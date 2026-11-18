@@ -905,11 +905,13 @@ namespace UGS.Editor
             var selectionCheck = new ToolbarButton(() => RunSelection(commit: false)) { text = T("Check"), tooltip = T("Read only the selected sheets again and validate. Writes nothing.") };
             var selectionBuild = new ToolbarButton(() => RunSelection(commit: true)) { text = T("Build"), tooltip = T("Read only the selected sheets again and write the result.") };
             selectionBuild.AddToClassList("ugs-build");
+            selectionBuild.AddToClassList("ugs-selection__build");
             selectionBar.Add(selectionCheck);
             selectionBar.Add(selectionBuild);
             side.Add(selectionBar);
             _selectionBar = selectionBar;
             _selectionLabel = selectionLabel;
+            _selectionBuild = selectionBuild;
             // Double-click (or Enter) opens the workbook the node came from.
             tree.itemsChosen += _ =>
             {
@@ -1170,6 +1172,7 @@ namespace UGS.Editor
 
         private Toolbar? _selectionBar;
         private Label? _selectionLabel;
+        private ToolbarButton? _selectionBuild;
 
         // Turns the selected nodes into the sheets a partial build reads again.
         private void UpdateTreeSelection(TreeView tree)
@@ -1214,6 +1217,18 @@ namespace UGS.Editor
             _selectionBar.style.display = selection.IsEmpty ? DisplayStyle.None : DisplayStyle.Flex;
             _selectionLabel.text = DescribeSelection();
             _selectionBar.tooltip = T("Reads these again; every other sheet comes from the last build on this machine.\n") + string.Join("\n", SelectionLines());
+            if (_selectionBuild != null)
+            {
+                // The number of tables the selection actually builds again: every table built from a selected sheet or workbook.
+                List<string> tables = (UgsProject.LastResult?.Build.RawTables ?? Array.Empty<RawTable>())
+                    .Where(table => SheetRefsOf(table).Any(entry => selection.Includes(entry.Workbook, entry.Sheet)))
+                    .Select(table => table.Name)
+                    .OrderBy(name => name, StringComparer.Ordinal)
+                    .ToList();
+                _selectionBuild.text = F("Build ({0})", tables.Count);
+                _selectionBuild.tooltip = T("Read only the selected sheets again and write the result.") + "\n" + F("Tables built again: {0}", tables.Count > 0 ? string.Join(", ", tables) : "-");
+            }
+
             bool canRun = _config != null && !UgsProject.IsRunning;
             _selectionBar.Query<ToolbarButton>().ForEach(button => button.SetEnabled(canRun));
         }

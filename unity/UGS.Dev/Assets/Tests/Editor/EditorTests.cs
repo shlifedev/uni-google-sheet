@@ -497,13 +497,18 @@ namespace UGS.Dev.Tests
                 // Several nodes can be selected; the bar under the tree builds just those.
                 tree = root.Q<TreeView>();
                 Label selectionLabel = root.Q<Label>(className: "ugs-selection__label");
+                // The build button counts the tables the selection builds again.
+                var selectionBuild = root.Q<UnityEditor.UIElements.ToolbarButton>(className: "ugs-selection__build");
                 tree.SetSelection(new[] { 2, 4 });
                 yield return null;
                 Assert.AreEqual("2 sheets", selectionLabel.text);
+                Assert.AreEqual("Build (2)", selectionBuild.text);
+                StringAssert.Contains("Drop, Spawn", selectionBuild.tooltip);
                 StringAssert.Contains("Monster.xlsx / Drop", root.Q(className: "ugs-selection").tooltip);
                 tree.SetSelection(new[] { 1, 3 });
                 yield return null;
                 Assert.AreEqual("Monster.xlsx", selectionLabel.text, "A selected workbook covers its tables.");
+                Assert.AreEqual("Build (3)", selectionBuild.text, "Drop, Monster and Spawn.");
                 tree.SetSelection(new[] { 0 });
                 yield return null;
                 Assert.AreEqual("Excel · 1 workbook", selectionLabel.text, "A source node covers the workbooks shown under it.");
@@ -511,6 +516,7 @@ namespace UGS.Dev.Tests
                 yield return null;
                 // Monster is built from Monster and Monster.Boss.
                 Assert.AreEqual("Monster · 2 sheets", selectionLabel.text);
+                Assert.AreEqual("Build (1)", selectionBuild.text, "Two sheets, one table.");
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "";
                 yield return null;
 

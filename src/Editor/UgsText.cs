@@ -186,6 +186,8 @@ namespace UGS.Editor
             ["Read only the selected sheets again and validate. Writes nothing."] = "선택한 시트만 다시 읽어 검사합니다. 파일은 쓰지 않습니다.",
             ["Read only the selected sheets again and write the result."] = "선택한 시트만 다시 읽어 결과를 씁니다.",
             ["Build {0}"] = "{0} 빌드",
+            ["Build ({0})"] = "빌드({0})",
+            ["Tables built again: {0}"] = "다시 빌드되는 테이블: {0}",
             ["Check {0}"] = "{0} 검사",
             ["Config table: one row, fields written down the sheet.\n"] = "설정 테이블: 한 행짜리이며 필드를 시트 아래로 적습니다.\n",
             ["No table matches '{0}'."] = "'{0}'에 맞는 테이블이 없습니다.",
