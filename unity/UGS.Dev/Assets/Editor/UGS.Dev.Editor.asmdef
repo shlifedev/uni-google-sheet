@@ -4,6 +4,7 @@
     "references": [
         "UGS.Runtime",
         "UGS.Editor",
+        "UGS.Core",
         "UGS.Demo"
     ],
     "includePlatforms": [

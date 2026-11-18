@@ -20,8 +20,6 @@ namespace UGS.Dev
         public static void ConfigurePlugins()
         {
             const string package = "Packages/com.shlifedev.ugs/Editor/Plugins/";
-            // The engine: editor only, visible to editor scripts so projects can add their own sheet rules.
-            Configure(package + "UGS.Core.dll", editor: true, autoReference: true, constraints: new string[0]);
             // The Sep backend needs .NET 8+, which only the Unity 7 (CoreCLR) editor has. Nothing compiles against it; the engine finds it by name.
             foreach (string name in new[] { "UGS.Csv.Sep.dll", "Sep.dll", "csFastFloat.dll" })
             {

@@ -260,6 +260,16 @@ Two kinds of Google source, both added from the window (Settings → Sources →
 | `serviceAccount` | private files: share the spreadsheet or folder with the account's e-mail (`client_email`) as a viewer | yes | yes |
 | `accessToken` | an OAuth token with the `drive.readonly` scope, from an environment variable | yes | yes |
 
+Requests are kept few, because the Sheets API allows 60 reads a minute per account:
+
+- With credentials, a spreadsheet costs two Sheets API requests however many tabs it has: the tab list and one
+  `values:batchGet` for all tabs.
+- Before downloading, one Drive request asks for the file's version (a Drive folder's listing already includes it). If
+  it is the version downloaded last time, the tabs are read from the local copy in `.ugs/cache/google` and nothing else
+  is requested. Frequent `ugs watch` polling therefore costs Drive requests only, until someone edits a file.
+- A "too many requests" answer or a server error is retried up to five times, waiting 1, 2, 4, 8 seconds plus up to a
+  second at random, or as long as Google's `Retry-After` header says.
+
 Keys come from files or environment variables, never from the command line. With `snapshot` set, what was fetched is
 also saved as CSV (one folder per workbook for a Drive folder): commit it for reviewable diffs, and build from it with
 `--offline` or the window's Offline toggle. Partial builds download only the selected files and tabs.
@@ -313,15 +323,20 @@ static void AddRules() => UgsProject.CreatePipeline = () =>
     TransformPipeline.CreateDefault().InsertAfter(ReadTablesStep.StepName, new MyStep());
 ```
 
+Editor scripts in the default assembly see the engine as is. An editor script inside its own assembly definition adds
+`UGS.Core` (the engine) and `UGS.Editor` (the window) to its references.
+
 ## Repository layout
 
 ```
 src/                    the Unity package (com.shlifedev.ugs)
   Runtime/              what generated code depends on; no dependencies; C# 9; compiled by Unity and by .NET unchanged
-  Editor/               the window, the build runner, and the engine as a DLL (Plugins/)
+  Editor/               the window and the build runner
+    Core/               the engine: sources, sheet rules, validation, code and data generation; C# 9; compiled by Unity and by .NET unchanged
+    Plugins/CoreClr/    the optional Sep CSV backend as DLLs, loaded only by the Unity 7 (CoreCLR) editor
   Samples~/Demo/        a scene that loads, shows, reloads and tamper-tests the sample tables
 dotnet/
-  UGS.Core/             the engine: sources, sheet rules, validation, code and data generation (netstandard2.1, no dependencies)
+  UGS.Core/             builds src/Editor/Core for .NET (netstandard2.1, no dependencies)
   UGS.Csv.Sep/          the optional Sep CSV backend (.NET 8+)
   UGS.Cli/              the ugs command
   UGS.Runtime/          builds src/Runtime for .NET
@@ -335,7 +350,7 @@ tools/                  build-unity-plugins.sh, make-sample-workbook.py
 
 ```bash
 dotnet test dotnet/UGS.Tests                     # engine, runtime, both serializers, CLI
-tools/build-unity-plugins.sh                     # after changing dotnet/UGS.Core or UGS.Csv.Sep
+tools/build-unity-plugins.sh                     # after changing dotnet/UGS.Csv.Sep
 unity test unity/UGS.Dev --mode EditMode         # the package inside a real editor
 unity test unity/UGS.Dev --mode PlayMode         # the demo scene
 ```

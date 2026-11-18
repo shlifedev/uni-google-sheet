@@ -4,6 +4,7 @@
     "references": [
         "UGS.Runtime",
         "UGS.Editor",
+        "UGS.Core",
         "UGS.Demo",
         "UGS.Demo.Editor",
         "UnityEngine.TestRunner",
@@ -16,8 +17,7 @@
     "allowUnsafeCode": false,
     "overrideReferences": true,
     "precompiledReferences": [
-        "nunit.framework.dll",
-        "UGS.Core.dll"
+        "nunit.framework.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [

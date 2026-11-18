@@ -2,17 +2,16 @@
     "name": "UGS.Editor",
     "rootNamespace": "UGS.Editor",
     "references": [
-        "UGS.Runtime"
+        "UGS.Runtime",
+        "UGS.Core"
     ],
     "includePlatforms": [
         "Editor"
     ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": true,
-    "precompiledReferences": [
-        "UGS.Core.dll"
-    ],
+    "overrideReferences": false,
+    "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
