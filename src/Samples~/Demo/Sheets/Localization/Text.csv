@@ -1,0 +1,21 @@
+Key<string>,string,string,#string
+Id,Ko,En,Note
+문구 번호,한국어,영어,메모
+ui.start,게임 시작,Start,
+ui.continue,이어하기,Continue,
+ui.settings,설정,Settings,
+ui.quit,종료,Quit,
+ui.inventory,인벤토리,Inventory,
+ui.skill,스킬,Skills,
+ui.quest,퀘스트,Quests,
+ui.party,파티,Party,
+ui.shop,상점,Shop,
+ui.level_up,레벨 업!,Level up!,레벨 업 연출
+ui.gold,골드,Gold,
+msg.not_enough_gold,골드가 부족합니다.,Not enough gold.,
+msg.inventory_full,인벤토리가 가득 찼습니다.,Your inventory is full.,
+msg.enhance_success,강화에 성공했습니다!,Enhancement succeeded!,
+msg.enhance_fail,강화에 실패했습니다.,Enhancement failed.,
+msg.welcome,"""엘더 마을""에 오신 것을 환영합니다,
+모험가님.","Welcome to ""Elder Village"",
+adventurer.","따옴표, 쉼표, 줄바꿈 예시"

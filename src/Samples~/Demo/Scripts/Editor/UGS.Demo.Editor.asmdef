@@ -1,0 +1,20 @@
+{
+    "name": "UGS.Demo.Editor",
+    "rootNamespace": "UGS.Demo.Editor",
+    "references": [
+        "UGS.Demo",
+        "UGS.Runtime",
+        "UGS.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

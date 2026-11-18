@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!--
+      Optional CSV backend built on Sep (SIMD). Sep needs .NET 8+, so this assembly can only be loaded by the .NET CLI
+      and by the Unity 7 editor, which runs on CoreCLR. Unity 6 (Mono) never sees it.
+      It is used when the config asks for "sep"; "auto" uses the built-in parser, which measured as fast in this pipeline.
+      net8.0 is the lowest target Sep supports; .NET 10 hosts load it as is.
+    -->
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>UGS.Csv</RootNamespace>
+    <AssemblyName>UGS.Csv.Sep</AssemblyName>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Sep" Version="0.18.0" />
+    <ProjectReference Include="../UGS.Core/UGS.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,1749 @@
+{
+  "format": 1,
+  "serializer": "memorypack",
+  "schema": "3fb3d079ddf1eba69701bbcd2c950697d3f8e02082374c92290ba3d2127d4e8b",
+  "tables": [
+    {
+      "name": "Drop",
+      "kind": "table",
+      "file": "Drop.bytes",
+      "schema": "f36c929284bff98dc32dff73caf597cf50b4397fe72c4022f164e68039849f11",
+      "source": "Monster.xlsx / Drop",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "드롭 테이블 번호"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "이름"
+        },
+        {
+          "name": "Items",
+          "type": "Ref<Item>[]",
+          "references": "Item",
+          "stored": "int",
+          "members": 1,
+          "comment": "아이템"
+        },
+        {
+          "name": "Chances",
+          "type": "float[]",
+          "members": 1,
+          "comment": "확률 (아이템과 같은 순서)"
+        },
+        {
+          "name": "GoldMin",
+          "type": "int",
+          "members": 1,
+          "comment": "최소 골드"
+        },
+        {
+          "name": "GoldMax",
+          "type": "int",
+          "members": 1,
+          "comment": "최대 골드"
+        }
+      ]
+    },
+    {
+      "name": "Enhance",
+      "kind": "table",
+      "file": "Enhance.bytes",
+      "schema": "7cc552280b1a16e299d7985d45b901139390a7525a82ad7fb3973ae98f1c52df",
+      "source": "Item.xlsx / Enhance",
+      "primaryKey": "Level",
+      "columns": [
+        {
+          "name": "Level",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "강화 단계"
+        },
+        {
+          "name": "SuccessRate",
+          "type": "float",
+          "members": 1,
+          "comment": "성공 확률"
+        },
+        {
+          "name": "DestroyRate",
+          "type": "float",
+          "members": 1,
+          "comment": "파괴 확률"
+        },
+        {
+          "name": "Gold",
+          "type": "int",
+          "members": 1,
+          "comment": "골드 비용"
+        },
+        {
+          "name": "Stone",
+          "type": "Ref<Item>",
+          "references": "Item",
+          "stored": "int",
+          "members": 1,
+          "comment": "필요 강화석"
+        },
+        {
+          "name": "StoneCount",
+          "type": "int",
+          "members": 1,
+          "comment": "필요 개수"
+        }
+      ]
+    },
+    {
+      "name": "Equipment",
+      "kind": "table",
+      "file": "Equipment.bytes",
+      "schema": "84a5e6c5d1cb8942781220060125a7c2cf1f150f096565a5a8b15d5eafbc5ec6",
+      "source": "Item.xlsx / Equipment",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "아이템 번호와 같음"
+        },
+        {
+          "name": "Item",
+          "type": "Ref<Item>",
+          "references": "Item",
+          "stored": "int",
+          "members": 1,
+          "comment": "아이템"
+        },
+        {
+          "name": "Slot",
+          "type": "Enum<EEquipSlot>",
+          "members": 1,
+          "comment": "장착 부위"
+        },
+        {
+          "name": "WeaponType",
+          "type": "Enum<EWeaponType>",
+          "members": 1,
+          "comment": "무기 종류"
+        },
+        {
+          "name": "Job",
+          "type": "Ref<Job>?",
+          "references": "Job",
+          "stored": "int",
+          "members": 2,
+          "comment": "착용 직업 (비우면 전 직업)"
+        },
+        {
+          "name": "RequiredLevel",
+          "type": "int",
+          "members": 1,
+          "comment": "착용 레벨"
+        },
+        {
+          "name": "Atk",
+          "type": "int",
+          "members": 1,
+          "comment": "공격력"
+        },
+        {
+          "name": "MAtk",
+          "type": "int",
+          "members": 1,
+          "comment": "마법 공격력"
+        },
+        {
+          "name": "Def",
+          "type": "int",
+          "members": 1,
+          "comment": "방어력"
+        },
+        {
+          "name": "BonusStats",
+          "type": "Enum<EStat>[]",
+          "members": 1,
+          "comment": "추가 능력치"
+        },
+        {
+          "name": "BonusValues",
+          "type": "int[]",
+          "members": 1,
+          "comment": "추가 능력치 값"
+        },
+        {
+          "name": "MaxUpgrade",
+          "type": "int",
+          "members": 1,
+          "comment": "최대 강화 횟수"
+        },
+        {
+          "name": "UpgradeGold",
+          "type": "int",
+          "members": 1,
+          "comment": "강화 비용"
+        },
+        {
+          "name": "UpgradeStone",
+          "type": "Ref<Item>?",
+          "references": "Item",
+          "stored": "int",
+          "members": 2,
+          "comment": "강화 재료"
+        }
+      ]
+    },
+    {
+      "name": "Gacha",
+      "kind": "table",
+      "file": "Gacha.bytes",
+      "schema": "d7495940e8c996e3131fefc24cb4f5f71dbd260f0cfd3cb00dc0fa4b342974f2",
+      "source": "Shop.xlsx / Gacha",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "뽑기 번호"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "이름"
+        },
+        {
+          "name": "Currency",
+          "type": "Enum<ECurrency>",
+          "members": 1,
+          "comment": "재화"
+        },
+        {
+          "name": "Cost",
+          "type": "int",
+          "members": 1,
+          "comment": "1회 비용"
+        },
+        {
+          "name": "Pool",
+          "type": "Ref<Item>[]",
+          "references": "Item",
+          "stored": "int",
+          "members": 1,
+          "comment": "등장 아이템"
+        },
+        {
+          "name": "Weights",
+          "type": "float[]",
+          "members": 1,
+          "comment": "가중치"
+        },
+        {
+          "name": "EndsAt",
+          "type": "DateTime",
+          "members": 1,
+          "comment": "종료 시각 (UTC)"
+        }
+      ]
+    },
+    {
+      "name": "Game",
+      "kind": "config",
+      "file": "Game.bytes",
+      "schema": "aec838ff1c90e3fa2fb1fed5096f449a14511e7bc627819b8c9ba5d2645cd2ab",
+      "source": "Common.xlsx / Game.Config",
+      "columns": [
+        {
+          "name": "MaxLevel",
+          "type": "int",
+          "members": 1,
+          "comment": "최대 레벨"
+        },
+        {
+          "name": "MaxPartySize",
+          "type": "int",
+          "members": 1,
+          "comment": "파티 최대 인원"
+        },
+        {
+          "name": "InventorySlots",
+          "type": "int",
+          "members": 1,
+          "comment": "기본 인벤토리 칸 수"
+        },
+        {
+          "name": "StartMap",
+          "type": "Ref<Map>",
+          "references": "Map",
+          "stored": "int",
+          "members": 1,
+          "comment": "캐릭터가 처음 서는 맵"
+        },
+        {
+          "name": "StarterItems",
+          "type": "Ref<Item>[]",
+          "references": "Item",
+          "stored": "int",
+          "members": 1,
+          "comment": "시작 아이템"
+        },
+        {
+          "name": "ExpRate",
+          "type": "float",
+          "members": 1,
+          "comment": "경험치 배율"
+        },
+        {
+          "name": "DropRate",
+          "type": "float",
+          "members": 1,
+          "comment": "드롭 배율"
+        },
+        {
+          "name": "SeasonStartsAt",
+          "type": "DateTime",
+          "members": 1,
+          "comment": "시즌 시작 (UTC)"
+        },
+        {
+          "name": "PvpEnabled",
+          "type": "bool",
+          "members": 1,
+          "comment": "대전 허용"
+        },
+        {
+          "name": "Version",
+          "type": "string",
+          "members": 1,
+          "comment": "데이터 버전"
+        }
+      ]
+    },
+    {
+      "name": "Hello",
+      "kind": "table",
+      "file": "Hello.bytes",
+      "schema": "0fdbf12a947e73f58a6b8793cb61b74f051d6ad7e69b129900b4f32ef921881c",
+      "source": "QQQQ / Hello",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "Hi"
+        },
+        {
+          "name": "Value",
+          "type": "float",
+          "members": 1,
+          "comment": "HiHi"
+        }
+      ]
+    },
+    {
+      "name": "Item",
+      "kind": "table",
+      "file": "Item.bytes",
+      "schema": "ec6d05e5c824b45421fcad949bc801eb4ed3786e47a6ce0d763cde7ebc4ff5ec",
+      "source": "Item.xlsx / Item",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "아이템 번호"
+        },
+        {
+          "name": "Code",
+          "type": "string",
+          "role": "key",
+          "members": 1,
+          "comment": "코드"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "표시 이름"
+        },
+        {
+          "name": "Type",
+          "type": "Enum<EItemType>",
+          "members": 1,
+          "comment": "종류"
+        },
+        {
+          "name": "Rarity",
+          "type": "Enum<ERarity>",
+          "members": 1,
+          "comment": "등급"
+        },
+        {
+          "name": "Tags",
+          "type": "Enum<EItemTag>",
+          "members": 1,
+          "comment": "속성"
+        },
+        {
+          "name": "MaxStack",
+          "type": "int",
+          "members": 1,
+          "comment": "최대 겹침"
+        },
+        {
+          "name": "BuyPrice",
+          "type": "int",
+          "members": 1,
+          "comment": "구매가"
+        },
+        {
+          "name": "SellPrice",
+          "type": "int",
+          "members": 1,
+          "comment": "판매가"
+        },
+        {
+          "name": "Tier",
+          "type": "int",
+          "role": "index",
+          "members": 1,
+          "comment": "티어"
+        },
+        {
+          "name": "Description",
+          "type": "string",
+          "members": 1,
+          "comment": "설명"
+        }
+      ]
+    },
+    {
+      "name": "Job",
+      "kind": "table",
+      "file": "Job.bytes",
+      "schema": "96a42c2ff348f17896351df1486104de6cce5e232032044d88ce339617f9640e",
+      "source": "Character.xlsx / Job",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "직업 번호"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "표시 이름"
+        },
+        {
+          "name": "Tier",
+          "type": "int",
+          "members": 1,
+          "comment": "전직 단계"
+        },
+        {
+          "name": "BaseJob",
+          "type": "Ref<Job>?",
+          "references": "Job",
+          "stored": "int",
+          "members": 2,
+          "comment": "이전 직업"
+        },
+        {
+          "name": "MainStat",
+          "type": "Enum<EStat>",
+          "members": 1,
+          "comment": "주 능력치"
+        },
+        {
+          "name": "Weapons",
+          "type": "Enum<EWeaponType>[]",
+          "members": 1,
+          "comment": "착용 가능 무기"
+        },
+        {
+          "name": "BaseHp",
+          "type": "int",
+          "members": 1,
+          "comment": "기본 HP"
+        },
+        {
+          "name": "BaseMp",
+          "type": "int",
+          "members": 1,
+          "comment": "기본 MP"
+        }
+      ]
+    },
+    {
+      "name": "Level",
+      "kind": "table",
+      "file": "Level.bytes",
+      "schema": "e9d8dc653e92e13b047dbbae84dbb50085b5348e795775a2dd47c366a0545efe",
+      "source": "Character.xlsx / Level",
+      "primaryKey": "Level",
+      "columns": [
+        {
+          "name": "Level",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "레벨"
+        },
+        {
+          "name": "ExpToNext",
+          "type": "long",
+          "members": 1,
+          "comment": "다음 레벨까지 경험치"
+        },
+        {
+          "name": "StatPoints",
+          "type": "int",
+          "members": 1,
+          "comment": "레벨업 시 능력치 포인트"
+        },
+        {
+          "name": "SkillPoints",
+          "type": "int",
+          "members": 1,
+          "comment": "레벨업 시 스킬 포인트"
+        },
+        {
+          "name": "HpBonus",
+          "type": "int",
+          "members": 1,
+          "comment": "누적 HP 보너스"
+        }
+      ]
+    },
+    {
+      "name": "Map",
+      "kind": "table",
+      "file": "Map.bytes",
+      "schema": "3268a68e7cade24a645fc8ae27f098854faac731bd73973a304f5cca3ad5f603",
+      "source": "World.xlsx / Map",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "맵 번호"
+        },
+        {
+          "name": "Code",
+          "type": "string",
+          "role": "key",
+          "members": 1,
+          "comment": "코드"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "표시 이름"
+        },
+        {
+          "name": "Region",
+          "type": "Ref<Region>",
+          "references": "Region",
+          "stored": "int",
+          "members": 1,
+          "comment": "지역"
+        },
+        {
+          "name": "Type",
+          "type": "Enum<EMapType>",
+          "members": 1,
+          "comment": "종류"
+        },
+        {
+          "name": "MinLevel",
+          "type": "int",
+          "members": 1,
+          "comment": "입장 최소 레벨"
+        },
+        {
+          "name": "MaxLevel",
+          "type": "int",
+          "members": 1,
+          "comment": "권장 최대 레벨"
+        },
+        {
+          "name": "Element",
+          "type": "Enum<EElement>",
+          "members": 1,
+          "comment": "지형 속성"
+        },
+        {
+          "name": "Bgm",
+          "type": "string",
+          "members": 1,
+          "comment": "배경음"
+        }
+      ]
+    },
+    {
+      "name": "Monster",
+      "kind": "table",
+      "file": "Monster.bytes",
+      "schema": "ad72ff7988f83edbf07ebd00c5bbd21294cd26ba87ef748bfcdbb736aa90c24d",
+      "source": "Monster.xlsx / Monster",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "몬스터 번호"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "표시 이름"
+        },
+        {
+          "name": "Rank",
+          "type": "Enum<EMonsterRank>",
+          "members": 1,
+          "comment": "등급"
+        },
+        {
+          "name": "Level",
+          "type": "int",
+          "members": 1,
+          "comment": "레벨"
+        },
+        {
+          "name": "Hp",
+          "type": "long",
+          "members": 1,
+          "comment": "HP"
+        },
+        {
+          "name": "Atk",
+          "type": "int",
+          "members": 1,
+          "comment": "공격력"
+        },
+        {
+          "name": "Def",
+          "type": "int",
+          "members": 1,
+          "comment": "방어력"
+        },
+        {
+          "name": "Ai",
+          "type": "Enum<EAiType>",
+          "members": 1,
+          "comment": "행동 방식"
+        },
+        {
+          "name": "Element",
+          "type": "Enum<EElement>",
+          "members": 1,
+          "comment": "속성"
+        },
+        {
+          "name": "Exp",
+          "type": "long",
+          "members": 1,
+          "comment": "처치 경험치"
+        },
+        {
+          "name": "Drop",
+          "type": "Ref<Drop>",
+          "references": "Drop",
+          "stored": "int",
+          "members": 1,
+          "comment": "드롭 테이블"
+        }
+      ]
+    },
+    {
+      "name": "Npc",
+      "kind": "table",
+      "file": "Npc.bytes",
+      "schema": "e32a0ab10612603bb8101f14c76dc519a1cf853e66dd9a78bea69bcfe1102ec9",
+      "source": "World.xlsx / Npc",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "NPC 번호"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "이름"
+        },
+        {
+          "name": "Map",
+          "type": "Ref<Map>",
+          "references": "Map",
+          "stored": "int",
+          "members": 1,
+          "comment": "있는 맵"
+        },
+        {
+          "name": "Shop",
+          "type": "Ref<Shop>?",
+          "references": "Shop",
+          "stored": "int",
+          "members": 2,
+          "comment": "상점 (없으면 비움)"
+        },
+        {
+          "name": "Greeting",
+          "type": "string",
+          "members": 1,
+          "comment": "인사말"
+        }
+      ]
+    },
+    {
+      "name": "Portal",
+      "kind": "table",
+      "file": "Portal.bytes",
+      "schema": "0df450307fe4efd18d667e48edb67b0915e31f1e037e325f27a455565de06120",
+      "source": "World.xlsx / Portal",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "포탈 번호"
+        },
+        {
+          "name": "From",
+          "type": "Ref<Map>",
+          "references": "Map",
+          "stored": "int",
+          "members": 1,
+          "comment": "출발 맵"
+        },
+        {
+          "name": "To",
+          "type": "Ref<Map>",
+          "references": "Map",
+          "stored": "int",
+          "members": 1,
+          "comment": "도착 맵"
+        },
+        {
+          "name": "X",
+          "type": "float",
+          "members": 1,
+          "comment": "위치 X"
+        },
+        {
+          "name": "Y",
+          "type": "float",
+          "members": 1,
+          "comment": "위치 Y"
+        }
+      ]
+    },
+    {
+      "name": "Quest",
+      "kind": "table",
+      "file": "Quest.bytes",
+      "schema": "aa09dcea23c76a0a1fbe31acbcf6eceb5757695d5464a7142dcd013bedf61b6f",
+      "source": "Quest.xlsx / Quest",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "퀘스트 번호"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "제목"
+        },
+        {
+          "name": "Type",
+          "type": "Enum<EQuestType>",
+          "members": 1,
+          "comment": "종류"
+        },
+        {
+          "name": "RequiredLevel",
+          "type": "int",
+          "members": 1,
+          "comment": "수락 레벨"
+        },
+        {
+          "name": "Previous",
+          "type": "Ref<Quest>?",
+          "references": "Quest",
+          "stored": "int",
+          "members": 2,
+          "comment": "선행 퀘스트"
+        },
+        {
+          "name": "Giver",
+          "type": "Ref<Npc>",
+          "references": "Npc",
+          "stored": "int",
+          "members": 1,
+          "comment": "주는 NPC"
+        },
+        {
+          "name": "RewardExp",
+          "type": "long",
+          "members": 1,
+          "comment": "보상 경험치"
+        },
+        {
+          "name": "RewardGold",
+          "type": "int",
+          "members": 1,
+          "comment": "보상 골드"
+        },
+        {
+          "name": "RewardItems",
+          "type": "Ref<Item>[]",
+          "references": "Item",
+          "stored": "int",
+          "members": 1,
+          "comment": "보상 아이템"
+        },
+        {
+          "name": "RewardCounts",
+          "type": "int[]",
+          "members": 1,
+          "comment": "보상 개수"
+        }
+      ]
+    },
+    {
+      "name": "QuestObjective",
+      "kind": "table",
+      "file": "QuestObjective.bytes",
+      "schema": "7169508a81c016f246d73ce6261a8cd28045b60f59b19086a61c71b24a5ba010",
+      "source": "Quest.xlsx / QuestObjective",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "목표 번호"
+        },
+        {
+          "name": "QuestId",
+          "type": "int",
+          "role": "index",
+          "members": 1,
+          "comment": "퀘스트 번호"
+        },
+        {
+          "name": "Type",
+          "type": "Enum<EObjective>",
+          "members": 1,
+          "comment": "목표 종류"
+        },
+        {
+          "name": "TargetId",
+          "type": "int",
+          "members": 1,
+          "comment": "대상 번호 (몬스터, 아이템, 맵, NPC)"
+        },
+        {
+          "name": "Count",
+          "type": "int",
+          "members": 1,
+          "comment": "필요 수"
+        },
+        {
+          "name": "Hint",
+          "type": "string",
+          "members": 1,
+          "comment": "안내 문구"
+        }
+      ]
+    },
+    {
+      "name": "Region",
+      "kind": "table",
+      "file": "Region.bytes",
+      "schema": "3085eae09e216a92a738a25779fb78d567d74778e336b69980ae298152353313",
+      "source": "World.xlsx / Region",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "지역 번호"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "표시 이름"
+        },
+        {
+          "name": "RecommendedLevel",
+          "type": "int",
+          "members": 1,
+          "comment": "권장 레벨"
+        }
+      ]
+    },
+    {
+      "name": "SetBonus",
+      "kind": "table",
+      "file": "SetBonus.bytes",
+      "schema": "1073e76754421b1e617b0e5d2a79317804a1a966b47a6010ef35f18e6106d593",
+      "source": "Item.xlsx / SetBonus",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "세트 번호"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "세트 이름"
+        },
+        {
+          "name": "Pieces",
+          "type": "Ref<Equipment>[]",
+          "references": "Equipment",
+          "stored": "int",
+          "members": 1,
+          "comment": "세트 구성"
+        },
+        {
+          "name": "RequiredPieces",
+          "type": "int",
+          "members": 1,
+          "comment": "효과 발동 개수"
+        },
+        {
+          "name": "Stats",
+          "type": "Enum<EStat>[]",
+          "members": 1,
+          "comment": "세트 효과 능력치"
+        },
+        {
+          "name": "Values",
+          "type": "int[]",
+          "members": 1,
+          "comment": "세트 효과 값"
+        }
+      ]
+    },
+    {
+      "name": "Shop",
+      "kind": "table",
+      "file": "Shop.bytes",
+      "schema": "7163eaa68bf80cc55884276c26cdb05de8fc4b2b11ea3fba46051e3d51031ac8",
+      "source": "Shop.xlsx / Shop",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "상점 번호"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "이름"
+        },
+        {
+          "name": "Currency",
+          "type": "Enum<ECurrency>",
+          "members": 1,
+          "comment": "결제 재화"
+        },
+        {
+          "name": "Map",
+          "type": "Ref<Map>",
+          "references": "Map",
+          "stored": "int",
+          "members": 1,
+          "comment": "위치"
+        }
+      ]
+    },
+    {
+      "name": "ShopGoods",
+      "kind": "table",
+      "file": "ShopGoods.bytes",
+      "schema": "d8c78bde3e774947d7286877607a687fe023f802969bd848fec58820933cef98",
+      "source": "Shop.xlsx / ShopGoods",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "판매 번호"
+        },
+        {
+          "name": "ShopId",
+          "type": "int",
+          "role": "index",
+          "members": 1,
+          "comment": "상점 번호"
+        },
+        {
+          "name": "Item",
+          "type": "Ref<Item>",
+          "references": "Item",
+          "stored": "int",
+          "members": 1,
+          "comment": "아이템"
+        },
+        {
+          "name": "Price",
+          "type": "int",
+          "members": 1,
+          "comment": "가격"
+        },
+        {
+          "name": "DailyLimit",
+          "type": "int",
+          "members": 1,
+          "comment": "일일 구매 제한 (0은 무제한)"
+        }
+      ]
+    },
+    {
+      "name": "Skill",
+      "kind": "table",
+      "file": "Skill.bytes",
+      "schema": "961add6db0a23007d006e2e37763b107631e308c93af59b83851ec6ebe39d493",
+      "source": "Character.xlsx / Skill",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "스킬 번호"
+        },
+        {
+          "name": "Code",
+          "type": "string",
+          "role": "key",
+          "members": 1,
+          "comment": "코드"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "표시 이름"
+        },
+        {
+          "name": "Job",
+          "type": "Ref<Job>",
+          "references": "Job",
+          "stored": "int",
+          "members": 1,
+          "comment": "배우는 직업"
+        },
+        {
+          "name": "Element",
+          "type": "Enum<EElement>",
+          "members": 1,
+          "comment": "속성"
+        },
+        {
+          "name": "RequiredLevel",
+          "type": "int",
+          "members": 1,
+          "comment": "습득 레벨"
+        },
+        {
+          "name": "MaxLevel",
+          "type": "int",
+          "members": 1,
+          "comment": "최대 스킬 레벨"
+        },
+        {
+          "name": "Cooldown",
+          "type": "float",
+          "members": 1,
+          "comment": "재사용 대기 (초)"
+        },
+        {
+          "name": "MpCost",
+          "type": "int",
+          "members": 1,
+          "comment": "MP 소모"
+        },
+        {
+          "name": "Damage",
+          "type": "float[]",
+          "members": 1,
+          "comment": "레벨별 피해 계수"
+        }
+      ]
+    },
+    {
+      "name": "Spawn",
+      "kind": "table",
+      "file": "Spawn.bytes",
+      "schema": "a3da0b4d8aba5bf17f64a4c2495d5a223f9be566fef8b1edcce76993b6326219",
+      "source": "Monster.xlsx / Spawn",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "배치 번호"
+        },
+        {
+          "name": "Map",
+          "type": "Ref<Map>",
+          "references": "Map",
+          "stored": "int",
+          "members": 1,
+          "comment": "맵"
+        },
+        {
+          "name": "Monster",
+          "type": "Ref<Monster>",
+          "references": "Monster",
+          "stored": "int",
+          "members": 1,
+          "comment": "몬스터"
+        },
+        {
+          "name": "Count",
+          "type": "int",
+          "members": 1,
+          "comment": "동시 출현 수"
+        },
+        {
+          "name": "RespawnSeconds",
+          "type": "float",
+          "members": 1,
+          "comment": "재출현 (초)"
+        }
+      ]
+    },
+    {
+      "name": "Text",
+      "kind": "table",
+      "file": "Text.bytes",
+      "schema": "cfc05a0282ec2e3ec2acb0a67ea89c7bf80054527317f4c3fcbb4add49becf01",
+      "source": "Localization / Text",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "string",
+          "role": "key",
+          "members": 1,
+          "comment": "문구 번호"
+        },
+        {
+          "name": "Ko",
+          "type": "string",
+          "members": 1,
+          "comment": "한국어"
+        },
+        {
+          "name": "En",
+          "type": "string",
+          "members": 1,
+          "comment": "영어"
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "name": "EAiType",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "Passive",
+          "value": 0
+        },
+        {
+          "name": "Aggressive",
+          "value": 1
+        },
+        {
+          "name": "Ranged",
+          "value": 2
+        },
+        {
+          "name": "Caster",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "ECurrency",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "Gold",
+          "value": 0
+        },
+        {
+          "name": "Gem",
+          "value": 1
+        },
+        {
+          "name": "Honor",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "EElement",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "None",
+          "value": 0
+        },
+        {
+          "name": "Fire",
+          "value": 1
+        },
+        {
+          "name": "Water",
+          "value": 2
+        },
+        {
+          "name": "Earth",
+          "value": 3
+        },
+        {
+          "name": "Wind",
+          "value": 4
+        },
+        {
+          "name": "Light",
+          "value": 5
+        },
+        {
+          "name": "Dark",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "name": "EEquipSlot",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "Weapon",
+          "value": 0
+        },
+        {
+          "name": "Head",
+          "value": 1
+        },
+        {
+          "name": "Body",
+          "value": 2
+        },
+        {
+          "name": "Legs",
+          "value": 3
+        },
+        {
+          "name": "Hands",
+          "value": 4
+        },
+        {
+          "name": "Feet",
+          "value": 5
+        },
+        {
+          "name": "Ring",
+          "value": 6
+        },
+        {
+          "name": "Necklace",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "name": "EItemTag",
+      "type": "int",
+      "flags": true,
+      "members": [
+        {
+          "name": "None",
+          "value": 0
+        },
+        {
+          "name": "Tradable",
+          "value": 1
+        },
+        {
+          "name": "Stackable",
+          "value": 2
+        },
+        {
+          "name": "Sellable",
+          "value": 4
+        },
+        {
+          "name": "Bound",
+          "value": 8
+        },
+        {
+          "name": "Event",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "name": "EItemType",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "Consumable",
+          "value": 0
+        },
+        {
+          "name": "Material",
+          "value": 1
+        },
+        {
+          "name": "Equipment",
+          "value": 2
+        },
+        {
+          "name": "Quest",
+          "value": 3
+        },
+        {
+          "name": "Box",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "name": "EJobId",
+      "type": "int",
+      "flags": false,
+      "members": [
+        {
+          "name": "Warrior",
+          "value": 100
+        },
+        {
+          "name": "Mage",
+          "value": 200
+        },
+        {
+          "name": "Archer",
+          "value": 300
+        },
+        {
+          "name": "Rogue",
+          "value": 400
+        },
+        {
+          "name": "Knight",
+          "value": 110
+        },
+        {
+          "name": "Berserker",
+          "value": 120
+        },
+        {
+          "name": "Sorcerer",
+          "value": 210
+        },
+        {
+          "name": "Cleric",
+          "value": 220
+        },
+        {
+          "name": "Ranger",
+          "value": 310
+        },
+        {
+          "name": "Marksman",
+          "value": 320
+        },
+        {
+          "name": "Assassin",
+          "value": 410
+        },
+        {
+          "name": "Shade",
+          "value": 420
+        }
+      ]
+    },
+    {
+      "name": "EMapType",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "Town",
+          "value": 0
+        },
+        {
+          "name": "Field",
+          "value": 1
+        },
+        {
+          "name": "Dungeon",
+          "value": 2
+        },
+        {
+          "name": "Raid",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "EMonsterId",
+      "type": "int",
+      "flags": false,
+      "members": [
+        {
+          "name": "GreenSlime",
+          "value": 1
+        },
+        {
+          "name": "Mushroom",
+          "value": 2
+        },
+        {
+          "name": "Wolf",
+          "value": 3
+        },
+        {
+          "name": "Goblin",
+          "value": 4
+        },
+        {
+          "name": "GoblinShaman",
+          "value": 5
+        },
+        {
+          "name": "FireImp",
+          "value": 6
+        },
+        {
+          "name": "Scorpion",
+          "value": 7
+        },
+        {
+          "name": "LavaGolem",
+          "value": 8
+        },
+        {
+          "name": "FrostWisp",
+          "value": 9
+        },
+        {
+          "name": "IceTroll",
+          "value": 10
+        },
+        {
+          "name": "DrownedKnight",
+          "value": 11
+        },
+        {
+          "name": "Wraith",
+          "value": 12
+        },
+        {
+          "name": "GoblinChief",
+          "value": 101
+        },
+        {
+          "name": "EmberDrake",
+          "value": 102
+        },
+        {
+          "name": "GlacierQueen",
+          "value": 103
+        },
+        {
+          "name": "AbyssLord",
+          "value": 104
+        }
+      ]
+    },
+    {
+      "name": "EMonsterRank",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "Normal",
+          "value": 0
+        },
+        {
+          "name": "Elite",
+          "value": 1
+        },
+        {
+          "name": "Boss",
+          "value": 2
+        },
+        {
+          "name": "RaidBoss",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "EObjective",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "Kill",
+          "value": 0
+        },
+        {
+          "name": "Collect",
+          "value": 1
+        },
+        {
+          "name": "Talk",
+          "value": 2
+        },
+        {
+          "name": "Reach",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "EQuestType",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "Main",
+          "value": 0
+        },
+        {
+          "name": "Side",
+          "value": 1
+        },
+        {
+          "name": "Daily",
+          "value": 2
+        },
+        {
+          "name": "Weekly",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "ERarity",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "Common",
+          "value": 0
+        },
+        {
+          "name": "Uncommon",
+          "value": 1
+        },
+        {
+          "name": "Rare",
+          "value": 2
+        },
+        {
+          "name": "Epic",
+          "value": 3
+        },
+        {
+          "name": "Legendary",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "name": "ERegionId",
+      "type": "int",
+      "flags": false,
+      "members": [
+        {
+          "name": "Elderwood",
+          "value": 1
+        },
+        {
+          "name": "AshenWastes",
+          "value": 2
+        },
+        {
+          "name": "Frostmere",
+          "value": 3
+        },
+        {
+          "name": "SunkenRuins",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "name": "EStat",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "Str",
+          "value": 0
+        },
+        {
+          "name": "Dex",
+          "value": 1
+        },
+        {
+          "name": "Int",
+          "value": 2
+        },
+        {
+          "name": "Luk",
+          "value": 3
+        },
+        {
+          "name": "MaxHp",
+          "value": 4
+        },
+        {
+          "name": "MaxMp",
+          "value": 5
+        },
+        {
+          "name": "Atk",
+          "value": 6
+        },
+        {
+          "name": "MAtk",
+          "value": 7
+        },
+        {
+          "name": "Def",
+          "value": 8
+        },
+        {
+          "name": "MDef",
+          "value": 9
+        },
+        {
+          "name": "Crit",
+          "value": 10
+        },
+        {
+          "name": "Speed",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "name": "EWeaponType",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "None",
+          "value": 0
+        },
+        {
+          "name": "Sword",
+          "value": 1
+        },
+        {
+          "name": "Axe",
+          "value": 2
+        },
+        {
+          "name": "Staff",
+          "value": 3
+        },
+        {
+          "name": "Wand",
+          "value": 4
+        },
+        {
+          "name": "Bow",
+          "value": 5
+        },
+        {
+          "name": "Crossbow",
+          "value": 6
+        },
+        {
+          "name": "Dagger",
+          "value": 7
+        },
+        {
+          "name": "Claw",
+          "value": 8
+        }
+      ]
+    }
+  ]
+}

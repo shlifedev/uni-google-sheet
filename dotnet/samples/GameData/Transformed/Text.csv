@@ -1,0 +1,6 @@
+Key<string>,string,string
+Id,Ko,En
+Text id,Korean,English
+ui.start,시작,Start
+ui.quit,종료,Quit
+ui.empty,,

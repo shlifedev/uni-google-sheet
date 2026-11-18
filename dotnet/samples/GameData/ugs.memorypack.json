@@ -1,0 +1,13 @@
+{
+  "sources": [
+    { "type": "xlsx", "path": "Sheets" },
+    { "type": "csv", "path": "Sheets/Csv" }
+  ],
+  "output": {
+    "code": "../Sample.Tables.MemoryPack/Generated",
+    "data": "Data/MemoryPack",
+    "csv": "Transformed",
+    "schema": true
+  },
+  "codegen": { "namespace": "Sample.MemoryPackData", "tablesClass": "GameTables", "serializer": "memorypack" }
+}

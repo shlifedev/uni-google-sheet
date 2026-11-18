@@ -1,19 +1,35 @@
 {
   "name": "com.shlifedev.ugs",
-  "version": "1.1.0",
-  "displayName": "Uni Google Sheets",
-  "description": "Google Sheet Intergration for Unity",
-  "dependencies": { 
-    "com.unity.nuget.newtonsoft-json": "2.0.0"
- },
- "keywords": [
+  "version": "2.0.0",
+  "displayName": "UGS - Game Tables from Sheets",
+  "description": "Turns xlsx workbooks, CSV folders and Google Sheets into typed, read-only C# tables with binary data files.\n\nThe generated code and data run on any .NET: Unity clients and plain .NET servers load the same files. Includes integrity checks, optional signing, hot reload and a command line tool that builds the same output in CI.",
+  "unity": "6000.0",
+  "documentationUrl": "https://github.com/shlifedev/uni-google-sheets#readme",
+  "changelogUrl": "https://github.com/shlifedev/uni-google-sheets/blob/main/src/CHANGELOG.md",
+  "licensesUrl": "https://github.com/shlifedev/uni-google-sheets/blob/main/LICENSE.md",
+  "license": "MIT",
+  "dependencies": {
+    "com.unity.modules.uielements": "1.0.0",
+    "com.unity.modules.unitywebrequest": "1.0.0"
+  },
+  "keywords": [
     "UGS",
-    "Unity Google Sheets",
-    "Google Sheet"
+    "google sheets",
+    "excel",
+    "xlsx",
+    "csv",
+    "data table",
+    "game data"
   ],
   "author": {
     "name": "shlifedev",
-    "email": "shlifedev@gmail.com",
-    "url": "https://www.unity3d.com"
-  }
+    "url": "https://github.com/shlifedev"
+  },
+  "samples": [
+    {
+      "displayName": "Demo",
+      "description": "A scene that loads sample tables, shows them, reloads when the data changes and demonstrates tamper detection. Needs the MemoryPack package in the project.",
+      "path": "Samples~/Demo"
+    }
+  ]
 }

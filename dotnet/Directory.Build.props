@@ -1,0 +1,17 @@
+<Project>
+  <PropertyGroup>
+    <Version>2.0.0</Version>
+    <Authors>shlifedev</Authors>
+    <Product>UGS</Product>
+    <RepositoryUrl>https://github.com/shlifedev/uni-google-sheets</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>NU1903;NU1902;NU1901</WarningsNotAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Deterministic>true</Deterministic>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>

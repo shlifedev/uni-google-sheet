@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!--
+      The tool's engine: read sheets, apply the transform rules, validate, generate code and data.
+      It knows nothing about consoles or windows; the CLI and the Unity editor window both sit on top of it.
+
+      One netstandard2.1 build serves every host: the Unity 6 editor (Mono), the Unity 7 editor (CoreCLR) and the .NET CLI.
+      It is shipped to Unity as a compiled DLL, so the language version is not limited by Unity's compiler.
+      It deliberately has no package dependencies at run time (PolySharp only adds compile-time polyfills):
+      a DLL with dependencies is a DLL that conflicts with something in somebody's Unity project.
+    -->
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>UGS.Core</RootNamespace>
+    <AssemblyName>UGS.Core</AssemblyName>
+    <!-- Unity loads this by simple name next to assemblies it versions as 0.0.0.0; keep the identity stable across releases. -->
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <Description>UGS engine: spreadsheet sources, transform rules, validation, C# and binary generation.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="PolySharp" Version="1.15.0" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="UGS.Tests" />
+  </ItemGroup>
+</Project>

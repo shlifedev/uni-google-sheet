@@ -1,0 +1,28 @@
+{
+    "name": "UGS.Dev.Tests.Editor",
+    "rootNamespace": "UGS.Dev.Tests",
+    "references": [
+        "UGS.Runtime",
+        "UGS.Editor",
+        "UGS.Demo",
+        "UGS.Demo.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll",
+        "UGS.Core.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

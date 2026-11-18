@@ -1,0 +1,12 @@
+{
+  "sources": [
+    { "type": "xlsx", "path": "Sheets" },
+    { "type": "csv", "path": "Sheets/Csv" }
+  ],
+  "output": {
+    "code": "../Sample.Tables.MessagePack/Generated",
+    "data": "Data/MessagePack",
+    "schema": true
+  },
+  "codegen": { "namespace": "Sample.MessagePackData", "tablesClass": "GameTables", "serializer": "messagepack" }
+}

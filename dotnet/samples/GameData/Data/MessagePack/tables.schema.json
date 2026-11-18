@@ -1,0 +1,471 @@
+{
+  "format": 1,
+  "serializer": "messagepack",
+  "schema": "0ffb73b0f9c709c7c8055277253f5c63090104dd68b18ee5d452375120087ef4",
+  "tables": [
+    {
+      "name": "Game",
+      "kind": "config",
+      "file": "Game.bytes",
+      "schema": "dbb8f4c2acfffdb1454c23a68f38914da76d33547dde257e3da3a49eb2fcf8cb",
+      "source": "Game.xlsx / Game.Config",
+      "columns": [
+        {
+          "name": "MaxLevel",
+          "type": "int",
+          "members": 1,
+          "comment": "Highest level a character can reach"
+        },
+        {
+          "name": "GoldRate",
+          "type": "float",
+          "members": 1,
+          "comment": "Multiplier on gold drops"
+        },
+        {
+          "name": "Title",
+          "type": "string",
+          "members": 1,
+          "comment": "Name shown on the title screen"
+        },
+        {
+          "name": "StartItem",
+          "type": "Ref<Item>",
+          "references": "Item",
+          "stored": "int",
+          "members": 1,
+          "comment": "Item every character starts with"
+        },
+        {
+          "name": "OpensAt",
+          "type": "DateTime",
+          "members": 1,
+          "comment": "When the service opens (UTC)"
+        },
+        {
+          "name": "Maintenance",
+          "type": "bool",
+          "members": 1,
+          "comment": "Reject logins"
+        }
+      ]
+    },
+    {
+      "name": "Item",
+      "kind": "table",
+      "file": "Item.bytes",
+      "schema": "e8437a2c281d628515cdf0b7d07849c7e8e68befb4fcc913e483abcb3988d939",
+      "source": "Game.xlsx / Item",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "Item id"
+        },
+        {
+          "name": "Code",
+          "type": "string",
+          "role": "key",
+          "members": 1,
+          "comment": "Name used in code"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "Display name"
+        },
+        {
+          "name": "Kind",
+          "type": "Enum<EItemKind>",
+          "members": 1,
+          "comment": "Kind of item"
+        },
+        {
+          "name": "Tags",
+          "type": "Enum<EItemTag>",
+          "members": 1,
+          "comment": "Tags"
+        },
+        {
+          "name": "Tier",
+          "type": "int",
+          "role": "index",
+          "members": 1,
+          "comment": "Tier, for grouping"
+        },
+        {
+          "name": "Price",
+          "type": "int",
+          "members": 1,
+          "comment": "Price in gold"
+        },
+        {
+          "name": "Weight",
+          "type": "float",
+          "members": 1,
+          "comment": "Weight in kg"
+        },
+        {
+          "name": "DropRate",
+          "type": "double",
+          "members": 1,
+          "comment": "Chance to drop"
+        },
+        {
+          "name": "Tradable",
+          "type": "bool",
+          "members": 1,
+          "comment": "Can be traded"
+        },
+        {
+          "name": "ReleasedAt",
+          "type": "DateTime",
+          "members": 1,
+          "comment": "Release date (UTC)"
+        },
+        {
+          "name": "Stats",
+          "type": "float[]",
+          "members": 1,
+          "comment": "Stat values"
+        },
+        {
+          "name": "Aliases",
+          "type": "string[]",
+          "members": 1,
+          "comment": "Other names"
+        },
+        {
+          "name": "Exp",
+          "type": "long",
+          "members": 1,
+          "comment": "Experience"
+        },
+        {
+          "name": "Sockets",
+          "type": "int[]",
+          "members": 1,
+          "comment": "Socket sizes"
+        },
+        {
+          "name": "Rarity",
+          "type": "Enum<ERarity>",
+          "members": 1,
+          "comment": "Rarity"
+        },
+        {
+          "name": "Attack",
+          "type": "int",
+          "members": 1,
+          "comment": "Attack bonus"
+        },
+        {
+          "name": "Defense",
+          "type": "int",
+          "members": 1,
+          "comment": "Defense bonus"
+        }
+      ]
+    },
+    {
+      "name": "Limits",
+      "kind": "table",
+      "file": "Limits.bytes",
+      "schema": "a712367775f7ce2e51f92213cfcd729ada1fae5dd62eb1ed66a69fa8a998e4e0",
+      "source": "Csv / Limits",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "Row id"
+        },
+        {
+          "name": "I8",
+          "type": "sbyte",
+          "members": 1
+        },
+        {
+          "name": "U8",
+          "type": "byte",
+          "members": 1
+        },
+        {
+          "name": "I16",
+          "type": "short",
+          "members": 1
+        },
+        {
+          "name": "U16",
+          "type": "ushort",
+          "members": 1
+        },
+        {
+          "name": "I32",
+          "type": "int",
+          "members": 1
+        },
+        {
+          "name": "U32",
+          "type": "uint",
+          "members": 1
+        },
+        {
+          "name": "I64",
+          "type": "long",
+          "members": 1
+        },
+        {
+          "name": "U64",
+          "type": "ulong",
+          "members": 1
+        },
+        {
+          "name": "F32",
+          "type": "float",
+          "members": 1
+        },
+        {
+          "name": "F64",
+          "type": "double",
+          "members": 1
+        },
+        {
+          "name": "Flag",
+          "type": "bool",
+          "members": 1
+        },
+        {
+          "name": "Text",
+          "type": "string",
+          "members": 1
+        },
+        {
+          "name": "Ints",
+          "type": "int[]",
+          "members": 1
+        },
+        {
+          "name": "Longs",
+          "type": "long[]",
+          "members": 1
+        },
+        {
+          "name": "Flags",
+          "type": "bool[]",
+          "members": 1
+        },
+        {
+          "name": "Bytes",
+          "type": "byte[]",
+          "members": 1
+        },
+        {
+          "name": "Dates",
+          "type": "DateTime[]",
+          "members": 1
+        },
+        {
+          "name": "Doubles",
+          "type": "double[]",
+          "members": 1
+        }
+      ]
+    },
+    {
+      "name": "Monster",
+      "kind": "table",
+      "file": "Monster.bytes",
+      "schema": "1fb7e86b38d57cdae4bb9cbacc3b302f370e06f94e0e97c1c708245218c94a14",
+      "source": "Game.xlsx / Monster",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "int",
+          "role": "key",
+          "members": 1,
+          "comment": "Monster id"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "members": 1,
+          "comment": "Display name"
+        },
+        {
+          "name": "Hp",
+          "type": "int",
+          "members": 1,
+          "comment": "Hit points"
+        },
+        {
+          "name": "Drops",
+          "type": "Ref<Item>[]",
+          "references": "Item",
+          "stored": "int",
+          "members": 1,
+          "comment": "Items it can drop"
+        },
+        {
+          "name": "Rare",
+          "type": "Ref<Item>?",
+          "references": "Item",
+          "stored": "int",
+          "members": 2,
+          "comment": "Rare drop, if any"
+        },
+        {
+          "name": "Weapon",
+          "type": "Ref<Item>",
+          "references": "Item",
+          "stored": "int",
+          "members": 1,
+          "comment": "Weapon it carries"
+        },
+        {
+          "name": "Weak",
+          "type": "Enum<EItemKind>[]",
+          "members": 1,
+          "comment": "Kinds of item it is weak to"
+        },
+        {
+          "name": "Zone",
+          "type": "string",
+          "role": "index",
+          "members": 1,
+          "comment": "Where it lives"
+        }
+      ]
+    },
+    {
+      "name": "Text",
+      "kind": "table",
+      "file": "Text.bytes",
+      "schema": "5fe077fdbe2a47945f29653f38dcca9bc872187ee4561b913a26356e6b900d4f",
+      "source": "Game.xlsx / Text",
+      "primaryKey": "Id",
+      "columns": [
+        {
+          "name": "Id",
+          "type": "string",
+          "role": "key",
+          "members": 1,
+          "comment": "Text id"
+        },
+        {
+          "name": "Ko",
+          "type": "string",
+          "members": 1,
+          "comment": "Korean"
+        },
+        {
+          "name": "En",
+          "type": "string",
+          "members": 1,
+          "comment": "English"
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "name": "EItemKind",
+      "type": "byte",
+      "flags": false,
+      "members": [
+        {
+          "name": "None",
+          "value": 0
+        },
+        {
+          "name": "Weapon",
+          "value": 1
+        },
+        {
+          "name": "Armor",
+          "value": 2
+        },
+        {
+          "name": "Consumable",
+          "value": 3
+        },
+        {
+          "name": "Material",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "name": "EItemTag",
+      "type": "int",
+      "flags": true,
+      "members": [
+        {
+          "name": "None",
+          "value": 0
+        },
+        {
+          "name": "Tradable",
+          "value": 1
+        },
+        {
+          "name": "Stackable",
+          "value": 2
+        },
+        {
+          "name": "Quest",
+          "value": 4
+        },
+        {
+          "name": "Sellable",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "EMonsterId",
+      "type": "int",
+      "flags": false,
+      "members": [
+        {
+          "name": "Slime",
+          "value": 1
+        },
+        {
+          "name": "Goblin",
+          "value": 2
+        },
+        {
+          "name": "Dragon",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "ERarity",
+      "type": "int",
+      "flags": false,
+      "members": [
+        {
+          "name": "Common",
+          "value": 0
+        },
+        {
+          "name": "Rare",
+          "value": 1
+        },
+        {
+          "name": "Epic",
+          "value": 2
+        }
+      ]
+    }
+  ]
+}
