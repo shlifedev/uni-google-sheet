@@ -217,13 +217,13 @@ namespace UGS.Core.Codecs
                     if (type.IsArray)
                     {
                         var elements = (object[])value;
-                        if (type is { Kind: ColumnKind.Scalar, Scalar: ScalarKind.Byte })
+                        if (IsStoredAsByteArray(type))
                         {
                             // byte[] is MessagePack's binary type, not an array of numbers.
                             WriteBinaryHeader(writer, elements.Length);
                             foreach (object element in elements)
                             {
-                                writer.Byte((byte)element);
+                                writer.Byte((byte)LeafValues.Resolve(type, element).Value);
                             }
                         }
                         else
@@ -254,6 +254,11 @@ namespace UGS.Core.Codecs
 
             return writer.ToArray();
         }
+
+        // The generated field is byte[] for byte[] columns and also for arrays of references to a Key<byte> table, since a
+        // reference is stored as its key. An enum stays an enum array even when its underlying type is byte.
+        private static bool IsStoredAsByteArray(ColumnType type) =>
+            (type.KeyType ?? type) is { Kind: ColumnKind.Scalar, Scalar: ScalarKind.Byte };
 
         private static void WriteLeaf(ByteWriter writer, ColumnType type, object value)
         {

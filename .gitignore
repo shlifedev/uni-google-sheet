@@ -27,3 +27,6 @@ ugs.private.key
 .vs/
 .vscode/
 *.ugs-tmp
+
+# LibreOffice lock files
+.~lock.*#

@@ -384,27 +384,55 @@ namespace UGS.Dev.Tests
                     Assert.Greater(root.Q(className: "ugs-fill").childCount, 0, "The " + page + " page is empty.");
                 }
 
-                // Tables: a tree of workbook > tables, a search box that filters it, and a preview of the selected table.
+                // Tables: a tree of workbook > tables, a search box that finds in it, and a preview of the selected table.
                 window.SelectPage("Tables");
                 yield return null;
                 yield return null;
                 // Workbooks are open, tables built from several sheets are closed. The top of the tree:
                 CollectionAssert.AreEqual(new[] { "Excel", "Character.xlsx", "Job", "Level", "Skill" }, TreeNames(root).Take(5).ToArray());
                 // The demo reads xlsx and CSV, so the tree starts with one node per kind of source.
-                // Rows below the fold are not built, so the CSV part is brought into view by filtering.
+                // Searching does not filter: the tree keeps every node, scrolls to the match and marks it in yellow.
+                TreeView tree = root.Q<TreeView>();
+                int rootCount = tree.GetRootIds().Count();
+                // Each kind of source is a section: a header row, not a parent, so its workbooks sit at the top level.
+                VisualElement excelHeader = root.Query(className: "ugs-tree-row").ToList().First(row => Plain(row.Q<Label>(className: "ugs-tree-row__name").text) == "Excel");
+                Assert.IsTrue(excelHeader.ClassListContains("ugs-tree-row--header"));
+                Assert.AreEqual(DisplayStyle.None, excelHeader.Q<Image>().resolvedStyle.display, "A header has no icon.");
+                Assert.IsFalse(root.Query(className: "ugs-tree-row").ToList().First(row => Plain(row.Q<Label>(className: "ugs-tree-row__name").text) == "Character.xlsx").ClassListContains("ugs-tree-row--header"));
+                Assert.Greater(rootCount, 3, "Workbooks are roots, next to the source headers.");
+                Label matchCount = root.Q<Label>(className: "ugs-search__count");
+                ScrollView treeScroll = tree.Q<ScrollView>();
+                // A match already in view does not move the tree; one out of sight is scrolled to.
+                root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "Skill";
+                yield return null;
+                yield return null;
+                Assert.AreEqual(0f, treeScroll.scrollOffset.y, "Skill is at the top, in view.");
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "localization";
                 yield return null;
                 yield return null;
-                CollectionAssert.AreEqual(new[] { "CSV", "Localization", "Text" }, TreeNames(root));
+                Assert.Greater(treeScroll.scrollOffset.y, 0f, "Localization is below the fold.");
+                Assert.AreEqual(rootCount, tree.GetRootIds().Count(), "Searching keeps every node.");
+                CollectionAssert.Contains(TreeNames(root), "Localization");
+                Label markedName = root.Query<Label>(className: "ugs-tree-row__name").ToList().FirstOrDefault(label => label.enableRichText);
+                Assert.IsNotNull(markedName, "The match is marked.");
+                StringAssert.Contains("<mark=#F2C94CE6>", markedName.text);
+                StringAssert.EndsWith(" of 1", matchCount.text);
+                root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "no such sheet";
+                yield return null;
+                Assert.AreEqual("No match", matchCount.text);
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "";
                 yield return null;
+                Assert.IsFalse(root.Query<Label>(className: "ugs-tree-row__name").ToList().Any(label => label.enableRichText), "No marks without a search.");
+                Assert.AreEqual(DisplayStyle.None, matchCount.resolvedStyle.display);
                 MultiColumnListView grid = root.Q<MultiColumnListView>();
                 Assert.AreEqual("Row", grid.columns[0].title);
                 Assert.Greater(grid.columns.Count, 1);
 
                 // Type colors: the type under each heading is classed by kind, and numbers line up on the right.
+                // Enter in the search box selects the match, so its table shows.
                 window.SelectPage("Tables");
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "game";
+                PressEnterInSearch(root);
                 yield return null;
                 yield return null;
                 StringAssert.StartsWith("Common.xlsx / Game.Config", root.Q(className: "ugs-caption").Q<Label>().text);
@@ -414,13 +442,9 @@ namespace UGS.Dev.Tests
                 Assert.IsNotNull(root.Q<Label>(className: "ugs-type--date"));
                 Assert.IsNotNull(root.Q<Label>(className: "ugs-type--ref"));
 
-                root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "item.xlsx";
-                yield return null;
-                yield return null;
-                CollectionAssert.AreEqual(new[] { "Excel", "Item.xlsx", "Enhance", "Equipment", "Item", "SetBonus" }, TreeNames(root));
-                // Select the Item table itself.
-                TreeView tree = root.Q<TreeView>();
-                tree.SetSelection(4);
+                // A name typed in full is the first match: "Item" goes to the Item table, not to Item.xlsx or EItemTag.
+                root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "Item";
+                PressEnterInSearch(root);
                 yield return null;
                 yield return null;
                 StringAssert.StartsWith("Item.xlsx / Item  ·  44 rows", root.Q(className: "ugs-caption").Q<Label>().text);
@@ -428,6 +452,45 @@ namespace UGS.Dev.Tests
                 Assert.IsNotNull(root.Q<Label>(className: "ugs-cell--number"));
                 // Values keep the default text color: the type classes are on the headings only.
                 Assert.IsTrue(root.Query<Label>(className: "ugs-cell").ToList().All(cell => !cell.ClassListContains("ugs-type--int") && !cell.ClassListContains("ugs-type--enum")));
+
+                // View style: grid lines, alignment and stripes are per user and apply to the grid on screen at once.
+                UgsWindow.GridLines savedLines = UgsWindow.ViewGridLines;
+                UgsWindow.CellAlignment savedAlignment = UgsWindow.ViewAlignment;
+                bool savedStripes = UgsWindow.ViewStripes;
+                try
+                {
+                    // Nothing saved: lines between every cell, text in the middle, striped rows.
+                    UgsText.SetSetting("view.gridLines", "");
+                    UgsText.SetSetting("view.alignment", "");
+                    UgsText.SetSetting("view.stripes", "");
+                    Assert.AreEqual(UgsWindow.GridLines.Both, UgsWindow.ViewGridLines);
+                    Assert.AreEqual(UgsWindow.CellAlignment.Center, UgsWindow.ViewAlignment);
+                    Assert.IsTrue(UgsWindow.ViewStripes);
+                    Assert.IsNotNull(root.Q(className: "ugs-caption").Q<Button>(className: "ugs-caption__menu"), "View is a button in the caption.");
+
+                    MultiColumnListView styled = root.Q<MultiColumnListView>(className: "ugs-grid");
+                    window.SetViewStyle(UgsWindow.GridLines.Both, UgsWindow.CellAlignment.Center, false);
+                    yield return null;
+                    Assert.IsTrue(styled.ClassListContains("ugs-grid--rows") && styled.ClassListContains("ugs-grid--columns"));
+                    Assert.AreEqual(AlternatingRowBackground.None, styled.showAlternatingRowBackgrounds);
+                    VisualElement firstCell = root.Q(className: "unity-multi-column-view__cell");
+                    Assert.AreEqual(1f, firstCell.resolvedStyle.borderRightWidth, "Vertical lines");
+                    Assert.AreEqual(1f, root.Q(className: "unity-multi-column-view__row-container").resolvedStyle.borderBottomWidth, "Horizontal lines");
+                    Assert.AreEqual(TextAnchor.MiddleCenter, root.Q<Label>(className: "ugs-cell--number").resolvedStyle.unityTextAlign, "Numbers follow the chosen alignment");
+                    Assert.AreEqual(TextAnchor.MiddleRight, root.Q<Label>(className: "ugs-cell--row").resolvedStyle.unityTextAlign, "The row number stays on the right");
+                    Assert.AreEqual("Both", UgsText.GetSetting("view.gridLines"));
+
+                    window.SetViewStyle(UgsWindow.GridLines.None, UgsWindow.CellAlignment.Auto, true);
+                    yield return null;
+                    Assert.IsFalse(styled.ClassListContains("ugs-grid--rows") || styled.ClassListContains("ugs-grid--columns") || styled.ClassListContains("ugs-grid--center"));
+                    Assert.AreEqual(AlternatingRowBackground.ContentOnly, styled.showAlternatingRowBackgrounds);
+                    Assert.AreEqual(0f, root.Q(className: "unity-multi-column-view__cell").resolvedStyle.borderRightWidth);
+                    Assert.AreEqual(TextAnchor.MiddleRight, root.Q<Label>(className: "ugs-cell--number").resolvedStyle.unityTextAlign);
+                }
+                finally
+                {
+                    window.SetViewStyle(savedLines, savedAlignment, savedStripes);
+                }
 
                 // Find in the table: Edit > Find (Ctrl+F / Cmd+F) opens the bar on the key column; Esc closes it.
                 VisualElement findBar = root.Q(className: "ugs-find");
@@ -480,43 +543,146 @@ namespace UGS.Dev.Tests
                 Assert.AreEqual(DisplayStyle.None, findBar.resolvedStyle.display);
                 Assert.AreEqual(44, itemGrid.itemsSource.Count);
 
+                // Sorting: a heading sorts the rows. Numbers sort by value, ties keep sheet order, and find keeps the order.
+                List<string> ItemColumn(int index) => itemGrid.itemsSource.Cast<Cell[]>().Select(row => row[index].Text).ToList();
+                List<string> sheetOrder = ItemColumn(0);
+                Assert.AreEqual(ColumnSortingMode.Custom, itemGrid.sortingMode);
+                itemGrid.sortColumnDescriptions.Add(new SortColumnDescription("c8", SortDirection.Descending));
+                yield return null;
+                List<double> sellPrices = ItemColumn(8).Select(text => double.Parse(text, System.Globalization.CultureInfo.InvariantCulture)).ToList();
+                Assert.AreEqual(44, sellPrices.Count);
+                Assert.AreEqual(2500d, sellPrices[0], "SellPrice by value: 2500 before 900.");
+                CollectionAssert.AreEqual(sellPrices.OrderByDescending(price => price).ToList(), sellPrices);
+                Assert.IsNotNull(root.Q(className: "unity-multi-column-header__column__sort-indicator"), "The heading shows the sort arrow.");
+                // Ties keep sheet order: the items that sell for 0 come in the order of their ids.
+                List<string> free = itemGrid.itemsSource.Cast<Cell[]>().Where(row => row[8].Text == "0").Select(row => row[0].Text).ToList();
+                CollectionAssert.AreEqual(sheetOrder.Where(free.Contains).ToList(), free);
+                // A heading click describes the column by its index rather than its name.
+                itemGrid.sortColumnDescriptions.Clear();
+                itemGrid.sortColumnDescriptions.Add(new SortColumnDescription(itemGrid.columns.IndexOf(itemGrid.columns["c8"]), SortDirection.Ascending));
+                yield return null;
+                Assert.AreEqual("0", ItemColumn(8)[0]);
+                Assert.AreEqual("2500", ItemColumn(8)[43]);
+
+                itemGrid.sortColumnDescriptions.Clear();
+                itemGrid.sortColumnDescriptions.Add(new SortColumnDescription("c0", SortDirection.Descending));
+                yield return null;
+                Assert.AreEqual("30111", ItemColumn(0)[0]);
+                root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-find__field").value = "1000";
+                for (int frame = 0; frame < 30 && itemGrid.itemsSource.Count != 7; frame++)
+                {
+                    yield return null;
+                }
+
+                CollectionAssert.AreEqual(new[] { "10007", "10006", "10005", "10004", "10003", "10002", "10001" }, ItemColumn(0), "Found rows stay sorted.");
+                root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-find__field").value = "";
+                yield return null;
+                Assert.AreEqual(44, itemGrid.itemsSource.Count);
+                Assert.AreEqual("30111", ItemColumn(0)[0], "Clearing find keeps the sort.");
+
+                // The Row column is sheet order.
+                itemGrid.sortColumnDescriptions.Clear();
+                itemGrid.sortColumnDescriptions.Add(new SortColumnDescription("row", SortDirection.Ascending));
+                yield return null;
+                CollectionAssert.AreEqual(sheetOrder, ItemColumn(0));
+                itemGrid.sortColumnDescriptions.Clear();
+                yield return null;
+                CollectionAssert.AreEqual(sheetOrder, ItemColumn(0), "No sort is sheet order.");
+
+                // Text sorts the way people read it: case ignored, digits by value, Hangul in 가나다 order.
+                Assert.Less(UgsWindow.CompareNatural("Item2", "item10"), 0);
+                Assert.Less(UgsWindow.CompareNatural("가방", "나무"), 0);
+                Assert.Greater(UgsWindow.CompareNatural("b", "A"), 0);
+                Assert.AreEqual(0, UgsWindow.CompareNatural("x", "x"));
+
                 // A table built from several sheets lists them under it. Searching for one opens the table and shows only that sheet's rows.
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "advanced";
+                PressEnterInSearch(root);
                 yield return null;
                 yield return null;
-                CollectionAssert.AreEqual(new[] { "Excel", "Character.xlsx", "Job", "Job.Advanced" }, TreeNames(root));
+                CollectionAssert.Contains(TreeNames(root), "Job.Advanced", "The table opens to show the matching sheet.");
                 StringAssert.StartsWith("Character.xlsx / Job.Advanced  ·  part of Job  ·  8 rows", root.Q(className: "ugs-caption").Q<Label>().text);
 
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "monster.xlsx";
+                PressEnterInSearch(root);
                 yield return null;
                 yield return null;
-                CollectionAssert.AreEqual(new[] { "Excel", "Monster.xlsx", "Drop", "Monster", "Spawn" }, TreeNames(root));
+                // The workbook is selected; its tables follow it (Drop, Monster, Spawn), which the selections below rely on.
+                string[] names = TreeNames(root);
+                int monsterBook = Array.IndexOf(names, "Monster.xlsx");
+                Assert.GreaterOrEqual(monsterBook, 0, string.Join(", ", names));
+                Assert.AreEqual("Drop", names.ElementAtOrDefault(monsterBook + 1), string.Join(", ", names));
                 // xlsx workbooks carry the Excel icon.
-                Assert.AreEqual("ugs:excel", root.Q(className: "ugs-tree-row").Q<Image>().image.name);
+                Assert.AreEqual("ugs:excel", root.Query(className: "ugs-tree-row").ToList().First(row => Plain(row.Q<Label>(className: "ugs-tree-row__name").text) == "Monster.xlsx").Q<Image>().image.name);
 
                 // Several nodes can be selected; the bar under the tree builds just those.
                 tree = root.Q<TreeView>();
+                int at = tree.selectedIndex;
                 Label selectionLabel = root.Q<Label>(className: "ugs-selection__label");
                 // The build button counts the tables the selection builds again.
                 var selectionBuild = root.Q<UnityEditor.UIElements.ToolbarButton>(className: "ugs-selection__build");
-                tree.SetSelection(new[] { 2, 4 });
+                tree.SetSelection(new[] { at + 1, at + 3 });
                 yield return null;
                 Assert.AreEqual("2 sheets", selectionLabel.text);
                 Assert.AreEqual("Build (2)", selectionBuild.text);
                 StringAssert.Contains("Drop, Spawn", selectionBuild.tooltip);
                 StringAssert.Contains("Monster.xlsx / Drop", root.Q(className: "ugs-selection").tooltip);
-                tree.SetSelection(new[] { 1, 3 });
+                tree.SetSelection(new[] { at, at + 2 });
                 yield return null;
                 Assert.AreEqual("Monster.xlsx", selectionLabel.text, "A selected workbook covers its tables.");
-                Assert.AreEqual("Build (3)", selectionBuild.text, "Drop, Monster and Spawn.");
+                Assert.AreEqual("Build (3 · enum 1)", selectionBuild.text, "Drop, Monster and Spawn. The workbook's Battle.Enums sheet is read again too.");
                 tree.SetSelection(new[] { 0 });
                 yield return null;
-                Assert.AreEqual("Excel · 1 workbook", selectionLabel.text, "A source node covers the workbooks shown under it.");
-                tree.SetSelection(new[] { 3 });
+                StringAssert.IsMatch(@"^Excel · \d+ workbooks$", selectionLabel.text, "A source node covers the workbooks under it.");
+                tree.SetSelection(new[] { at + 2 });
                 yield return null;
                 // Monster is built from Monster and Monster.Boss.
                 Assert.AreEqual("Monster · 2 sheets", selectionLabel.text);
                 Assert.AreEqual("Build (1)", selectionBuild.text, "Two sheets, one table.");
+
+                // Enums are in the tree too: those of an Enums sheet under its workbook, Mapping enums under their table.
+                root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "EStat";
+                PressEnterInSearch(root);
+                yield return null;
+                yield return null;
+                CollectionAssert.Contains(TreeNames(root), "EStat");
+                StringAssert.StartsWith("Common.xlsx / Enums  ·  EStat  ·  byte  ·  12 members", root.Q(className: "ugs-caption").Q<Label>().text);
+                Assert.AreEqual(12, root.Q<MultiColumnListView>().itemsSource.Count);
+                Assert.AreEqual(new[] { "Member", "Value", "Comment" }, root.Q<MultiColumnListView>().columns.Select(column => column.title).ToArray());
+                // An Enums sheet builds no table, but its enums are read again: the whole sheet, so all 12 of them.
+                Assert.AreEqual("Build (enum 12)", root.Q<UnityEditor.UIElements.ToolbarButton>(className: "ugs-selection__build").text);
+
+                root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "EItemTag";
+                PressEnterInSearch(root);
+                yield return null;
+                yield return null;
+                StringAssert.Contains("Flags", root.Q(className: "ugs-caption").Q<Label>().text);
+                CollectionAssert.Contains(((List<string[]>)root.Q<MultiColumnListView>().itemsSource).Select(row => row[2]).ToList(), "8  (1 << 3)");
+                // Enum members sort too; Value by its number, so 16 comes before 8.
+                MultiColumnListView enumGrid = root.Q<MultiColumnListView>();
+                enumGrid.sortColumnDescriptions.Add(new SortColumnDescription("f2", SortDirection.Descending));
+                yield return null;
+                CollectionAssert.AreEqual(new[] { "Event", "Bound", "Sellable", "Stackable", "Tradable", "None" },
+                    ((List<string[]>)enumGrid.itemsSource).Select(row => row[1]).ToArray());
+
+                root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "EJobId";
+                PressEnterInSearch(root);
+                yield return null;
+                yield return null;
+                CollectionAssert.Contains(TreeNames(root), "EJobId");
+                StringAssert.Contains("Mapping", root.Q(className: "ugs-caption").Q<Label>().text);
+                Assert.AreEqual(12, root.Q<MultiColumnListView>().itemsSource.Count);
+
+                // An Enums sheet lists every enum it defines.
+                root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "battle";
+                PressEnterInSearch(root);
+                yield return null;
+                yield return null;
+                CollectionAssert.Contains(TreeNames(root), "Battle.Enums");
+                StringAssert.StartsWith("Monster.xlsx / Battle.Enums  ·  1 enum", root.Q(className: "ugs-caption").Q<Label>().text);
+                Assert.AreEqual(4, root.Q<MultiColumnListView>().itemsSource.Count);
+                Assert.AreEqual("Enum", root.Q<MultiColumnListView>().columns[0].title);
+
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "";
                 yield return null;
 
@@ -600,7 +766,22 @@ namespace UGS.Dev.Tests
         {
             return root.Query<Label>(className: "ugs-tree-row__name").ToList()
                 .Where(label => label.resolvedStyle.display == DisplayStyle.Flex && label.text.Length > 0 && label.parent.parent.resolvedStyle.display == DisplayStyle.Flex)
-                .Select(label => label.text).ToArray();
+                .Select(label => Plain(label.text)).ToArray();
+        }
+
+        // A tree name without the rich text that marks a search match.
+        private static string Plain(string text) => System.Text.RegularExpressions.Regex.Replace(text, "<[^>]*>", "");
+
+        // Enter in the tree's search box: selects the next match.
+        private static void PressEnterInSearch(VisualElement root)
+        {
+            var search = root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search");
+            VisualElement input = search.Q<TextField>() ?? (VisualElement)search;
+            using (KeyDownEvent enter = KeyDownEvent.GetPooled('\0', KeyCode.Return, EventModifiers.None))
+            {
+                enter.target = input;
+                input.SendEvent(enter);
+            }
         }
     }
 }

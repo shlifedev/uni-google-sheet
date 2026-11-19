@@ -127,7 +127,8 @@ public class CommitTests
         using var temp = new TempDir();
         using var build = new SampleBuild("memorypack", config => config.Output.Csv = temp.Combine("csv"));
         string[] files = Directory.GetFiles(temp.Combine("csv")).Select(path => Path.GetFileName(path)!).OrderBy(name => name, StringComparer.Ordinal).ToArray();
-        Assert.Equal(["Game.csv", "Item.csv", "Limits.csv", "Monster.csv", "Text.csv"], files);
+        // Beside the tables, the list of what the tool wrote: the only files a later build may remove.
+        Assert.Equal([OutputCommitter.CsvListFileName, "Game.csv", "Item.csv", "Limits.csv", "Monster.csv", "Text.csv"], files);
         // What was written reads back as the same table.
         List<string[]> rows = BuiltinCsvParser.Instance.Parse(File.ReadAllText(temp.Combine("csv", "Item.csv")));
         Assert.Equal(9, rows.Count);
@@ -446,7 +447,8 @@ public class GoogleSourceTests
         var source = new SourceConfig { Type = SourceType.Google, SpreadsheetId = "sheet-id", Snapshot = "Snapshot", Auth = { Type = GoogleAuthType.ApiKey, ApiKey = "KEY" } };
         (BuildResult online, _) = Build(source, Serve, temp.Path);
         Assert.True(online.Success, Sheets.Errors(online));
-        Assert.Equal(["Item.csv", "Monster.csv"], Directory.GetFiles(temp.Combine("Snapshot")).Select(Path.GetFileName).OrderBy(name => name));
+        Assert.Equal(["Item.csv", "Monster.csv"], Directory.GetFiles(temp.Combine("Snapshot"), "*.csv").Select(Path.GetFileName).OrderBy(name => name));
+        Assert.True(File.Exists(temp.Combine("Snapshot", SnapshotIndex.FileName)));
         // The snapshot uses LF line endings so it diffs the same on every machine.
         Assert.DoesNotContain("\r", File.ReadAllText(temp.Combine("Snapshot", "Item.csv")));
 
@@ -455,6 +457,33 @@ public class GoogleSourceTests
         Assert.Empty(handler.Requests);
         Assert.Equal(online.Output!.ContentHash, offline.Output!.ContentHash);
         Assert.Equal(online.Output.SchemaHash, offline.Output.SchemaHash);
+    }
+
+    [Fact]
+    public void An_offline_partial_build_names_the_workbook_as_the_online_build_did()
+    {
+        using var temp = new TempDir();
+        var source = new SourceConfig { Type = SourceType.Google, SpreadsheetId = "sheet-id", Snapshot = "Snapshot", Auth = { Type = GoogleAuthType.ApiKey, ApiKey = "KEY" } };
+        var config = new UgsConfig { BaseDirectory = temp.Path, Sources = { source }, CsvBackend = "builtin" };
+        BuildResult online = TableBuild.Run(config, new TableBuildOptions { HttpHandler = new StubHandler(Serve), GoogleEndpoints = Endpoints });
+        Assert.True(online.Success, Sheets.Errors(online));
+        TableBuild.Commit(config, online);
+        string item = Path.Combine(config.Resolve(config.Output.Data), "Item.bytes");
+
+        // Without a configured name the workbook is the spreadsheet's title, and the offline build must use the same one.
+        var offline = new StubHandler(_ => throw new InvalidOperationException("offline builds must not use the network"));
+        BuildResult partial = TableBuild.Run(config, new TableBuildOptions { HttpHandler = offline, GoogleEndpoints = Endpoints, Offline = true, Only = SheetSelection.Parse(["Live Data/Item"]) });
+        Assert.True(partial.Success, Sheets.Errors(partial));
+        Assert.Equal(["Live Data / Item"], partial.RefreshedSheets);
+        TableBuild.Commit(config, partial);
+        Assert.True(File.Exists(item));
+
+        // A snapshot from before the name was recorded cannot be matched: the build stops instead of deleting the table.
+        File.Delete(temp.Combine("Snapshot", SnapshotIndex.FileName));
+        BuildResult unmatched = TableBuild.Run(config, new TableBuildOptions { HttpHandler = offline, GoogleEndpoints = Endpoints, Offline = true, Only = SheetSelection.Parse(["Live Data/Item"]) });
+        Assert.False(unmatched.Success);
+        Assert.Contains("The workbook was not found in any source", Sheets.Errors(unmatched));
+        Assert.True(File.Exists(item));
     }
 }
 

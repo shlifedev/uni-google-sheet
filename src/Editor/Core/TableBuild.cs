@@ -38,6 +38,12 @@ namespace UGS.Core
         public GoogleEndpoints? GoogleEndpoints { get; set; }
 
         /// <summary>
+        /// The providers that sources with auth type "custom" choose from by name (see <see cref="IGoogleCredentialProvider"/>).
+        /// The Unity editor fills this with the provider classes it finds; null means the host has none.
+        /// </summary>
+        public IReadOnlyList<IGoogleCredentialProvider>? CredentialProviders { get; set; }
+
+        /// <summary>
         /// Read only these workbooks and sheets again; take every other sheet from the sheet cache, as the last build on this
         /// machine read it. Null or empty reads everything. See <see cref="SheetCache"/>.
         /// </summary>
@@ -106,6 +112,12 @@ namespace UGS.Core
         public bool IsReleased => _released;
 
         /// <summary>
+        /// Hash of the manifest that was on disk when the build started; null when there was none. A commit checks it again,
+        /// so a build never writes over output that another build wrote in the meantime.
+        /// </summary>
+        internal string? BaseManifestHash { get; set; }
+
+        /// <summary>
         /// Lets go of everything that is only needed to write files: the sheets as read, the typed values and the generated output.
         /// What is left is what a person looks at afterwards: <see cref="RawTables"/>, <see cref="Diagnostics"/>, <see cref="Enums"/>
         /// and the counts. Call it after <see cref="TableBuild.Commit"/> when the result is kept around, as the editor window does;
@@ -167,6 +179,7 @@ namespace UGS.Core
 
             result.CsvBackend = parser.Name;
             ITableCodec codec = TableCodecs.Find(config.Codegen.Serializer)!;
+            result.BaseManifestHash = HashManifestOnDisk(config);
 
             // 1. Read every source. Sources are independent, so they are read at the same time.
             var readWatch = Stopwatch.StartNew();
@@ -177,7 +190,7 @@ namespace UGS.Core
                 return result;
             }
 
-            IReadOnlyList<IWorkbookSource> sources = options.Sources ?? WorkbookSources.Create(config, parser, options.Offline, options.HttpHandler, options.GoogleEndpoints, only);
+            IReadOnlyList<IWorkbookSource> sources = options.Sources ?? WorkbookSources.Create(config, parser, options.Offline, options.HttpHandler, options.GoogleEndpoints, only, options.CredentialProviders);
             var sourceBags = new DiagnosticBag[sources.Count];
             var loads = new Task<IReadOnlyList<Workbook>>[sources.Count];
             for (int index = 0; index < sources.Count; index++)
@@ -299,10 +312,38 @@ namespace UGS.Core
                 throw new InvalidOperationException(result.IsReleased ? "The build data was released; run the build again to write it." : "A build with errors has no output to write.");
             }
 
-            CommitReport report = OutputCommitter.Commit(result.Output, config.Resolve(config.Output.Code), config.Resolve(config.Output.Data),
-                config.Output.Csv == null ? null : config.Resolve(config.Output.Csv));
-            SaveCache(config, result);
-            return report;
+            // Two builds of the same project can overlap: the CLI next to the editor, a watch next to a build. Commits are
+            // taken one at a time, and a build whose starting point was replaced by another build's output is refused:
+            // writing it would put back what that build changed (a partial build carries every unselected sheet as it was).
+            using (OutputLock.Acquire(config.Resolve(config.CacheDirectory), CommitLockTimeout))
+            {
+                if (HashManifestOnDisk(config) != result.BaseManifestHash)
+                {
+                    throw new IOException("Another build wrote the output while this one was running. Nothing was written, so its changes are kept; run this build again.");
+                }
+
+                CommitReport report = OutputCommitter.Commit(result.Output, config.Resolve(config.Output.Code), config.Resolve(config.Output.Data),
+                    config.Output.Csv == null ? null : config.Resolve(config.Output.Csv));
+                SaveCache(config, result);
+                return report;
+            }
+        }
+
+        /// <summary>How long a commit waits for another build's commit to finish.</summary>
+        internal static TimeSpan CommitLockTimeout { get; set; } = TimeSpan.FromMinutes(2);
+
+        private static string? HashManifestOnDisk(UgsConfig config)
+        {
+            string manifestPath = Path.Combine(config.Resolve(config.Output.Data), config.Output.ManifestFile);
+            try
+            {
+                return File.Exists(manifestPath) ? SheetCache.HashManifest(File.ReadAllBytes(manifestPath)) : null;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Unreadable now; a commit will find out properly. Use a value no real hash equals, so it is not mistaken for "no manifest".
+                return "unreadable";
+            }
         }
 
         // The cache records what was just written. If it cannot be saved, the old one is removed rather than left behind:
@@ -383,18 +424,22 @@ namespace UGS.Core
 
             Workbook Merge(Workbook old, Workbook? read)
             {
-                if (only.IsWholeWorkbook(old.Name))
+                if (read == null)
                 {
-                    if (read == null)
+                    // No source returned the workbook at all. That is far more often a name that does not match (an offline
+                    // snapshot, a renamed file) than a deliberate removal, and dropping its sheets here would delete their
+                    // tables' data on commit. A partial build never removes a whole workbook; a full build does.
+                    if (!sourceFailed)
                     {
-                        if (!sourceFailed && old.Sheets.Count > 0)
-                        {
-                            diagnostics.AddWarning(old.Name, "The workbook was not found in any source; its sheets are left out of this build.");
-                        }
-
-                        return new Workbook(old.Name, Array.Empty<Sheet>(), old.Origin);
+                        diagnostics.AddError(old.Name, "The workbook was not found in any source, so this partial build cannot read it again.",
+                            "Check the workbook name. If it was removed or renamed on purpose, run a full build.");
                     }
 
+                    return old;
+                }
+
+                if (only.IsWholeWorkbook(old.Name))
+                {
                     refreshedSheets.AddRange(read.Sheets.Select(sheet => sheet.Location));
                     return read;
                 }
@@ -402,7 +447,7 @@ namespace UGS.Core
                 var sheets = old.Sheets.ToList();
                 foreach ((string _, string sheetName) in only.Sheets.Where(entry => entry.Workbook == old.Name))
                 {
-                    Sheet? replacement = read?.Sheets.FirstOrDefault(sheet => sheet.Name == sheetName);
+                    Sheet? replacement = read.Sheets.FirstOrDefault(sheet => sheet.Name == sheetName);
                     int index = sheets.FindIndex(sheet => sheet.Name == sheetName);
                     if (replacement == null)
                     {
@@ -433,7 +478,7 @@ namespace UGS.Core
                     }
                 }
 
-                return new Workbook(old.Name, sheets, read?.Origin ?? old.Origin);
+                return new Workbook(old.Name, sheets, read.Origin ?? old.Origin);
             }
         }
 

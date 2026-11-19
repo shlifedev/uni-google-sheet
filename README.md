@@ -229,7 +229,7 @@ about 0.5 s.
     { "type": "xlsx", "path": "Sheets" },
     { "type": "csv",  "path": "Sheets/Csv" },
     { "type": "google", "spreadsheetId": "1AbC…",
-      "auth": { "type": "serviceAccount", "keyFile": "secrets/sa.json" },   // or "public", "apiKey", "accessToken"
+      "auth": { "type": "serviceAccount", "keyFile": "secrets/sa.json" },   // or "public", "apiKey", "accessToken", "custom", "command"
       "snapshot": "Sheets/Snapshot" },                                       // saved CSV: diffs and --offline builds
     { "type": "googleFolder", "folderId": "1XyZ…",                          // every spreadsheet and .xlsx in a Drive folder
       "auth": { "type": "apiKey", "apiKeyEnv": "UGS_GOOGLE_KEY" },
@@ -259,6 +259,8 @@ Two kinds of Google source, both added from the window (Settings → Sources →
 | `apiKey` | link-shared spreadsheets and folders; enable the Sheets and Drive APIs for the key | yes | yes |
 | `serviceAccount` | private files: share the spreadsheet or folder with the account's e-mail (`client_email`) as a viewer | yes | yes |
 | `accessToken` | an OAuth token with the `drive.readonly` scope, from an environment variable | yes | yes |
+| `command` | credentials from a command (`"command": "gcloud auth print-access-token"`): it prints an access token, JSON with `access_token`, or a service account's JSON key | yes | yes |
+| `custom` | credentials from a C# class of your project (`"provider": "vault"`), Unity editor only | yes | yes |
 
 Requests are kept few, because the Sheets API allows 60 reads a minute per account:
 
@@ -270,9 +272,38 @@ Requests are kept few, because the Sheets API allows 60 reads a minute per accou
 - A "too many requests" answer or a server error is retried up to five times, waiting 1, 2, 4, 8 seconds plus up to a
   second at random, or as long as Google's `Retry-After` header says.
 
-Keys come from files or environment variables, never from the command line. With `snapshot` set, what was fetched is
+Keys come from files, environment variables, a credential command or a provider class, never from the command line. With `snapshot` set, what was fetched is
 also saved as CSV (one folder per workbook for a Drive folder): commit it for reviewable diffs, and build from it with
 `--offline` or the window's Offline toggle. Partial builds download only the selected files and tabs.
+
+#### Your own credentials
+
+When the credentials live somewhere UGS does not read on its own (a secret manager, the OS keychain, a company token
+service), write a provider class in any editor assembly. Nothing registers it: the editor finds every class that
+implements `IGoogleCredentialProvider`, and lists it under Access → Custom provider by its class name, or by the name in
+the attribute.
+
+```csharp
+using UGS.Core.Sources;
+
+[UgsCredentialProvider("vault")]   // optional; without it the name is "VaultCredentials"
+public sealed class VaultCredentials : IGoogleCredentialProvider
+{
+    public async Task<GoogleCredential> GetCredentialAsync(GoogleCredentialRequest request, CancellationToken cancellationToken)
+    {
+        string keyJson = await MyVault.ReadAsync("google/ugs-reader", cancellationToken);
+        return GoogleCredential.FromServiceAccountKey(keyJson);   // or FromAccessToken(token, account), FromApiKey(key)
+    }
+}
+```
+
+```jsonc
+"auth": { "type": "custom", "provider": "vault" }
+```
+
+The provider runs on a background thread, once per source per build, so it must not call Unity's API. A service
+account key is signed and exchanged for a token by UGS. The `ugs` CLI cannot load editor classes: for CI, use
+`"type": "command"` with a command that prints the same credentials, or build `--offline` from the snapshot.
 
 ## Partial builds
 

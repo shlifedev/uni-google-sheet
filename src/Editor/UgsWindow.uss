@@ -10,6 +10,7 @@
     --ugs-card: rgba(255, 255, 255, 0.025);
     --ugs-line: #242424;
     --ugs-dim: #8f8f8f;
+    --ugs-grid-line: rgba(0, 0, 0, 0.3);
 }
 
 .ugs--light {
@@ -18,6 +19,7 @@
     --ugs-card: rgba(255, 255, 255, 0.35);
     --ugs-line: #999999;
     --ugs-dim: #5f5f5f;
+    --ugs-grid-line: rgba(0, 0, 0, 0.14);
 }
 
 .ugs-icon {
@@ -185,6 +187,14 @@
     margin-right: 4px;
 }
 
+.ugs-search__count {
+    flex-shrink: 0;
+    -unity-text-align: middle-left;
+    margin: 0 6px 0 0;
+    font-size: 11px;
+    color: var(--ugs-dim);
+}
+
 .ugs-tree-row {
     flex-direction: row;
     align-items: center;
@@ -208,6 +218,25 @@
     margin: 0 0 0 4px;
     padding: 0;
     font-size: 10px;
+    color: var(--ugs-dim);
+}
+
+/* A source header: a small dim title, its workbook count and a rule, instead of a node one level up. */
+.ugs-tree-row__rule {
+    display: none;
+    flex-grow: 1;
+    height: 1px;
+    margin: 0 6px 0 6px;
+    background-color: var(--ugs-line);
+}
+
+.ugs-tree-row--header > .ugs-tree-row__rule {
+    display: flex;
+}
+
+.ugs-tree-row--header > .ugs-tree-row__name {
+    font-size: 10px;
+    -unity-font-style: bold;
     color: var(--ugs-dim);
 }
 
@@ -240,6 +269,28 @@
 .ugs-caption > .unity-label {
     margin: 0;
     padding: 0;
+}
+
+/* "View": a small dropdown button, so it reads as something to press. */
+.ugs-caption__menu {
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    height: 18px;
+    margin: -2px 8px -2px 8px;
+    padding: 0 4px 0 8px;
+    border-radius: 3px;
+}
+
+.ugs-caption > .ugs-caption__menu > .ugs-caption__menu-label {
+    margin: 0;
+    padding: 0;
+    font-size: 11px;
+    color: var(--unity-colors-button-text);
+}
+
+.ugs-caption__menu-arrow {
+    margin: 0 0 0 6px;
 }
 
 .ugs-caption__hint {
@@ -333,6 +384,28 @@
     -unity-text-align: middle-right;
     opacity: 0.5;
 }
+
+/*
+ * View style, chosen per user from "View" above the table: lines between rows and columns, and where text sits.
+ * The row number stays on the right whatever the alignment.
+ */
+
+.ugs-grid--rows .unity-multi-column-view__row-container {
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ugs-grid-line);
+}
+
+.ugs-grid--columns .unity-multi-column-view__cell {
+    border-right-width: 1px;
+    border-right-color: var(--ugs-grid-line);
+}
+
+.ugs-grid--left .ugs-cell { -unity-text-align: middle-left; }
+.ugs-grid--center .ugs-cell { -unity-text-align: middle-center; }
+.ugs-grid--right .ugs-cell { -unity-text-align: middle-right; }
+.ugs-grid--center .ugs-header > .unity-label { -unity-text-align: upper-center; }
+.ugs-grid--right .ugs-header > .unity-label { -unity-text-align: upper-right; }
+.ugs-grid .ugs-cell--row { -unity-text-align: middle-right; }
 
 /* Settings */
 

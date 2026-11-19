@@ -13,10 +13,14 @@ namespace UGS
     /// Reads table data from a folder under StreamingAssets.
     /// On desktop, iOS and consoles the files are plain files, so both <see cref="Read"/> and <see cref="ReadAsync"/> work.
     /// On Android and WebGL they sit inside the package or behind a URL: only <see cref="ReadAsync"/> works there.
+    /// Create it on the main thread. URL reads always run there, because UnityWebRequest works nowhere else, even when the
+    /// loader calls <see cref="ReadAsync"/> from a thread-pool thread (it continues there between files, and reads in
+    /// parallel there with <see cref="TableLoadOptions.Parallel"/>). Do not block the main thread on such a load.
     /// </summary>
     public sealed class StreamingAssetsTableSource : TableSource
     {
         private readonly string _root;
+        private readonly SynchronizationContext? _mainThread;
 
         public override string Description => _root;
 
@@ -24,6 +28,7 @@ namespace UGS
         public StreamingAssetsTableSource(string folder)
         {
             _root = string.IsNullOrEmpty(folder) ? Application.streamingAssetsPath : Application.streamingAssetsPath + "/" + folder;
+            _mainThread = SynchronizationContext.Current;
         }
 
         /// <summary>True when the files can be opened directly, which is what the synchronous load and the watcher need.</summary>
@@ -43,14 +48,44 @@ namespace UGS
             return File.Exists(path) ? File.ReadAllBytes(path) : null;
         }
 
-        public override async ValueTask<byte[]?> ReadAsync(string fileName, CancellationToken cancellationToken)
+        public override ValueTask<byte[]?> ReadAsync(string fileName, CancellationToken cancellationToken)
         {
             if (IsFileSystem)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return Read(fileName);
+                return new ValueTask<byte[]?>(Read(fileName));
             }
 
+            if (_mainThread == null || SynchronizationContext.Current == _mainThread)
+            {
+                return new ValueTask<byte[]?>(DownloadAsync(fileName, cancellationToken));
+            }
+
+            // Called off the main thread: start the request there and hand the result back.
+            var completion = new TaskCompletionSource<byte[]?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _mainThread.Post(_ => Forward(DownloadAsync(fileName, cancellationToken), completion, cancellationToken), null);
+            return new ValueTask<byte[]?>(completion.Task);
+        }
+
+        private static async void Forward(Task<byte[]?> download, TaskCompletionSource<byte[]?> completion, CancellationToken cancellationToken)
+        {
+            try
+            {
+                completion.TrySetResult(await download);
+            }
+            catch (OperationCanceledException)
+            {
+                completion.TrySetCanceled(cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                completion.TrySetException(exception);
+            }
+        }
+
+        // Must start on the main thread; Task.Yield keeps it there between polls.
+        private async Task<byte[]?> DownloadAsync(string fileName, CancellationToken cancellationToken)
+        {
             using (UnityWebRequest request = UnityWebRequest.Get(_root + "/" + fileName))
             {
                 UnityWebRequestAsyncOperation operation = request.SendWebRequest();

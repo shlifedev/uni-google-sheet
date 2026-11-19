@@ -36,7 +36,16 @@ namespace UGS.Core.Config
         ServiceAccount,
 
         /// <summary>An OAuth access token supplied by the environment, for CI that already has one.</summary>
-        AccessToken
+        AccessToken,
+
+        /// <summary>
+        /// A C# class of the project supplies the credentials (see <see cref="Sources.IGoogleCredentialProvider"/>), chosen by
+        /// <see cref="GoogleAuthConfig.Provider"/>. Only the Unity editor finds such classes on its own.
+        /// </summary>
+        Custom,
+
+        /// <summary>A command prints the credentials (<see cref="GoogleAuthConfig.Command"/>), for example <c>gcloud auth print-access-token</c>.</summary>
+        Command
     }
 
     public sealed class GoogleAuthConfig
@@ -54,6 +63,15 @@ namespace UGS.Core.Config
 
         /// <summary>Name of the environment variable holding an OAuth access token.</summary>
         public string? AccessTokenEnv { get; set; }
+
+        /// <summary>Name of the credential provider class, for <see cref="GoogleAuthType.Custom"/>.</summary>
+        public string? Provider { get; set; }
+
+        /// <summary>
+        /// Command whose output is the credentials, for <see cref="GoogleAuthType.Command"/>: an access token, a JSON object
+        /// with <c>access_token</c>, or a service account's JSON key. It runs in the config file's folder, through the system shell.
+        /// </summary>
+        public string? Command { get; set; }
     }
 
     /// <summary>One tab of a Google spreadsheet, named explicitly so no API call is needed to list the tabs.</summary>
@@ -326,12 +344,16 @@ namespace UGS.Core.Config
                     "apikey" => GoogleAuthType.ApiKey,
                     "serviceaccount" => GoogleAuthType.ServiceAccount,
                     "accesstoken" => GoogleAuthType.AccessToken,
-                    _ => throw new JsonFormatException($"auth type \"{authType}\" is not one of \"public\", \"apiKey\", \"serviceAccount\", \"accessToken\"")
+                    "custom" => GoogleAuthType.Custom,
+                    "command" => GoogleAuthType.Command,
+                    _ => throw new JsonFormatException($"auth type \"{authType}\" is not one of \"public\", \"apiKey\", \"serviceAccount\", \"accessToken\", \"custom\", \"command\"")
                 };
                 result.Auth.ApiKey = auth.GetString("apiKey");
                 result.Auth.ApiKeyEnv = auth.GetString("apiKeyEnv");
                 result.Auth.KeyFile = auth.GetString("keyFile");
                 result.Auth.AccessTokenEnv = auth.GetString("accessTokenEnv");
+                result.Auth.Provider = auth.GetString("provider");
+                result.Auth.Command = auth.GetString("command");
             }
 
             foreach (JsonValue item in source.GetArray("sheets") ?? Array.Empty<JsonValue>())
@@ -371,12 +393,16 @@ namespace UGS.Core.Config
                         GoogleAuthType.ApiKey => "apiKey",
                         GoogleAuthType.ServiceAccount => "serviceAccount",
                         GoogleAuthType.AccessToken => "accessToken",
+                        GoogleAuthType.Custom => "custom",
+                        GoogleAuthType.Command => "command",
                         _ => "public"
                     });
                     SetIfPresent(auth, "apiKey", source.Auth.ApiKey);
                     SetIfPresent(auth, "apiKeyEnv", source.Auth.ApiKeyEnv);
                     SetIfPresent(auth, "keyFile", source.Auth.KeyFile);
                     SetIfPresent(auth, "accessTokenEnv", source.Auth.AccessTokenEnv);
+                    SetIfPresent(auth, "provider", source.Auth.Provider);
+                    SetIfPresent(auth, "command", source.Auth.Command);
                     item.Set("auth", auth);
                     if (source.Sheets.Count > 0)
                     {
@@ -468,6 +494,19 @@ namespace UGS.Core.Config
                 {
                     diagnostics.AddError(location, $"A {source.Type.ToString().ToLowerInvariant()} source has no path.", "Set \"path\" to a file or folder, relative to the config file.");
                 }
+
+                if (source.IsRemote)
+                {
+                    string where = source.Name ?? source.SpreadsheetId ?? source.FolderId ?? "";
+                    if (source.Auth.Type == GoogleAuthType.Custom && string.IsNullOrWhiteSpace(source.Auth.Provider))
+                    {
+                        diagnostics.AddError(location, $"The source '{where}' uses a custom credential provider but names none.", "Set auth.provider to the provider's name: its class name, or the name in [UgsCredentialProvider(\"name\")].");
+                    }
+                    else if (source.Auth.Type == GoogleAuthType.Command && string.IsNullOrWhiteSpace(source.Auth.Command))
+                    {
+                        diagnostics.AddError(location, $"The source '{where}' gets its credentials from a command but has none.", "Set auth.command to a command that prints an access token, for example \"gcloud auth print-access-token\".");
+                    }
+                }
             }
 
             foreach (string part in Codegen.Namespace.Split('.'))
@@ -517,6 +556,37 @@ namespace UGS.Core.Config
                 if (Directory.Exists(input) && (PathsEqual(input, code) || PathsEqual(input, data)))
                 {
                     diagnostics.AddError(location, $"The source folder '{source.Path}' is also an output folder.", "Use separate folders for sheets and for generated files.");
+                }
+            }
+
+            // The CSV output and the snapshots are written over and pruned too: a build replaces their files with its own.
+            // Pointed at a folder of sheets, a build would overwrite those sheets with its output.
+            string? csv = Output.Csv == null ? null : Resolve(Output.Csv);
+            var inputs = Sources.Where(source => source.Path != null && source.Type is SourceType.Csv or SourceType.Xlsx).Select(source => (Name: source.Path!, Path: Resolve(source.Path!))).ToList();
+            if (csv != null && inputs.FirstOrDefault(input => PathsEqual(input.Path, csv)) is { Name: { } shared })
+            {
+                diagnostics.AddError(location, $"The CSV output folder '{Output.Csv}' is also the source folder '{shared}'.", "Write the CSV output to a folder of its own.");
+            }
+
+            var snapshots = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (SourceConfig source in Sources.Where(source => source.Snapshot != null))
+            {
+                string snapshot = Resolve(source.Snapshot!).TrimEnd('/', '\\');
+                if (inputs.FirstOrDefault(input => PathsEqual(input.Path, snapshot)) is { Name: { } sharedInput })
+                {
+                    diagnostics.AddError(location, $"The snapshot folder '{source.Snapshot}' is also the source folder '{sharedInput}'.", "Give each snapshot a folder of its own.");
+                }
+                else if (PathsEqual(snapshot, code) || PathsEqual(snapshot, data) || (csv != null && PathsEqual(snapshot, csv)))
+                {
+                    diagnostics.AddError(location, $"The snapshot folder '{source.Snapshot}' is also an output folder.", "Give each snapshot a folder of its own.");
+                }
+                else if (snapshots.TryGetValue(snapshot, out string? other))
+                {
+                    diagnostics.AddError(location, $"Two sources save their snapshot to '{source.Snapshot}' (also '{other}').", "Give each snapshot a folder of its own.");
+                }
+                else
+                {
+                    snapshots.Add(snapshot, source.Snapshot!);
                 }
             }
         }

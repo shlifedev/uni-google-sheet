@@ -37,9 +37,11 @@ namespace UGS.Core.Sources
         private readonly SheetSelection? only;
         private bool offline;
         private readonly string? remoteCacheDirectory;
+        private readonly IReadOnlyList<IGoogleCredentialProvider>? credentialProviders;
 
-        public GoogleFolderSource(SourceConfig source, string baseDirectory, ICsvParser parser, string? snapshotDirectory = null, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null, bool offline = false, string? remoteCacheDirectory = null)
+        public GoogleFolderSource(SourceConfig source, string baseDirectory, ICsvParser parser, string? snapshotDirectory = null, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null, bool offline = false, string? remoteCacheDirectory = null, IReadOnlyList<IGoogleCredentialProvider>? credentialProviders = null)
         {
+            this.credentialProviders = credentialProviders;
             this.source = source;
             this.baseDirectory = baseDirectory;
             this.parser = parser;
@@ -72,13 +74,14 @@ namespace UGS.Core.Sources
             string folderId = source.FolderId ?? "";
             string location = source.Name ?? "Drive folder " + folderId;
             // The single-spreadsheet source does the authentication and the HTTP work; this one only adds the folder listing.
-            var helper = new GoogleSheetsSource(source, baseDirectory, parser, null, httpHandler, _endpoints);
+            var helper = new GoogleSheetsSource(source, baseDirectory, parser, null, httpHandler, _endpoints, credentialProviders: credentialProviders);
             using HttpClient client = httpHandler == null ? new HttpClient() : new HttpClient(httpHandler, disposeHandler: false);
             client.Timeout = TimeSpan.FromSeconds(100);
             try
             {
-                (string? apiKey, string? bearer) = await helper.ResolveAuthAsync(client, cancellationToken).ConfigureAwait(false);
-                _serviceAccount = helper.ServiceAccountEmail();
+                GoogleSheetsSource.ResolvedAuth auth = await helper.ResolveAuthAsync(client, cancellationToken).ConfigureAwait(false);
+                (string? apiKey, string? bearer, _) = auth;
+                _account = auth.Account;
                 // Asked first because the listing cannot tell "empty" from "not shared with you": both come back as no files.
                 string folderName = await GetFolderNameAsync(helper, client, folderId, apiKey, bearer, cancellationToken).ConfigureAwait(false);
                 location = source.Name ?? folderName;
@@ -118,7 +121,7 @@ namespace UGS.Core.Sources
                             await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
                             try
                             {
-                                results[fileIndex] = await LoadFileAsync(helper, client, wanted[fileIndex], apiKey, bearer, bags[fileIndex], cancellationToken).ConfigureAwait(false);
+                                results[fileIndex] = await LoadFileAsync(helper, client, wanted[fileIndex], auth, bags[fileIndex], cancellationToken).ConfigureAwait(false);
                             }
                             finally
                             {
@@ -168,7 +171,8 @@ namespace UGS.Core.Sources
 
         internal const string FolderMimeType = "application/vnd.google-apps.folder";
 
-        private string? _serviceAccount;
+        // The account the credentials belong to, once known, for messages that say whom to share the folder with.
+        private string? _account;
 
         private async Task<string> GetFolderNameAsync(GoogleSheetsSource helper, HttpClient client, string folderId, string? apiKey, string? bearer, CancellationToken cancellationToken)
         {
@@ -236,15 +240,16 @@ namespace UGS.Core.Sources
             return files;
         }
 
-        private async Task<IReadOnlyList<Workbook>> LoadFileAsync(GoogleSheetsSource helper, HttpClient client, DriveFile file, string? apiKey, string? bearer, DiagnosticBag diagnostics, CancellationToken cancellationToken)
+        private async Task<IReadOnlyList<Workbook>> LoadFileAsync(GoogleSheetsSource helper, HttpClient client, DriveFile file, GoogleSheetsSource.ResolvedAuth auth, DiagnosticBag diagnostics, CancellationToken cancellationToken)
         {
+            (string? apiKey, string? bearer, _) = auth;
             string? workbookSnapshot = snapshotDirectory == null ? null : Path.Combine(snapshotDirectory, GoogleSheetsSource.SafeFileName(file.Name));
             if (file.MimeType == SpreadsheetMimeType)
             {
                 var spreadsheet = new SourceConfig { Type = SourceType.Google, SpreadsheetId = file.Id, Name = file.Name, Auth = source.Auth };
-                var reader = new GoogleSheetsSource(spreadsheet, baseDirectory, parser, workbookSnapshot, httpHandler, _endpoints, only, remoteCacheDirectory)
+                var reader = new GoogleSheetsSource(spreadsheet, baseDirectory, parser, workbookSnapshot, httpHandler, _endpoints, only, remoteCacheDirectory, credentialProviders)
                 {
-                    PresetAuth = (apiKey, bearer),
+                    PresetAuth = auth,
                     // The listing already said which version this is; no need to ask Drive again.
                     KnownVersion = file.Version
                 };
@@ -257,7 +262,7 @@ namespace UGS.Core.Sources
                 // Unchanged since the last download: read the copy instead of downloading the file again.
                 if (workbookSnapshot != null)
                 {
-                    GoogleSheetsSource.WriteSnapshot(workbookSnapshot, copy.Tabs.Select(tab => tab.Name).ToList(), copy.Tabs.Select(tab => tab.Text).ToList(), complete: true);
+                    GoogleSheetsSource.WriteSnapshot(workbookSnapshot, file.Name, copy.Tabs.Select(tab => tab.Name).ToList(), copy.Tabs.Select(tab => tab.Text).ToList(), complete: true);
                 }
 
                 var cachedSheets = new List<Sheet>();
@@ -284,7 +289,7 @@ namespace UGS.Core.Sources
                 if (workbookSnapshot != null)
                 {
                     // The whole file was downloaded, so its snapshot is complete even in a partial build.
-                    GoogleSheetsSource.WriteSnapshot(workbookSnapshot, tabs.Select(tab => tab.Name).ToList(), tabs.Select(tab => tab.Text).ToList(), complete: true);
+                    GoogleSheetsSource.WriteSnapshot(workbookSnapshot, file.Name, tabs.Select(tab => tab.Name).ToList(), tabs.Select(tab => tab.Text).ToList(), complete: true);
                 }
 
                 if (file.Version is { } version)
@@ -311,7 +316,8 @@ namespace UGS.Core.Sources
             }
 
             Directory.CreateDirectory(snapshotDirectory);
-            Dictionary<string, (string Name, string? Link)> index = complete ? new Dictionary<string, (string Name, string? Link)>(StringComparer.Ordinal) : ReadIndex(snapshotDirectory);
+            Dictionary<string, (string Name, string? Link)> previous = ReadIndex(snapshotDirectory);
+            Dictionary<string, (string Name, string? Link)> index = complete ? new Dictionary<string, (string Name, string? Link)>(StringComparer.Ordinal) : previous;
             foreach ((string name, string? link) in files)
             {
                 index[GoogleSheetsSource.SafeFileName(name)] = (name, link);
@@ -319,12 +325,14 @@ namespace UGS.Core.Sources
 
             if (complete)
             {
-                // Files that left the folder leave the snapshot too.
-                foreach (string directory in Directory.GetDirectories(snapshotDirectory))
+                // Files that left the Drive folder leave the snapshot too. Only folders the previous index lists were made
+                // by this tool; any other folder that shares the snapshot location is not ours to delete.
+                foreach (string folder in previous.Keys)
                 {
-                    if (!index.ContainsKey(Path.GetFileName(directory)))
+                    string gone = Path.Combine(snapshotDirectory, folder);
+                    if (!index.ContainsKey(folder) && IsOwnFolderName(folder) && Directory.Exists(gone))
                     {
-                        Directory.Delete(directory, recursive: true);
+                        Directory.Delete(gone, recursive: true);
                     }
                 }
             }
@@ -357,6 +365,10 @@ namespace UGS.Core.Sources
                 File.WriteAllText(path, content, new UTF8Encoding(false));
             }
         }
+
+        // A plain folder name inside the snapshot. A hand-edited index must never point the tool at a folder elsewhere.
+        private static bool IsOwnFolderName(string folder) =>
+            folder.Length > 0 && folder == Path.GetFileName(folder) && folder != "." && folder != "..";
 
         private static Dictionary<string, (string Name, string? Link)> ReadIndex(string directory)
         {
@@ -408,15 +420,17 @@ namespace UGS.Core.Sources
                 case HttpStatusCode.Forbidden:
                     return new GoogleSourceException($"Google refused access to Drive folder '{id}' ({(int)status}).", source.Auth.Type switch
                     {
-                        GoogleAuthType.ServiceAccount => $"Share the folder with the service account {_serviceAccount ?? "(client_email in the key file)"} as a viewer.",
+                        GoogleAuthType.ServiceAccount => $"Share the folder with the service account {_account ?? "(client_email in the key file)"} as a viewer.",
                         GoogleAuthType.ApiKey => "An API key only lists folders shared as 'Anyone with the link can view', and the Drive API must be enabled for the key's project.",
                         GoogleAuthType.AccessToken => "The access token is expired or lacks the drive.readonly scope.",
+                        GoogleAuthType.Custom or GoogleAuthType.Command => $"Share the folder with {_account ?? "the account these credentials belong to"} as a viewer, and check that the credentials are not expired.",
                         _ => "Configure an API key, a service account or an access token: a folder cannot be listed without one."
                     });
                 case HttpStatusCode.NotFound:
                     return new GoogleSourceException($"Google has no Drive folder or file '{id}' that these credentials can see (404).", source.Auth.Type switch
                     {
-                        GoogleAuthType.ServiceAccount => $"Share the folder with the service account {_serviceAccount ?? "(client_email in the key file)"} as a viewer, and check the id: drive.google.com/drive/folders/<id>.",
+                        GoogleAuthType.ServiceAccount => $"Share the folder with the service account {_account ?? "(client_email in the key file)"} as a viewer, and check the id: drive.google.com/drive/folders/<id>.",
+                        GoogleAuthType.Custom or GoogleAuthType.Command when _account != null => $"Share the folder with {_account} as a viewer, and check the id: drive.google.com/drive/folders/<id>.",
                         GoogleAuthType.ApiKey => "Share the folder as 'Anyone with the link can view', and check the id: drive.google.com/drive/folders/<id>.",
                         _ => "Check that the folder is shared with this account, and the id: drive.google.com/drive/folders/<id>."
                     });

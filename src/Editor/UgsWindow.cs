@@ -40,7 +40,7 @@ namespace UGS.Editor
         private static readonly List<string> Serializers = new List<string> { "memorypack", "messagepack" };
         private static readonly List<string> CsvBackendNames = new List<string> { "auto", "builtin", "sep" };
         // In GoogleAuthType order, in the window's language.
-        private static List<string> AuthNames => new List<string> { T("Public link"), T("API key"), T("Service account"), T("Access token") };
+        private static List<string> AuthNames => new List<string> { T("Public link"), T("API key"), T("Service account"), T("Access token"), T("Custom provider"), T("Command") };
 
         private UgsConfig? _config;
         private string? _configError;
@@ -450,7 +450,7 @@ namespace UGS.Editor
                 selectionType = SelectionType.Single
             };
             list.AddToClassList("ugs-fill");
-            list.tooltip = T("Double-click a problem to open its file.");
+            list.tooltip = T("Double-click a problem to open its file. Right-click to copy it.");
             list.itemsChosen += _ =>
             {
                 if (list.selectedIndex >= 0 && list.selectedIndex < items.Count)
@@ -634,20 +634,47 @@ namespace UGS.Editor
             var icon = new Image();
             icon.AddToClassList("ugs-problem__icon");
             row.Add(icon);
+            // Plain labels, not selectable ones: a selectable label takes the clicks, so a double-click would select a
+            // word instead of opening the file. Copying is on the right-click menu.
             var text = new VisualElement();
             text.AddToClassList("ugs-fill");
-            text.Add(Selectable("ugs-problem__message"));
+            text.Add(Plain("ugs-problem__message"));
             var detail = new VisualElement();
             detail.AddToClassList("ugs-problem__detail");
-            detail.Add(Selectable("ugs-problem__location"));
-            detail.Add(Selectable("ugs-problem__hint"));
+            detail.Add(Plain("ugs-problem__location"));
+            detail.Add(Plain("ugs-problem__hint"));
             text.Add(detail);
             row.Add(text);
+            row.AddManipulator(new ContextualMenuManipulator(menu =>
+            {
+                if (row.userData is not Diagnostic problem)
+                {
+                    return;
+                }
+
+                menu.menu.AppendAction(T("Open file"), _ => OpenProblem(problem));
+                menu.menu.AppendSeparator();
+                menu.menu.AppendAction(T("Copy"), _ => EditorGUIUtility.systemCopyBuffer = problem.ToString());
+                menu.menu.AppendAction(T("Copy message"), _ => EditorGUIUtility.systemCopyBuffer = problem.Message);
+                menu.menu.AppendAction(T("Copy location"), _ => EditorGUIUtility.systemCopyBuffer = problem.Location);
+                if (problem.Hint.Length > 0)
+                {
+                    menu.menu.AppendAction(T("Copy fix"), _ => EditorGUIUtility.systemCopyBuffer = problem.Hint);
+                }
+            }));
             return row;
+
+            static Label Plain(string className)
+            {
+                var label = new Label();
+                label.AddToClassList(className);
+                return label;
+            }
         }
 
         private static void BindProblemRow(VisualElement row, Diagnostic diagnostic)
         {
+            row.userData = diagnostic;
             row.Q<Image>().image = EditorGUIUtility.IconContent(diagnostic.Severity == Severity.Error ? "console.erroricon.sml" : "console.warnicon.sml").image;
             row.Q<Label>(className: "ugs-problem__message").text = diagnostic.Message;
             row.Q<Label>(className: "ugs-problem__location").text = diagnostic.Location;
@@ -676,6 +703,14 @@ namespace UGS.Editor
 
             /// <summary>Set on source group nodes (Excel, Google Drive, …): the workbooks shown under it.</summary>
             public string[]? GroupWorkbooks;
+
+            /// <summary>Set on an enum node: one enum from an Enums sheet or a Mapping column.</summary>
+            public EnumDefinition? Enum;
+
+            /// <summary>Set on an Enums sheet node: the enums the sheet defines.</summary>
+            public EnumDefinition[]? EnumSheet;
+
+            public bool IsEnum => Enum != null || EnumSheet != null;
         }
 
         /// <summary>The top level of the tree when a project reads from more than one kind of source.</summary>
@@ -729,21 +764,6 @@ namespace UGS.Editor
             }
         }
 
-        private static string GroupIcon(SourceGroup group)
-        {
-            switch (group)
-            {
-                case SourceGroup.Excel:
-                    return ExcelIconName;
-                case SourceGroup.GoogleSheets:
-                    return GoogleSheetsIconName;
-                case SourceGroup.GoogleDrive:
-                    return "CloudConnect";
-                default:
-                    return "Folder Icon";
-            }
-        }
-
         // The keys of the selected tree nodes. Several can be selected (Ctrl/Cmd or Shift click) for a partial build.
         private readonly HashSet<string> _selectedKeys = new HashSet<string>();
 
@@ -752,7 +772,14 @@ namespace UGS.Editor
 
         private string? _selectedSheet;
 
+        // What the tree's search box holds. It does not filter: matching names are marked yellow, as in the table's
+        // find, and scrolled to.
         private string _tableFilter = "";
+        private List<TreeViewItemData<TableNode>> _treeRoots = new List<TreeViewItemData<TableNode>>();
+        // The ids of the nodes whose name matches, best first, and which of them Enter went to last (-1: none yet).
+        private readonly List<int> _treeMatches = new List<int>();
+        private int _treeMatchIndex = -1;
+        private Label? _treeMatchCount;
 
         // The sheets each table was assembled from. Counting them walks every row, so it is done once per build.
         private readonly Dictionary<RawTable, (string Workbook, string Sheet)[]> _sheetsByTable = new Dictionary<RawTable, (string Workbook, string Sheet)[]>();
@@ -871,10 +898,14 @@ namespace UGS.Editor
 
             var side = new VisualElement();
             side.AddToClassList("ugs-side");
-            var search = new ToolbarSearchField { value = _tableFilter, tooltip = T("Filter by table, sheet or workbook name.") };
+            var search = new ToolbarSearchField { value = _tableFilter, tooltip = T("Find a table, sheet, enum or workbook by name. Enter selects the next match, Shift+Enter the one before.") };
             search.AddToClassList("ugs-search");
             var searchBar = new Toolbar();
             searchBar.Add(search);
+            var matchCount = new Label();
+            matchCount.AddToClassList("ugs-search__count");
+            searchBar.Add(matchCount);
+            _treeMatchCount = matchCount;
             side.Add(searchBar);
 
             var tree = new TreeView
@@ -887,8 +918,18 @@ namespace UGS.Editor
             tree.bindItem = (element, index) =>
             {
                 TableNode node = tree.GetItemDataForIndex<TableNode>(index);
-                element.Q<Image>().image = TreeIcon(node.Icon);
-                element.Q<Label>(className: "ugs-tree-row__name").text = node.Label;
+                // A source header (Excel, CSV, Google Drive) is a section title with a rule, not a node with an icon.
+                bool header = node.GroupWorkbooks != null;
+                element.EnableInClassList("ugs-tree-row--header", header);
+                Image icon = element.Q<Image>();
+                icon.image = header ? null : TreeIcon(node.Icon);
+                icon.style.display = header ? DisplayStyle.None : DisplayStyle.Flex;
+                Label name = element.Q<Label>(className: "ugs-tree-row__name");
+                string query = _tableFilter.Trim();
+                string marked = query.Length > 0 ? Highlight(node.Label, query) : "";
+                // Rich text only while a match is marked, so a name with "<b>" in it shows as written.
+                name.enableRichText = marked.Length > 0;
+                name.text = marked.Length > 0 ? marked : node.Label;
                 Label note = element.Q<Label>(className: "ugs-tree-row__note");
                 note.text = node.Note;
                 note.style.display = node.Note.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
@@ -957,10 +998,27 @@ namespace UGS.Editor
                 {
                     TableNode node = tree.GetItemDataForIndex<TableNode>(index);
                     _selectedKeys.Add(node.Key);
-                    shown = node.Table != null ? node : shown;
+                    shown = node.Table != null || node.IsEnum ? node : shown;
                 }
 
                 UpdateTreeSelection(tree);
+                if (shown != null && shown.IsEnum)
+                {
+                    if (shown.Key != _selectedEnumKey || preview.childCount == 0)
+                    {
+                        _selectedEnumKey = shown.Key;
+                        ShowEnumPreview(preview, shown);
+                    }
+
+                    return;
+                }
+
+                if (shown != null && _selectedEnumKey != null)
+                {
+                    // Back from an enum to a table: draw the table even if it was the one shown before.
+                    _selectedEnumKey = null;
+                    preview.Clear();
+                }
                 // With several nodes selected the preview shows the one clicked last.
                 if (shown != null && (shown.Table!.Name != _selectedTable || shown.Sheet != _selectedSheet || preview.childCount == 0))
                 {
@@ -973,8 +1031,19 @@ namespace UGS.Editor
             search.RegisterValueChangedCallback(change =>
             {
                 _tableFilter = change.newValue ?? "";
-                FillTree(tree, build.RawTables, preview);
+                ApplyTreeSearch(tree, scroll: true);
             });
+            // Enter goes to the next match and selects it, so its table shows; Shift+Enter goes back.
+            search.RegisterCallback<KeyDownEvent>(key =>
+            {
+                if (key.keyCode != KeyCode.Return && key.keyCode != KeyCode.KeypadEnter)
+                {
+                    return;
+                }
+
+                StepTreeSearch(tree, key.shiftKey ? -1 : 1);
+                key.StopPropagation();
+            }, TrickleDown.TrickleDown);
 
             split.Add(side);
             split.Add(WithProblems(preview));
@@ -983,45 +1052,72 @@ namespace UGS.Editor
         }
 
         // Workbook > table > sheet. A table built from one sheet has no sheet nodes; one built from several
-        // (Item, Item.Rare, Item.Col.Balance) lists them under it, collapsed unless the filter matched one.
-        // Selects what was selected before, else a sheet the filter matched, else the first table.
+        // (Item, Item.Rare, Item.Col.Balance) lists them under it, collapsed. The search box does not filter the tree;
+        // it highlights the names that match and scrolls to them (see ApplyTreeSearch).
+        // Selects what was selected before, else the first table.
         private void FillTree(TreeView tree, IReadOnlyList<RawTable> tables, VisualElement preview)
         {
-            string filter = _tableFilter.Trim();
             var roots = new List<TreeViewItemData<TableNode>>();
             var expand = new List<int>();
             int nextId = 0;
-            (int Id, RawTable Table, string? Sheet)? previous = null, sheetMatch = null, first = null;
-            // Whether the node selected before matches the filter itself, rather than being shown only for a child sheet.
-            bool previousMatches = false;
+            (int Id, RawTable Table, string? Sheet)? previous = null, first = null;
             var keyed = new List<(string Key, int Id)>();
             _origins = UgsProject.LastResult?.Build.WorkbookOrigins ?? new Dictionary<string, WorkbookOrigin>();
-            List<IGrouping<string, RawTable>> workbooks = tables.GroupBy(WorkbookOf)
-                .OrderBy(group => (int)GroupOf(group.Key)).ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase).ToList();
-            // The source level appears once the project reads from more than one kind of source, and stays while filtering.
-            bool showGroups = workbooks.Select(group => GroupOf(group.Key)).Distinct().Count() > 1;
-            var workbookNodes = new List<(SourceGroup Group, string Workbook, TreeViewItemData<TableNode> Node)>();
-            foreach (IGrouping<string, RawTable> workbook in workbooks)
+            // Enums: those of an Enums sheet go under their workbook, those a Mapping column makes go under its table.
+            var sheetEnums = new Dictionary<string, List<(string Sheet, List<EnumDefinition> Enums)>>(StringComparer.Ordinal);
+            var mappingEnums = new Dictionary<string, List<EnumDefinition>>(StringComparer.Ordinal);
+            foreach (EnumDefinition definition in UgsProject.LastResult?.Build.Enums ?? (IReadOnlyList<EnumDefinition>)Array.Empty<EnumDefinition>())
             {
-                bool workbookMatches = filter.Length == 0 || Contains(workbook.Key, filter) || (showGroups && Contains(GroupLabel(GroupOf(workbook.Key)), filter));
+                (string enumWorkbook, string enumSheet) = SplitLocation(definition.Location);
+                if (IsEnumsSheet(enumSheet))
+                {
+                    if (!sheetEnums.TryGetValue(enumWorkbook, out List<(string Sheet, List<EnumDefinition> Enums)>? sheetsOfWorkbook))
+                    {
+                        sheetsOfWorkbook = new List<(string Sheet, List<EnumDefinition> Enums)>();
+                        sheetEnums[enumWorkbook] = sheetsOfWorkbook;
+                    }
+
+                    int at = sheetsOfWorkbook.FindIndex(entry => entry.Sheet == enumSheet);
+                    if (at < 0)
+                    {
+                        sheetsOfWorkbook.Add((enumSheet, new List<EnumDefinition>()));
+                        at = sheetsOfWorkbook.Count - 1;
+                    }
+
+                    sheetsOfWorkbook[at].Enums.Add(definition);
+                }
+                else
+                {
+                    string at = enumWorkbook + " / " + enumSheet;
+                    if (!mappingEnums.TryGetValue(at, out List<EnumDefinition>? list))
+                    {
+                        list = new List<EnumDefinition>();
+                        mappingEnums[at] = list;
+                    }
+
+                    list.Add(definition);
+                }
+            }
+
+            (int Id, TableNode Node)? enumPrevious = null;
+            ILookup<string, RawTable> tablesByWorkbook = tables.ToLookup(WorkbookOf);
+            List<string> workbooks = tablesByWorkbook.Select(group => group.Key).Concat(sheetEnums.Keys).Distinct()
+                .OrderBy(name => (int)GroupOf(name)).ThenBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
+            // The source level appears once the project reads from more than one kind of source.
+            bool showGroups = workbooks.Select(GroupOf).Distinct().Count() > 1;
+            var workbookNodes = new List<(SourceGroup Group, string Workbook, TreeViewItemData<TableNode> Node)>();
+            foreach (string workbookName in workbooks)
+            {
                 var children = new List<TreeViewItemData<TableNode>>();
-                foreach (RawTable table in workbook.OrderBy(table => table.Name, StringComparer.Ordinal))
+                foreach (RawTable table in tablesByWorkbook[workbookName].OrderBy(table => table.Name, StringComparer.Ordinal))
                 {
                     string[] sheets = SheetsOf(table);
-                    bool tableMatches = workbookMatches || Contains(table.Name, filter);
                     var sheetNodes = new List<TreeViewItemData<TableNode>>();
-                    bool anySheetMatched = false;
                     int tableId = nextId++;
                     if (sheets.Length > 1)
                     {
                         foreach (string sheet in sheets)
                         {
-                            bool sheetMatches = filter.Length > 0 && Contains(sheet, filter);
-                            if (!tableMatches && !sheetMatches)
-                            {
-                                continue;
-                            }
-
                             int sheetId = nextId++;
                             sheetNodes.Add(new TreeViewItemData<TableNode>(sheetId, new TableNode
                             {
@@ -1037,21 +1133,29 @@ namespace UGS.Editor
                             if (table.Name == _selectedTable && sheet == _selectedSheet)
                             {
                                 previous = (sheetId, table, sheet);
-                                previousMatches = tableMatches || sheetMatches;
                             }
-
-                            if (sheetMatches && !tableMatches && sheetMatch == null)
-                            {
-                                sheetMatch = (sheetId, table, sheet);
-                            }
-
-                            anySheetMatched |= sheetMatches;
                         }
                     }
 
-                    if (!tableMatches && sheetNodes.Count == 0)
+                    // Enums a Mapping column of this table makes.
+                    foreach ((string mappingWorkbook, string mappingSheet) in SheetRefsOf(table))
                     {
-                        continue;
+                        if (!mappingEnums.TryGetValue(mappingWorkbook + " / " + mappingSheet, out List<EnumDefinition>? made))
+                        {
+                            continue;
+                        }
+
+                        foreach (EnumDefinition definition in made)
+                        {
+                            int enumId = nextId++;
+                            TableNode enumNode = EnumNode(definition, mapping: true);
+                            sheetNodes.Add(new TreeViewItemData<TableNode>(enumId, enumNode));
+                            keyed.Add((enumNode.Key, enumId));
+                            if (enumNode.Key == _selectedEnumKey)
+                            {
+                                enumPrevious = (enumId, enumNode);
+                            }
+                        }
                     }
 
                     children.Add(new TreeViewItemData<TableNode>(tableId, new TableNode
@@ -1069,30 +1173,73 @@ namespace UGS.Editor
                     if (table.Name == _selectedTable && _selectedSheet == null)
                     {
                         previous = (tableId, table, null);
-                        previousMatches = tableMatches;
                     }
 
                     first ??= (tableId, table, null);
-                    if (anySheetMatched || (previous?.Table == table && previous?.Sheet != null))
+                    if ((previous?.Table == table && previous?.Sheet != null) || (enumPrevious != null && sheetNodes.Any(node => node.data == enumPrevious.Value.Node)))
                     {
                         expand.Add(tableId);
+                    }
+                }
+
+                // Enums sheets, after the tables.
+                if (sheetEnums.TryGetValue(workbookName, out List<(string Sheet, List<EnumDefinition> Enums)>? enumSheets))
+                {
+                    foreach ((string enumSheet, List<EnumDefinition> definitions) in enumSheets)
+                    {
+                        var enumNodes = new List<TreeViewItemData<TableNode>>();
+                        foreach (EnumDefinition definition in definitions)
+                        {
+                            int enumId = nextId++;
+                            TableNode enumNode = EnumNode(definition, mapping: false);
+                            enumNodes.Add(new TreeViewItemData<TableNode>(enumId, enumNode));
+                            keyed.Add((enumNode.Key, enumId));
+                            if (enumNode.Key == _selectedEnumKey)
+                            {
+                                enumPrevious = (enumId, enumNode);
+                            }
+                        }
+
+                        int enumSheetId = nextId++;
+                        var sheetNode = new TableNode
+                        {
+                            Label = enumSheet,
+                            Workbook = workbookName,
+                            Sheet = enumSheet,
+                            Key = "enumsheet:" + workbookName + "/" + enumSheet,
+                            Icon = EnumIconName,
+                            Note = definitions.Count.ToString(),
+                            EnumSheet = definitions.ToArray(),
+                            Tooltip = Plural(definitions.Count, "enum") + "\n" + string.Join("\n", definitions.Select(definition => definition.Name))
+                        };
+                        children.Add(new TreeViewItemData<TableNode>(enumSheetId, sheetNode, enumNodes));
+                        keyed.Add((sheetNode.Key, enumSheetId));
+                        if (sheetNode.Key == _selectedEnumKey)
+                        {
+                            enumPrevious = (enumSheetId, sheetNode);
+                        }
+
+                        if ((enumPrevious != null && enumNodes.Any(node => node.data == enumPrevious.Value.Node)))
+                        {
+                            expand.Add(enumSheetId);
+                        }
                     }
                 }
 
                 if (children.Count > 0)
                 {
                     int workbookId = nextId++;
-                    workbookNodes.Add((GroupOf(workbook.Key), workbook.Key, new TreeViewItemData<TableNode>(workbookId, new TableNode
+                    workbookNodes.Add((GroupOf(workbookName), workbookName, new TreeViewItemData<TableNode>(workbookId, new TableNode
                     {
-                        Label = workbook.Key,
-                        Workbook = workbook.Key,
-                        Key = "workbook:" + workbook.Key,
-                        Icon = WorkbookIcon(workbook.Key),
-                        Tooltip = _origins.TryGetValue(workbook.Key, out WorkbookOrigin? origin) && origin.Source.Length > 0
-                            ? workbook.Key + "\n" + GroupLabel(GroupOf(workbook.Key)) + ": " + origin.Source
-                            : workbook.Key
+                        Label = workbookName,
+                        Workbook = workbookName,
+                        Key = "workbook:" + workbookName,
+                        Icon = WorkbookIcon(workbookName),
+                        Tooltip = _origins.TryGetValue(workbookName, out WorkbookOrigin? origin) && origin.Source.Length > 0
+                            ? workbookName + "\n" + GroupLabel(GroupOf(workbookName)) + ": " + origin.Source
+                            : workbookName
                     }, children)));
-                    keyed.Add(("workbook:" + workbook.Key, workbookId));
+                    keyed.Add(("workbook:" + workbookName, workbookId));
                     expand.Add(workbookId);
                 }
             }
@@ -1103,6 +1250,8 @@ namespace UGS.Editor
             }
             else
             {
+                // Each kind of source is a section: a header row, then its workbooks at the top level. The header is not a
+                // parent node, so the workbooks are not indented one level deeper. Selecting it still covers its workbooks.
                 foreach (IGrouping<SourceGroup, (SourceGroup Group, string Workbook, TreeViewItemData<TableNode> Node)> group in workbookNodes.GroupBy(entry => entry.Group))
                 {
                     int groupId = nextId++;
@@ -1112,13 +1261,12 @@ namespace UGS.Editor
                     {
                         Label = label,
                         Key = "group:" + group.Key,
-                        Icon = GroupIcon(group.Key),
                         Note = names.Length.ToString(),
                         GroupWorkbooks = names,
                         Tooltip = Plural(names.Length, "workbook") + "\n" + string.Join("\n", names)
-                    }, group.Select(entry => entry.Node).ToList()));
+                    }));
                     keyed.Add(("group:" + group.Key, groupId));
-                    expand.Add(groupId);
+                    roots.AddRange(group.Select(entry => entry.Node));
                 }
             }
 
@@ -1130,12 +1278,27 @@ namespace UGS.Editor
                 tree.ExpandItem(id);
             }
 
+            _treeRoots = roots;
+            ApplyTreeSearch(tree, scroll: false);
+
             preview.Clear();
-            // Keep the earlier selection if it still matches; otherwise prefer the sheet the filter named.
-            (int Id, RawTable Table, string? Sheet)? selected = (previousMatches ? previous : null) ?? sheetMatch ?? previous ?? first;
+            // Keep the earlier selection; an enum that was selected stays selected.
+            (int Id, RawTable Table, string? Sheet)? selected = previous ?? first;
+            (int Id, TableNode Node)? enumSelected = enumPrevious;
+            if (enumSelected != null)
+            {
+                _selectedEnumKey = enumSelected.Value.Node.Key;
+                _selectedKeys.Clear();
+                _selectedKeys.Add(_selectedEnumKey);
+                tree.SetSelectionByIdWithoutNotify(new[] { enumSelected.Value.Id });
+                UpdateTreeSelection(tree);
+                ShowEnumPreview(preview, enumSelected.Value.Node);
+                return;
+            }
+
+            _selectedEnumKey = null;
             if (selected == null)
             {
-                preview.Add(Empty(F("No table matches '{0}'.", filter)));
                 _selectedKeys.Clear();
                 UpdateTreeSelection(tree);
                 return;
@@ -1168,6 +1331,109 @@ namespace UGS.Editor
             tree.SetSelectionByIdWithoutNotify(ids);
             UpdateTreeSelection(tree);
             ShowPreview(preview, selected.Value.Table, selected.Value.Sheet);
+        }
+
+        /// <summary>
+        /// Marks the tree names that contain the search text, opens the nodes above them and, when <paramref name="scroll"/>
+        /// is set and no match is in view, scrolls to the best one. The tree keeps every node and the selection stays.
+        /// </summary>
+        private void ApplyTreeSearch(TreeView tree, bool scroll)
+        {
+            string query = _tableFilter.Trim();
+            _treeMatches.Clear();
+            _treeMatchIndex = -1;
+            if (query.Length > 0)
+            {
+                var exact = new List<int>();
+                var partial = new List<int>();
+                var parents = new List<int>();
+                var open = new HashSet<int>();
+                void Walk(IEnumerable<TreeViewItemData<TableNode>> items)
+                {
+                    foreach (TreeViewItemData<TableNode> item in items)
+                    {
+                        if (Contains(item.data.Label, query))
+                        {
+                            (string.Equals(item.data.Label, query, StringComparison.OrdinalIgnoreCase) ? exact : partial).Add(item.id);
+                            open.UnionWith(parents);
+                        }
+
+                        if (item.hasChildren)
+                        {
+                            parents.Add(item.id);
+                            Walk(item.children);
+                            parents.RemoveAt(parents.Count - 1);
+                        }
+                    }
+                }
+
+                Walk(_treeRoots);
+                foreach (int parent in open)
+                {
+                    if (!tree.IsExpanded(parent))
+                    {
+                        tree.ExpandItem(parent);
+                    }
+                }
+
+                // A name typed in full comes first, then the others in tree order.
+                _treeMatches.AddRange(exact);
+                _treeMatches.AddRange(partial);
+            }
+
+            tree.RefreshItems();
+            UpdateTreeMatchCount(query);
+            // A match already in view is enough: the tree only moves when every match is out of sight.
+            if (scroll && _treeMatches.Count > 0 && !_treeMatches.Any(id => IsInView(tree, id)))
+            {
+                tree.ScrollToItemById(_treeMatches[0]);
+            }
+        }
+
+        // Whether the row of a node is within the visible part of the tree.
+        private static bool IsInView(TreeView tree, int id)
+        {
+            int index = tree.viewController.GetIndexForId(id);
+            ScrollView? scroll = tree.Q<ScrollView>();
+            if (index < 0 || scroll == null || float.IsNaN(scroll.contentViewport.layout.height))
+            {
+                return false;
+            }
+
+            float top = index * tree.fixedItemHeight;
+            float offset = scroll.scrollOffset.y;
+            return top >= offset && top + tree.fixedItemHeight <= offset + scroll.contentViewport.layout.height;
+        }
+
+        /// <summary>Selects the next (or, with -1, the previous) match, scrolls to it and shows it.</summary>
+        private void StepTreeSearch(TreeView tree, int step)
+        {
+            if (_treeMatches.Count == 0)
+            {
+                return;
+            }
+
+            // The first Enter goes to the match the search scrolled to; the next ones move on from there.
+            _treeMatchIndex = _treeMatchIndex < 0
+                ? (step > 0 ? 0 : _treeMatches.Count - 1)
+                : (_treeMatchIndex + step + _treeMatches.Count) % _treeMatches.Count;
+            int id = _treeMatches[_treeMatchIndex];
+            tree.SetSelectionById(id);
+            tree.ScrollToItemById(id);
+            UpdateTreeMatchCount(_tableFilter.Trim());
+        }
+
+        private void UpdateTreeMatchCount(string query)
+        {
+            if (_treeMatchCount == null)
+            {
+                return;
+            }
+
+            _treeMatchCount.text = query.Length == 0 ? ""
+                : _treeMatches.Count == 0 ? T("No match")
+                : F("{0} of {1}", Math.Max(_treeMatchIndex, 0) + 1, _treeMatches.Count);
+            _treeMatchCount.style.display = query.Length == 0 ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         private Toolbar? _selectionBar;
@@ -1225,8 +1491,15 @@ namespace UGS.Editor
                     .Select(table => table.Name)
                     .OrderBy(name => name, StringComparer.Ordinal)
                     .ToList();
-                _selectionBuild.text = F("Build ({0})", tables.Count);
-                _selectionBuild.tooltip = T("Read only the selected sheets again and write the result.") + "\n" + F("Tables built again: {0}", tables.Count > 0 ? string.Join(", ", tables) : "-");
+                // Enums sheets build no table but do change the generated enums, so they are counted too.
+                List<string> enums = (UgsProject.LastResult?.Build.Enums ?? (IReadOnlyList<EnumDefinition>)Array.Empty<EnumDefinition>())
+                    .Where(definition => SplitLocation(definition.Location) is var at && IsEnumsSheet(at.Sheet) && selection.Includes(at.Workbook, at.Sheet))
+                    .Select(definition => definition.Name)
+                    .ToList();
+                string built = enums.Count == 0 ? tables.Count.ToString() : (tables.Count > 0 ? tables.Count + " · " : "") + "enum " + enums.Count;
+                _selectionBuild.text = F("Build ({0})", built);
+                _selectionBuild.tooltip = T("Read only the selected sheets again and write the result.") + "\n" + F("Tables built again: {0}", tables.Count > 0 ? string.Join(", ", tables) : "-")
+                    + (enums.Count > 0 ? "\n" + F("Enums read again: {0}", string.Join(", ", enums)) : "");
             }
 
             bool canRun = _config != null && !UgsProject.IsRunning;
@@ -1270,6 +1543,166 @@ namespace UGS.Editor
             }
         }
 
+        private string? _selectedEnumKey;
+
+        private const string EnumIconName = "ugs:enum";
+
+        // "Book / Sheet!B2" or "Book / Sheet" into its workbook and sheet.
+        private static (string Workbook, string Sheet) SplitLocation(string location)
+        {
+            int separator = location.IndexOf(" / ", StringComparison.Ordinal);
+            if (separator < 0)
+            {
+                return (location, "");
+            }
+
+            string sheet = location.Substring(separator + 3);
+            int cell = sheet.LastIndexOf('!');
+            return (location.Substring(0, separator), cell >= 0 ? sheet.Substring(0, cell) : sheet);
+        }
+
+        // The sheet rule: "Enums", or a name ending in ".Enums" (Battle.Enums).
+        private static bool IsEnumsSheet(string sheet) => sheet == "Enums" || sheet.EndsWith(".Enums", StringComparison.Ordinal);
+
+        private TableNode EnumNode(EnumDefinition definition, bool mapping)
+        {
+            (string workbook, string sheet) = SplitLocation(definition.Location);
+            return new TableNode
+            {
+                Label = definition.Name,
+                Workbook = workbook,
+                Sheet = sheet,
+                Key = "enum:" + definition.Name,
+                Icon = EnumIconName,
+                Note = definition.Members.Count.ToString(),
+                Enum = definition,
+                Tooltip = DescribeEnum(definition, mapping) + (definition.Comment.Length > 0 ? "\n" + definition.Comment : "")
+            };
+        }
+
+        // "byte · Flags · 6 members" / "int · Mapping · 12 members".
+        private static string DescribeEnum(EnumDefinition definition, bool mapping)
+        {
+            return definition.Underlying.ToString().ToLowerInvariant()
+                + (definition.IsFlags ? " · Flags" : "")
+                + (mapping ? " · Mapping" : "")
+                + " · " + Plural(definition.Members.Count, "member");
+        }
+
+        /// <summary>An enum's members, or every enum of an Enums sheet: name, value, comment.</summary>
+        private void ShowEnumPreview(VisualElement container, TableNode node)
+        {
+            container.Clear();
+            // Find works on tables only.
+            _findBar = null;
+            _findField = null;
+            EnumDefinition[] definitions = node.Enum != null ? new[] { node.Enum } : node.EnumSheet ?? Array.Empty<EnumDefinition>();
+            bool several = node.Enum == null;
+            bool mapping = node.Enum != null && !IsEnumsSheet(node.Sheet ?? "");
+
+            var caption = new VisualElement();
+            caption.AddToClassList("ugs-caption");
+            string where = (node.Workbook ?? "") + " / " + (node.Sheet ?? "");
+            var captionText = new Label(several
+                ? where + "  ·  " + Plural(definitions.Length, "enum")
+                : where + "  ·  " + node.Enum!.Name + "  ·  " + DescribeEnum(node.Enum, mapping).Replace(" · ", "  ·  "));
+            captionText.AddToClassList("ugs-fill");
+            caption.Add(captionText);
+            caption.Add(ViewMenu());
+            container.Add(caption);
+
+            var rows = new List<string[]>();
+            foreach (EnumDefinition definition in definitions)
+            {
+                foreach (EnumMember member in definition.Members)
+                {
+                    rows.Add(new[] { definition.Name, member.Name, FormatEnumValue(definition, member.Value), member.Comment });
+                }
+            }
+
+            var columns = new List<(string Title, int Field, float Width, bool Number)>();
+            if (several)
+            {
+                columns.Add((T("Enum"), 0, 160f, false));
+            }
+
+            columns.Add((T("Member"), 1, 180f, false));
+            columns.Add((T("Value"), 2, 110f, true));
+            columns.Add((T("Comment"), 3, 260f, false));
+
+            // The rows in the order on screen; sorting replaces it, member order is kept in rows.
+            List<string[]> shown = rows;
+            var grid = new MultiColumnListView
+            {
+                itemsSource = shown,
+                fixedItemHeight = 20,
+                showAlternatingRowBackgrounds = AlternatingRowBackground.ContentOnly,
+                selectionType = SelectionType.Multiple,
+                reorderable = false,
+                sortingMode = ColumnSortingMode.Custom
+            };
+            grid.AddToClassList("ugs-fill");
+            grid.AddToClassList("ugs-grid");
+            ApplyViewStyle(grid);
+            grid.columnSortingChanged += () =>
+            {
+                shown = SortRows(rows, grid.sortedColumns, name =>
+                {
+                    int field = name.Length == 2 && name[0] == 'f' ? name[1] - '0' : -1;
+                    if (field < 0 || field > 3)
+                    {
+                        return null;
+                    }
+
+                    return (field == 2 ? SortKind.Number : SortKind.Text, row => row[field]);
+                });
+                grid.ClearSelection();
+                grid.itemsSource = shown;
+                grid.Rebuild();
+            };
+            foreach ((string title, int field, float width, bool number) in columns)
+            {
+                grid.columns.Add(new Column
+                {
+                    name = "f" + field,
+                    title = title,
+                    width = width,
+                    makeHeader = () => Header(title, "", ""),
+                    makeCell = () =>
+                    {
+                        var label = new Label();
+                        label.AddToClassList("ugs-cell");
+                        if (number)
+                        {
+                            label.AddToClassList("ugs-cell--number");
+                        }
+
+                        return label;
+                    },
+                    bindCell = (element, index) => ((Label)element).text = shown[index][field]
+                });
+            }
+
+            container.Add(grid);
+        }
+
+        // Flags read better as bits: "8  (1 << 3)".
+        private static string FormatEnumValue(EnumDefinition definition, long value)
+        {
+            if (definition.IsFlags && value > 0 && (value & (value - 1)) == 0)
+            {
+                int bit = 0;
+                while ((1L << bit) != value)
+                {
+                    bit++;
+                }
+
+                return value + "  (1 << " + bit + ")";
+            }
+
+            return value.ToString();
+        }
+
         private static string DescribeSheet(RawTable table, string sheet)
         {
             bool addsColumns = table.Columns.Any(column => column.NameCell.Origin.Sheet == sheet) && table.Rows.Count > 0 && table.Rows[0].Length > 0 && table.Rows[0][0].Origin.Sheet != sheet
@@ -1297,6 +1730,10 @@ namespace UGS.Editor
             var note = new Label();
             note.AddToClassList("ugs-tree-row__note");
             row.Add(note);
+            // The line after a source header's name; hidden on other rows.
+            var rule = new VisualElement();
+            rule.AddToClassList("ugs-tree-row__rule");
+            row.Add(rule);
             return row;
         }
 
@@ -1455,6 +1892,7 @@ namespace UGS.Editor
             captionRow.Add(caption);
             var shortcut = new Label(Application.platform == RuntimePlatform.OSXEditor ? T("⌘F to find") : T("Ctrl+F to find"));
             shortcut.AddToClassList("ugs-caption__hint");
+            captionRow.Add(ViewMenu());
             captionRow.Add(shortcut);
             container.Add(captionRow);
 
@@ -1490,10 +1928,13 @@ namespace UGS.Editor
                 fixedItemHeight = 20,
                 showAlternatingRowBackgrounds = AlternatingRowBackground.ContentOnly,
                 selectionType = SelectionType.None,
-                sortingMode = ColumnSortingMode.None
+                // Clicking a heading sorts by it, Shift+click adds a second column. Unity draws the arrows; the rows are
+                // ordered here, after the find filter, so find and sort work together.
+                sortingMode = ColumnSortingMode.Custom
             };
             grid.AddToClassList("ugs-fill");
             grid.AddToClassList("ugs-grid");
+            ApplyViewStyle(grid);
             // The row number is the sheet's own, so it matches the cell addresses on the Problems page. Rows that another
             // sheet added (Item.Rare) carry that sheet's short name, so "Rare 4" is not mistaken for row 4 of Item.
             // The column is as wide as the longest label needs, so 200,000 rows do not show as "199…".
@@ -1577,7 +2018,26 @@ namespace UGS.Editor
             noMatch.style.display = DisplayStyle.None;
             container.Add(noMatch);
 
-            void ApplyFind()
+            // How each column compares when sorted. The Row column is sheet order, which SortRows knows by itself.
+            var sortKinds = new Dictionary<string, (int Column, SortKind Kind)>();
+            foreach (int index in columns)
+            {
+                sortKinds["c" + index] = (index, SortKindOf(table.Columns[index].TypeText));
+            }
+
+            (SortKind Kind, Func<Cell[], string> Text)? SortColumn(string name)
+            {
+                if (!sortKinds.TryGetValue(name, out (int Column, SortKind Kind) found))
+                {
+                    return null;
+                }
+
+                int column = found.Column;
+                return (found.Kind, row => column < row.Length ? row[column].Text : "");
+            }
+
+            // Filter, then sort. Rows keep their sheet order through the filter, so sorting by Row puts that order back.
+            void ApplyView()
             {
                 query = (findField.value ?? "").Trim();
                 if (query.Length == 0)
@@ -1593,6 +2053,7 @@ namespace UGS.Editor
                     matches.text = F("{0} of {1}", rows.Count.ToString("N0"), allRows.Count.ToString("N0"));
                 }
 
+                rows = SortRows(rows, grid.sortedColumns, SortColumn);
                 grid.itemsSource = rows;
                 grid.Rebuild();
                 noMatch.style.display = query.Length > 0 && rows.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
@@ -1605,13 +2066,259 @@ namespace UGS.Editor
                 _findInAllColumns = searchAll;
                 keyToggle.SetValueWithoutNotify(!searchAll);
                 allToggle.SetValueWithoutNotify(searchAll);
-                ApplyFind();
+                ApplyView();
             }
 
-            findField.RegisterValueChangedCallback(_ => ApplyFind());
+            findField.RegisterValueChangedCallback(_ => ApplyView());
             keyToggle.RegisterValueChangedCallback(change => SetScope(!change.newValue));
             allToggle.RegisterValueChangedCallback(change => SetScope(change.newValue));
+            grid.columnSortingChanged += ApplyView;
         }
+
+        /// <summary>How a column's text is compared when the data view is sorted.</summary>
+        internal enum SortKind
+        {
+            Text,
+            Number,
+            Bool
+        }
+
+        // Single numbers sort by value and booleans false before true. Everything else, arrays included, sorts as text.
+        private static SortKind SortKindOf(string typeText)
+        {
+            if (IsArray(typeText))
+            {
+                return SortKind.Text;
+            }
+
+            switch (TypeClass(typeText))
+            {
+                case "ugs-type--int":
+                case "ugs-type--float":
+                    return SortKind.Number;
+                case "ugs-type--bool":
+                    return SortKind.Bool;
+                default:
+                    return SortKind.Text;
+            }
+        }
+
+        // A cell's sort value, read once per sort. Missing: empty, or not a number in a number column.
+        private readonly struct SortKey
+        {
+            public readonly bool Missing;
+            public readonly double Number;
+            public readonly string Text;
+
+            private SortKey(bool missing, double number, string text)
+            {
+                Missing = missing;
+                Number = number;
+                Text = text;
+            }
+
+            public static SortKey Of(string text, SortKind kind)
+            {
+                text = text.Trim();
+                if (text.Length == 0)
+                {
+                    return new SortKey(true, 0, "");
+                }
+
+                switch (kind)
+                {
+                    case SortKind.Number:
+                        // Only the leading number counts, so an enum value shown as "8  (1 << 3)" sorts as 8.
+                        int end = 0;
+                        while (end < text.Length && !char.IsWhiteSpace(text[end]))
+                        {
+                            end++;
+                        }
+
+                        return double.TryParse(text.Substring(0, end), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double number)
+                            ? new SortKey(false, number, text)
+                            : new SortKey(true, 0, text);
+                    case SortKind.Bool:
+                        // As the build reads booleans: 1 / true and 0 / false.
+                        if (text == "1" || string.Equals(text, "true", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return new SortKey(false, 1, text);
+                        }
+
+                        return text == "0" || string.Equals(text, "false", StringComparison.OrdinalIgnoreCase)
+                            ? new SortKey(false, 0, text)
+                            : new SortKey(true, 0, text);
+                    default:
+                        return new SortKey(false, 0, text);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Orders <paramref name="rows"/> by the grid's sorted columns, first column first. A column named "row" is the
+        /// order the rows came in; others are looked up with <paramref name="columnFor"/>. Empty cells go last in either
+        /// direction, as in a spreadsheet, and ties keep the order the rows came in.
+        /// </summary>
+        internal static List<T> SortRows<T>(List<T> rows, IEnumerable<SortColumnDescription> sorted, Func<string, (SortKind Kind, Func<T, string> Text)?> columnFor)
+        {
+            var keys = new List<(SortKey[]? Keys, SortKind Kind, bool Descending)>();
+            foreach (SortColumnDescription description in sorted)
+            {
+                // A heading click describes the column by index, code by name; the resolved column has both.
+                string name = description.column?.name ?? "";
+                if (name.Length == 0)
+                {
+                    name = description.columnName ?? "";
+                }
+                bool descending = description.direction == SortDirection.Descending;
+                if (name == "row")
+                {
+                    keys.Add((null, SortKind.Number, descending));
+                    continue;
+                }
+
+                (SortKind Kind, Func<T, string> Text)? column = columnFor(name);
+                if (column == null)
+                {
+                    continue;
+                }
+
+                // Parse each cell once here, not on every comparison: a table can have a few hundred thousand rows.
+                var values = new SortKey[rows.Count];
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    values[i] = SortKey.Of(column.Value.Text(rows[i]) ?? "", column.Value.Kind);
+                }
+
+                keys.Add((values, column.Value.Kind, descending));
+            }
+
+            if (keys.Count == 0)
+            {
+                return rows;
+            }
+
+            int[] order = Enumerable.Range(0, rows.Count).ToArray();
+            Array.Sort(order, (a, b) =>
+            {
+                foreach ((SortKey[]? values, SortKind kind, bool descending) in keys)
+                {
+                    int result;
+                    if (values == null)
+                    {
+                        result = a.CompareTo(b);
+                    }
+                    else
+                    {
+                        SortKey x = values[a];
+                        SortKey y = values[b];
+                        if (x.Missing || y.Missing)
+                        {
+                            // Not flipped by the direction: blanks stay at the bottom.
+                            result = x.Missing == y.Missing ? 0 : x.Missing ? 1 : -1;
+                            if (result != 0)
+                            {
+                                return result;
+                            }
+
+                            continue;
+                        }
+
+                        result = kind == SortKind.Text ? CompareNatural(x.Text, y.Text) : x.Number.CompareTo(y.Number);
+                    }
+
+                    if (result != 0)
+                    {
+                        return descending ? -result : result;
+                    }
+                }
+
+                // Array.Sort is not stable; the original position breaks ties.
+                return a.CompareTo(b);
+            });
+
+            var sortedRows = new List<T>(rows.Count);
+            foreach (int index in order)
+            {
+                sortedRows.Add(rows[index]);
+            }
+
+            return sortedRows;
+        }
+
+        /// <summary>
+        /// Text order for people: case is ignored and runs of digits compare as numbers, so "Item2" comes before "Item10".
+        /// Other characters compare by code point, which puts Hangul in 가나다 order.
+        /// </summary>
+        public static int CompareNatural(string a, string b)
+        {
+            int i = 0;
+            int j = 0;
+            while (i < a.Length && j < b.Length)
+            {
+                if (IsAsciiDigit(a[i]) && IsAsciiDigit(b[j]))
+                {
+                    int endA = i;
+                    while (endA < a.Length && IsAsciiDigit(a[endA]))
+                    {
+                        endA++;
+                    }
+
+                    int endB = j;
+                    while (endB < b.Length && IsAsciiDigit(b[endB]))
+                    {
+                        endB++;
+                    }
+
+                    // Leading zeros do not change the value; "007" equals "7" here, and the final ordinal check splits them.
+                    int startA = i;
+                    while (startA < endA - 1 && a[startA] == '0')
+                    {
+                        startA++;
+                    }
+
+                    int startB = j;
+                    while (startB < endB - 1 && b[startB] == '0')
+                    {
+                        startB++;
+                    }
+
+                    int lengthA = endA - startA;
+                    int lengthB = endB - startB;
+                    if (lengthA != lengthB)
+                    {
+                        return lengthA < lengthB ? -1 : 1;
+                    }
+
+                    for (int k = 0; k < lengthA; k++)
+                    {
+                        if (a[startA + k] != b[startB + k])
+                        {
+                            return a[startA + k] < b[startB + k] ? -1 : 1;
+                        }
+                    }
+
+                    i = endA;
+                    j = endB;
+                    continue;
+                }
+
+                char x = char.ToUpperInvariant(a[i]);
+                char y = char.ToUpperInvariant(b[j]);
+                if (x != y)
+                {
+                    return x < y ? -1 : 1;
+                }
+
+                i++;
+                j++;
+            }
+
+            int rest = (a.Length - i).CompareTo(b.Length - j);
+            return rest != 0 ? rest : string.CompareOrdinal(a, b);
+        }
+
+        private static bool IsAsciiDigit(char c) => c >= '0' && c <= '9';
 
         /// <summary>
         /// Wraps every occurrence of <paramref name="query"/> (ignoring case) in a highlight. The rest is wrapped in noparse,
@@ -1713,6 +2420,106 @@ namespace UGS.Editor
             }
 
             return header;
+        }
+
+        /// <summary>Lines drawn between the cells of the data view.</summary>
+        public enum GridLines
+        {
+            None,
+            Rows,
+            Columns,
+            Both
+        }
+
+        /// <summary>How text sits in the cells of the data view. Auto puts numbers on the right and the rest on the left.</summary>
+        public enum CellAlignment
+        {
+            Auto,
+            Left,
+            Center,
+            Right
+        }
+
+        // How the data view looks is a matter of taste, so it is kept per user in UserSettings, next to the language.
+        // Out of the box: lines between every cell, text in the middle, striped rows.
+        public static GridLines ViewGridLines
+        {
+            get => Enum.TryParse(UgsText.GetSetting("view.gridLines"), true, out GridLines lines) ? lines : GridLines.Both;
+            set => UgsText.SetSetting("view.gridLines", value.ToString());
+        }
+
+        public static CellAlignment ViewAlignment
+        {
+            get => Enum.TryParse(UgsText.GetSetting("view.alignment"), true, out CellAlignment alignment) ? alignment : CellAlignment.Center;
+            set => UgsText.SetSetting("view.alignment", value.ToString());
+        }
+
+        public static bool ViewStripes
+        {
+            get => UgsText.GetSetting("view.stripes") != "false";
+            set => UgsText.SetSetting("view.stripes", value ? "true" : "false");
+        }
+
+        /// <summary>Gives a data grid the user's view style: grid lines, alignment and striped rows.</summary>
+        private static void ApplyViewStyle(MultiColumnListView grid)
+        {
+            GridLines lines = ViewGridLines;
+            CellAlignment alignment = ViewAlignment;
+            grid.EnableInClassList("ugs-grid--rows", lines == GridLines.Rows || lines == GridLines.Both);
+            grid.EnableInClassList("ugs-grid--columns", lines == GridLines.Columns || lines == GridLines.Both);
+            grid.EnableInClassList("ugs-grid--left", alignment == CellAlignment.Left);
+            grid.EnableInClassList("ugs-grid--center", alignment == CellAlignment.Center);
+            grid.EnableInClassList("ugs-grid--right", alignment == CellAlignment.Right);
+            AlternatingRowBackground stripes = ViewStripes ? AlternatingRowBackground.ContentOnly : AlternatingRowBackground.None;
+            if (grid.showAlternatingRowBackgrounds != stripes)
+            {
+                grid.showAlternatingRowBackgrounds = stripes;
+            }
+        }
+
+        /// <summary>Saves the view style for this user and applies it to the grids on screen.</summary>
+        public void SetViewStyle(GridLines lines, CellAlignment alignment, bool stripes)
+        {
+            ViewGridLines = lines;
+            ViewAlignment = alignment;
+            ViewStripes = stripes;
+            rootVisualElement.Query<MultiColumnListView>(className: "ugs-grid").ForEach(ApplyViewStyle);
+        }
+
+        /// <summary>A small "View" dropdown button in a caption: grid lines, text alignment and striped rows.</summary>
+        private Button ViewMenu()
+        {
+            var view = new Button { tooltip = T("How the table looks. Kept for you only, in UserSettings.") };
+            view.AddToClassList("ugs-caption__menu");
+            // A label and an arrow side by side; the button's own text would be drawn under the arrow.
+            var label = new Label(T("View"));
+            label.AddToClassList("ugs-caption__menu-label");
+            view.Add(label);
+            // The arrow of Unity's own popup fields, so it reads as a dropdown.
+            var arrow = new VisualElement();
+            arrow.AddToClassList("unity-base-popup-field__arrow");
+            arrow.AddToClassList("ugs-caption__menu-arrow");
+            view.Add(arrow);
+            view.clicked += () =>
+            {
+                var menu = new GenericMenu();
+                GridLines lines = ViewGridLines;
+                foreach ((GridLines value, string name) in new[] { (GridLines.None, T("None")), (GridLines.Rows, T("Between rows")), (GridLines.Columns, T("Between columns")), (GridLines.Both, T("Both")) })
+                {
+                    menu.AddItem(new GUIContent(T("Grid lines") + "/" + name), lines == value, () => SetViewStyle(value, ViewAlignment, ViewStripes));
+                }
+
+                CellAlignment alignment = ViewAlignment;
+                foreach ((CellAlignment value, string name) in new[] { (CellAlignment.Auto, T("Auto (numbers right)")), (CellAlignment.Left, T("Left")), (CellAlignment.Center, T("Center")), (CellAlignment.Right, T("Right")) })
+                {
+                    menu.AddItem(new GUIContent(T("Text alignment") + "/" + name), alignment == value, () => SetViewStyle(ViewGridLines, value, ViewStripes));
+                }
+
+                bool stripes = ViewStripes;
+                menu.AddItem(new GUIContent(T("Striped rows")), stripes, () => SetViewStyle(ViewGridLines, ViewAlignment, !stripes));
+                menu.DropDown(view.worldBound);
+            };
+            return view;
         }
 
         private static Label Cell(string className)
@@ -1882,6 +2689,12 @@ namespace UGS.Editor
             card.Add(Choice(T("Access"), AuthNames, AuthNames[(int)source.Auth.Type], value =>
             {
                 source.Auth.Type = (GoogleAuthType)AuthNames.IndexOf(value);
+                if (source.Auth.Type == GoogleAuthType.Custom && string.IsNullOrEmpty(source.Auth.Provider) && UgsProject.CredentialProviderNames() is { Count: 1 } only)
+                {
+                    // With a single provider in the project there is nothing to choose.
+                    source.Auth.Provider = only[0];
+                }
+
                 ShowPage();
             }, T("Public link and API key read spreadsheets shared as 'anyone with the link'. A service account reads private ones shared with its e-mail.")));
             switch (source.Auth.Type)
@@ -1895,6 +2708,13 @@ namespace UGS.Editor
                     break;
                 case GoogleAuthType.AccessToken:
                     card.Add(Text(T("Token variable"), source.Auth.AccessTokenEnv ?? "", value => source.Auth.AccessTokenEnv = Optional(value), T("Environment variable that holds an OAuth access token.")));
+                    break;
+                case GoogleAuthType.Custom:
+                    AddProviderChoice(card, source);
+                    break;
+                case GoogleAuthType.Command:
+                    card.Add(Text(T("Command"), source.Auth.Command ?? "", value => source.Auth.Command = Optional(value),
+                        T("Runs in the project folder; what it prints is used: an access token, JSON with access_token, or a service account's JSON key. Works in the CLI and CI too. Use full paths: the editor may not see your terminal's PATH.")));
                     break;
             }
 
@@ -1927,6 +2747,41 @@ namespace UGS.Editor
             card.Add(tabs);
             card.Add(PathField(T("Snapshot folder"), source.Snapshot ?? "", value => source.Snapshot = Optional(value), T("Optional. The fetched CSV is saved here, for diffs and offline builds."), Browse.Folder));
             return card;
+        }
+
+        // Custom credentials: the provider classes this editor found, by name.
+        private void AddProviderChoice(VisualElement card, SourceConfig source)
+        {
+            List<string> names = UgsProject.CredentialProviderNames().ToList();
+            string? current = source.Auth.Provider;
+            if (names.Count == 0)
+            {
+                card.Add(new HelpBox(T("No credential provider was found. Add a class that implements UGS.Core.Sources.IGoogleCredentialProvider to an editor assembly; it is found by itself and listed here by its class name, or by the name in [UgsCredentialProvider(\"name\")]."), HelpBoxMessageType.Info));
+                if (string.IsNullOrEmpty(current))
+                {
+                    return;
+                }
+            }
+
+            bool missing = !string.IsNullOrEmpty(current) && !names.Contains(current!, StringComparer.OrdinalIgnoreCase);
+            if (missing)
+            {
+                // Kept in the list so the choice in ugs.json is shown as it is, not silently replaced.
+                names.Add(current!);
+            }
+
+            string selected = names.FirstOrDefault(name => string.Equals(name, current, StringComparison.OrdinalIgnoreCase)) ?? "";
+            if (selected.Length == 0)
+            {
+                names.Insert(0, "");
+            }
+
+            card.Add(Choice(T("Provider"), names, selected, value => source.Auth.Provider = Optional(value),
+                T("The class that supplies the credentials. Only the editor runs it: the CLI and CI need auth type \"command\", or an offline build.")));
+            if (missing)
+            {
+                card.Add(new HelpBox(string.Format(T("No credential provider named '{0}' is in the project."), current), HelpBoxMessageType.Warning));
+            }
         }
 
         private void AddSource(SourceConfig source)
@@ -2165,6 +3020,9 @@ namespace UGS.Editor
                     return DrawnIcon(name, ExcelPixel);
                 case GoogleSheetsIconName:
                     return DrawnIcon(name, GoogleSheetsPixel);
+                case EnumIconName:
+                    // In the enum type color of the current skin.
+                    return EditorGUIUtility.isProSkin ? DrawnIcon(name + ":dark", (x, y) => EnumPixel(x, y, EnumDark)) : DrawnIcon(name + ":light", (x, y) => EnumPixel(x, y, EnumLight));
                 default:
                     return Icon(name);
             }
@@ -2173,6 +3031,24 @@ namespace UGS.Editor
         private static readonly Color ExcelDark = new Color32(0x10, 0x7C, 0x41, 0xFF);
         private static readonly Color ExcelMid = new Color32(0x21, 0xA3, 0x66, 0xFF);
         private static readonly Color ExcelLight = new Color32(0x33, 0xC4, 0x81, 0xFF);
+        private static readonly Color EnumDark = new Color32(0xD8, 0xC5, 0x78, 0xFF);
+        private static readonly Color EnumLight = new Color32(0x85, 0x70, 0x0F, 0xFF);
+
+        // A short list: three bullets with lines, the look of a set of named values.
+        private static Color? EnumPixel(float x, float y, Color ink)
+        {
+            for (int row = 0; row < 3; row++)
+            {
+                float top = 6.5f + row * 7.5f;
+                if (InRoundedRect(x, y, 4f, top, 9f, top + 5f, 1f) || InRoundedRect(x, y, 12f, top + 1f, 28f, top + 4f, 1.2f))
+                {
+                    return ink;
+                }
+            }
+
+            return null;
+        }
+
         private static readonly Color SheetsGreen = new Color32(0x0F, 0x9D, 0x58, 0xFF);
         private static readonly Color SheetsFold = new Color32(0x87, 0xCE, 0xAC, 0xFF);
 

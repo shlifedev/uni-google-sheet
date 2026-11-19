@@ -278,6 +278,11 @@ namespace UGS.Core.Output
     {
         private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
+        /// <summary>The list of CSV files the tool wrote into the CSV output folder. Starts with a dot so Unity does not import it.</summary>
+        public const string CsvListFileName = ".ugs-csv";
+
+        private const string CsvListHeader = "ugs-csv 1";
+
         public static CommitReport Commit(GeneratedOutput output, string codeDirectory, string dataDirectory, string? csvDirectory = null)
         {
             var report = new CommitReport();
@@ -327,16 +332,18 @@ namespace UGS.Core.Output
                     PlanWrite(changes, report, Path.Combine(csvDirectory, file.Key), Utf8.GetBytes(file.Value), file.Key);
                 }
 
-                if (Directory.Exists(csvDirectory))
+                // CSV files carry no marker, so the folder keeps a list of the ones this tool wrote. Only those are removed
+                // when their table goes away; any other CSV in the folder, such as sheets people keep there, is left alone.
+                string listPath = Path.Combine(csvDirectory, CsvListFileName);
+                foreach (string stale in ReadCsvList(listPath))
                 {
-                    foreach (string path in Directory.GetFiles(csvDirectory, "*.csv", SearchOption.TopDirectoryOnly))
+                    if (!keptCsv.Contains(stale) && File.Exists(Path.Combine(csvDirectory, stale)))
                     {
-                        if (!keptCsv.Contains(Path.GetFileName(path)))
-                        {
-                            PlanDelete(changes, path, Path.GetFileName(path));
-                        }
+                        PlanDelete(changes, Path.Combine(csvDirectory, stale), stale);
                     }
                 }
+
+                PlanWrite(changes, report, listPath, Utf8.GetBytes(WriteCsvList(keptCsv)), CsvListFileName);
             }
 
             // The manifest goes last: it is the signal that a complete build is in place.
@@ -423,9 +430,10 @@ namespace UGS.Core.Output
         }
 
         // Write to a temporary file in the same folder, then rename over the target: a reader sees the old file or the new one, never half of one.
+        // The temporary name is unique, so two writers can never take each other's temporary file.
         private static void WriteAtomically(string path, byte[] content)
         {
-            string temporary = path + ".ugs-tmp";
+            string temporary = path + "." + Guid.NewGuid().ToString("N").Substring(0, 12) + ".ugs-tmp";
             File.WriteAllBytes(temporary, content);
             try
             {
@@ -476,6 +484,53 @@ namespace UGS.Core.Output
             }
 
             return false;
+        }
+
+        private static string WriteCsvList(IEnumerable<string> files)
+        {
+            var text = new StringBuilder();
+            text.Append(CsvListHeader).Append('\n');
+            text.Append("# Written by UGS: the CSV files it made here. Only these are ever replaced or removed by a build.\n");
+            foreach (string file in files.OrderBy(file => file, StringComparer.Ordinal))
+            {
+                text.Append(file).Append('\n');
+            }
+
+            return text.ToString();
+        }
+
+        private static List<string> ReadCsvList(string path)
+        {
+            var files = new List<string>();
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    return files;
+                }
+
+                string[] lines = File.ReadAllText(path, Utf8).Split('\n');
+                if (lines.Length == 0 || lines[0].TrimEnd('\r') != CsvListHeader)
+                {
+                    return files;
+                }
+
+                foreach (string raw in lines.Skip(1))
+                {
+                    string file = raw.TrimEnd('\r');
+                    // Only plain .csv names in this folder: a hand-edited list must never make the tool delete anything else.
+                    if (file.Length > 0 && !file.StartsWith("#", StringComparison.Ordinal) && file == Path.GetFileName(file)
+                        && file.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                    {
+                        files.Add(file);
+                    }
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+
+            return files;
         }
 
         private static List<string> ReadPreviousDataFiles(string manifestPath)
@@ -535,6 +590,121 @@ namespace UGS.Core.Output
             public byte[]? Original { get; set; }
 
             public byte[]? OriginalMeta { get; set; }
+        }
+    }
+
+    /// <summary>
+    /// Lets one build at a time write a project's output, across processes: the CLI, the Unity editor and watchers.
+    /// The lock is a file created with create-new, which every runtime and file system makes atomic. It holds the owner's
+    /// process id, so a lock left behind by a process that died is recognized and taken over.
+    /// </summary>
+    internal sealed class OutputLock : IDisposable
+    {
+        public const string FileName = "build.lock";
+
+        private static readonly bool IsWindows = Path.DirectorySeparatorChar == '\\';
+
+        private readonly string path;
+        private FileStream? stream;
+
+        private OutputLock(string path, FileStream stream)
+        {
+            this.path = path;
+            this.stream = stream;
+        }
+
+        public static OutputLock Acquire(string directory, TimeSpan timeout)
+        {
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, FileName);
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            while (true)
+            {
+                try
+                {
+                    // On Windows the system deletes the file when the handle closes, even after a crash. Elsewhere it is
+                    // deleted by Dispose, and a crashed owner is detected by its process id.
+                    var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 64, IsWindows ? FileOptions.DeleteOnClose : FileOptions.None);
+                    byte[] owner = Encoding.ASCII.GetBytes(System.Diagnostics.Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture));
+                    stream.Write(owner, 0, owner.Length);
+                    stream.Flush();
+                    return new OutputLock(path, stream);
+                }
+                catch (IOException) when (File.Exists(path))
+                {
+                    if (IsAbandoned(path))
+                    {
+                        TryDelete(path);
+                        continue;
+                    }
+
+                    if (watch.Elapsed > timeout)
+                    {
+                        throw new IOException($"Another build is still writing the output (lock file {path}). Wait for it to finish; if no build is running, delete that file.");
+                    }
+
+                    System.Threading.Thread.Sleep(50);
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            if (stream == null)
+            {
+                return;
+            }
+
+            if (!IsWindows)
+            {
+                // Removed while still open, so another process can never lose a lock it has just created to this delete.
+                TryDelete(path);
+            }
+
+            stream.Dispose();
+            stream = null;
+        }
+
+        private static bool IsAbandoned(string path)
+        {
+            string text;
+            DateTime written;
+            try
+            {
+                text = File.ReadAllText(path).Trim();
+                written = File.GetLastWriteTimeUtc(path);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+
+            if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int processId))
+            {
+                // Just created and not written yet, or damaged. Only an old one is abandoned.
+                return DateTime.UtcNow - written > TimeSpan.FromSeconds(30);
+            }
+
+            try
+            {
+                using System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById(processId);
+                return process.HasExited;
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or NotSupportedException or PlatformNotSupportedException)
+            {
+                return true;
+            }
+        }
+
+        private static void TryDelete(string path)
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 }

@@ -95,6 +95,51 @@ namespace UGS.Editor
 
         private static UgsLanguage Load()
         {
+            return Enum.TryParse(GetSetting("language"), true, out UgsLanguage language) ? language : UgsLanguage.System;
+        }
+
+        private static void Save(UgsLanguage language)
+        {
+            SetSetting("language", language.ToString());
+        }
+
+        private static Dictionary<string, string>? _settings;
+
+        /// <summary>
+        /// A personal setting of the window (the language, how the data view looks), from UserSettings/UgsEditor.txt.
+        /// Empty when it was never set.
+        /// </summary>
+        public static string GetSetting(string key)
+        {
+            _settings ??= ReadSettings();
+            return _settings.TryGetValue(key, out string? value) ? value : "";
+        }
+
+        /// <summary>Saves a personal setting; the other settings in the file are kept.</summary>
+        public static void SetSetting(string key, string value)
+        {
+            _settings ??= ReadSettings();
+            _settings[key] = value;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
+                var text = new System.Text.StringBuilder();
+                foreach (KeyValuePair<string, string> setting in _settings)
+                {
+                    text.Append(setting.Key).Append('=').Append(setting.Value).Append('\n');
+                }
+
+                File.WriteAllText(SettingsPath, text.ToString());
+            }
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
+            {
+                Debug.LogWarning("[UGS] The setting '" + key + "' could not be saved: " + exception.Message);
+            }
+        }
+
+        private static Dictionary<string, string> ReadSettings()
+        {
+            var settings = new Dictionary<string, string>();
             try
             {
                 if (File.Exists(SettingsPath))
@@ -102,9 +147,9 @@ namespace UGS.Editor
                     foreach (string line in File.ReadAllLines(SettingsPath))
                     {
                         string[] parts = line.Split(new[] { '=' }, 2);
-                        if (parts.Length == 2 && parts[0].Trim() == "language" && Enum.TryParse(parts[1].Trim(), true, out UgsLanguage language))
+                        if (parts.Length == 2 && parts[0].Trim().Length > 0)
                         {
-                            return language;
+                            settings[parts[0].Trim()] = parts[1].Trim();
                         }
                     }
                 }
@@ -113,20 +158,7 @@ namespace UGS.Editor
             {
             }
 
-            return UgsLanguage.System;
-        }
-
-        private static void Save(UgsLanguage language)
-        {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-                File.WriteAllText(SettingsPath, "language=" + language + "\n");
-            }
-            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
-            {
-                Debug.LogWarning("[UGS] The language setting could not be saved: " + exception.Message);
-            }
+            return settings;
         }
 
         private static readonly Dictionary<string, string> KoreanCounts = new Dictionary<string, string>
@@ -139,6 +171,7 @@ namespace UGS.Editor
             ["error"] = "오류 {0}개",
             ["warning"] = "경고 {0}개",
             ["enum"] = "enum {0}개",
+            ["member"] = "멤버 {0}개",
             ["file"] = "파일 {0}개",
         };
 
@@ -175,22 +208,26 @@ namespace UGS.Editor
             ["Nothing has run yet."] = "아직 실행한 적이 없습니다.",
             ["No problems."] = "문제가 없습니다.",
             ["Copy all"] = "모두 복사",
-            ["Double-click a problem to open its file."] = "문제를 더블클릭하면 그 파일이 열립니다.",
+            ["Open file"] = "파일 열기",
+            ["Copy"] = "복사",
+            ["Copy message"] = "메시지 복사",
+            ["Copy location"] = "위치 복사",
+            ["Copy fix"] = "해결 방법 복사",
+            ["Double-click a problem to open its file. Right-click to copy it."] = "문제를 더블클릭하면 그 파일이 열리고, 우클릭하면 복사할 수 있습니다.",
             ["[UGS] The file of '{0}' was not found among the sources."] = "[UGS] 소스에서 '{0}' 파일을 찾지 못했습니다.",
             ["Click to show or hide the problems of the last run."] = "클릭하면 마지막 실행의 문제 목록을 열거나 닫습니다.",
 
             // Tree and selection
             ["Other"] = "기타",
             ["Run Check to see the tables as the build reads them."] = "검사를 실행하면 빌드가 읽은 그대로 테이블을 볼 수 있습니다.",
-            ["Filter by table, sheet or workbook name."] = "테이블, 시트, 워크북 이름으로 거릅니다.",
             ["Read only the selected sheets again and validate. Writes nothing."] = "선택한 시트만 다시 읽어 검사합니다. 파일은 쓰지 않습니다.",
             ["Read only the selected sheets again and write the result."] = "선택한 시트만 다시 읽어 결과를 씁니다.",
             ["Build {0}"] = "{0} 빌드",
             ["Build ({0})"] = "빌드({0})",
             ["Tables built again: {0}"] = "다시 빌드되는 테이블: {0}",
+            ["Enums read again: {0}"] = "다시 읽는 enum: {0}",
             ["Check {0}"] = "{0} 검사",
             ["Config table: one row, fields written down the sheet.\n"] = "설정 테이블: 한 행짜리이며 필드를 시트 아래로 적습니다.\n",
-            ["No table matches '{0}'."] = "'{0}'에 맞는 테이블이 없습니다.",
             ["Reads these again; every other sheet comes from the last build on this machine.\n"] = "아래 항목만 다시 읽고, 나머지 시트는 이 PC의 마지막 빌드에서 가져옵니다.\n",
             [" (all sheets)"] = " (모든 시트)",
             ["Adds columns to {0}, matched by key."] = "{0}에 열을 추가합니다 (키로 연결).",
@@ -210,6 +247,25 @@ namespace UGS.Editor
             ["Row"] = "행",
             ["{0} row {1}"] = "{0} {1}행",
             ["No rows match."] = "맞는 행이 없습니다.",
+            ["Find a table, sheet, enum or workbook by name. Enter selects the next match, Shift+Enter the one before."] = "테이블, 시트, enum, 워크북을 이름으로 찾습니다. Enter는 다음 항목, Shift+Enter는 이전 항목을 선택합니다.",
+            ["No match"] = "없음",
+            ["View"] = "보기",
+            ["How the table looks. Kept for you only, in UserSettings."] = "표를 어떻게 보여줄지. UserSettings에 나만의 설정으로 저장됩니다.",
+            ["Grid lines"] = "격자선",
+            ["None"] = "없음",
+            ["Between rows"] = "가로선",
+            ["Between columns"] = "세로선",
+            ["Both"] = "모두",
+            ["Text alignment"] = "텍스트 정렬",
+            ["Auto (numbers right)"] = "자동 (숫자는 오른쪽)",
+            ["Left"] = "왼쪽",
+            ["Center"] = "가운데",
+            ["Right"] = "오른쪽",
+            ["Striped rows"] = "줄무늬 배경",
+            ["Enum"] = "Enum",
+            ["Member"] = "멤버",
+            ["Value"] = "값",
+            ["Comment"] = "설명",
             ["{0} of {1}"] = "{1}개 중 {0}개",
 
             // Settings: sources
@@ -233,6 +289,13 @@ namespace UGS.Editor
             ["API key"] = "API 키",
             ["Service account"] = "서비스 계정",
             ["Access token"] = "액세스 토큰",
+            ["Custom provider"] = "커스텀 프로바이더",
+            ["Command"] = "명령 실행",
+            ["Runs in the project folder; what it prints is used: an access token, JSON with access_token, or a service account's JSON key. Works in the CLI and CI too. Use full paths: the editor may not see your terminal's PATH."] = "프로젝트 폴더에서 실행하고, 출력한 내용을 씁니다: 액세스 토큰, access_token이 든 JSON, 또는 서비스 계정 JSON 키. CLI와 CI에서도 동작합니다. 에디터는 터미널의 PATH를 모를 수 있으니 전체 경로를 쓰세요.",
+            ["No credential provider was found. Add a class that implements UGS.Core.Sources.IGoogleCredentialProvider to an editor assembly; it is found by itself and listed here by its class name, or by the name in [UgsCredentialProvider(\"name\")]."] = "자격 증명 프로바이더가 없습니다. UGS.Core.Sources.IGoogleCredentialProvider를 구현한 클래스를 에디터 어셈블리에 추가하세요. 따로 등록하지 않아도 찾아서, 클래스 이름 또는 [UgsCredentialProvider(\"name\")]의 이름으로 여기에 보여 줍니다.",
+            ["Provider"] = "프로바이더",
+            ["The class that supplies the credentials. Only the editor runs it: the CLI and CI need auth type \"command\", or an offline build."] = "자격 증명을 주는 클래스. 에디터에서만 실행됩니다. CLI와 CI에서는 \"command\" 방식이나 오프라인 빌드를 쓰세요.",
+            ["No credential provider named '{0}' is in the project."] = "프로젝트에 '{0}' 이름의 자격 증명 프로바이더가 없습니다.",
             ["Key variable"] = "키 환경 변수",
             ["Environment variable that holds the API key."] = "API 키가 들어 있는 환경 변수.",
             ["Or the key itself. Saved to ugs.json as plain text."] = "또는 키 자체. ugs.json에 평문으로 저장됩니다.",

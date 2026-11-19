@@ -78,8 +78,9 @@ namespace UGS.Core.Sources
         private readonly HttpMessageHandler? httpHandler;
         private readonly SheetSelection? only;
         private readonly string? remoteCacheDirectory;
+        private readonly IReadOnlyList<IGoogleCredentialProvider>? credentialProviders;
 
-        public GoogleSheetsSource(SourceConfig source, string baseDirectory, ICsvParser parser, string? snapshotDirectory = null, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null, string? remoteCacheDirectory = null)
+        public GoogleSheetsSource(SourceConfig source, string baseDirectory, ICsvParser parser, string? snapshotDirectory = null, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null, string? remoteCacheDirectory = null, IReadOnlyList<IGoogleCredentialProvider>? credentialProviders = null)
         {
             this.source = source;
             this.baseDirectory = baseDirectory;
@@ -88,6 +89,7 @@ namespace UGS.Core.Sources
             this.httpHandler = httpHandler;
             this.only = only;
             this.remoteCacheDirectory = remoteCacheDirectory;
+            this.credentialProviders = credentialProviders;
             _endpoints = endpoints ?? new GoogleEndpoints();
         }
 
@@ -99,7 +101,10 @@ namespace UGS.Core.Sources
         public string Description => "google:" + source.SpreadsheetId;
 
         /// <summary>Credentials already obtained by the caller (a Drive folder reading its spreadsheets), so they are not fetched again per spreadsheet.</summary>
-        internal (string? ApiKey, string? Bearer)? PresetAuth { get; set; }
+        internal ResolvedAuth? PresetAuth { get; set; }
+
+        // The account the credentials belong to, once known, for messages that say whom to share a file with.
+        private string? _account;
 
         public IReadOnlyList<string> WatchPaths => Array.Empty<string>();
 
@@ -114,7 +119,8 @@ namespace UGS.Core.Sources
             client.Timeout = TimeSpan.FromSeconds(100);
             try
             {
-                (string? apiKey, string? bearer) = PresetAuth ?? await ResolveAuthAsync(client, cancellationToken).ConfigureAwait(false);
+                (string? apiKey, string? bearer, string? account) = PresetAuth ?? await ResolveAuthAsync(client, cancellationToken).ConfigureAwait(false);
+                _account = account;
                 string? title = source.Name;
                 if (only != null && title != null && !only.Touches(title))
                 {
@@ -135,7 +141,7 @@ namespace UGS.Core.Sources
                     }
 
                     List<(string Name, string Text)> kept = copy.Tabs.Where(tab => only == null || only.Includes(name, tab.Name)).ToList();
-                    WriteSnapshot(kept.Select(tab => tab.Name).ToList(), kept.Select(tab => tab.Text).ToList(), complete: only == null);
+                    WriteSnapshot(name, kept.Select(tab => tab.Name).ToList(), kept.Select(tab => tab.Text).ToList(), complete: only == null);
                     return new[] { Linked(ToWorkbook(name, kept, diagnostics)) };
                 }
 
@@ -201,7 +207,7 @@ namespace UGS.Core.Sources
                 }
 
                 // A partial fetch saves the tabs it fetched and leaves the others as they were.
-                WriteSnapshot(fetched.Select(tab => tab.Name).ToList(), fetched.Select(tab => tab.Text).ToList(), complete);
+                WriteSnapshot(workbookName, fetched.Select(tab => tab.Name).ToList(), fetched.Select(tab => tab.Text).ToList(), complete);
                 if (version != null)
                 {
                     if (complete)
@@ -510,9 +516,10 @@ namespace UGS.Core.Sources
                 case HttpStatusCode.Forbidden:
                     return new GoogleSourceException($"Google refused access to spreadsheet '{id}' ({(int)status}).", source.Auth.Type switch
                     {
-                        GoogleAuthType.ServiceAccount => "Share the spreadsheet with the service account's e-mail address (client_email in the key file) as a viewer.",
+                        GoogleAuthType.ServiceAccount => $"Share the spreadsheet with the service account {_account ?? "(client_email in the key file)"} as a viewer.",
                         GoogleAuthType.ApiKey => "An API key only reads link-shared spreadsheets: share it as 'Anyone with the link can view', and check that the Sheets API is enabled for the key.",
                         GoogleAuthType.AccessToken => "The access token is expired or lacks the drive.readonly scope.",
+                        GoogleAuthType.Custom or GoogleAuthType.Command => $"Share the spreadsheet with {_account ?? "the account these credentials belong to"} as a viewer, and check that the credentials are not expired.",
                         _ => "Share the spreadsheet as 'Anyone with the link can view', or configure an API key or a service account."
                     });
                 case HttpStatusCode.NotFound:
@@ -525,7 +532,10 @@ namespace UGS.Core.Sources
             }
         }
 
-        internal async Task<(string? ApiKey, string? Bearer)> ResolveAuthAsync(HttpClient client, CancellationToken cancellationToken)
+        /// <summary>The credentials to send: an API key or a bearer token (or neither, for a public link), and the account they belong to when known.</summary>
+        internal sealed record ResolvedAuth(string? ApiKey, string? Bearer, string? Account);
+
+        internal async Task<ResolvedAuth> ResolveAuthAsync(HttpClient client, CancellationToken cancellationToken)
         {
             GoogleAuthConfig auth = source.Auth;
             switch (auth.Type)
@@ -537,7 +547,7 @@ namespace UGS.Core.Sources
                         throw new GoogleSourceException("No API key is configured.", "Set auth.apiKeyEnv to the name of an environment variable that holds the key (or auth.apiKey for a key you are willing to commit).");
                     }
 
-                    return (key, null);
+                    return new ResolvedAuth(key, null, null);
                 case GoogleAuthType.AccessToken:
                     string? token = ReadEnvironment(auth.AccessTokenEnv);
                     if (string.IsNullOrEmpty(token))
@@ -545,12 +555,44 @@ namespace UGS.Core.Sources
                         throw new GoogleSourceException("No access token is available.", "Set auth.accessTokenEnv to the name of an environment variable that holds an OAuth access token.");
                     }
 
-                    return (null, token);
+                    return new ResolvedAuth(null, token, null);
                 case GoogleAuthType.ServiceAccount:
-                    return (null, await FetchServiceAccountTokenAsync(client, auth, cancellationToken).ConfigureAwait(false));
+                    return await ExchangeServiceAccountKeyAsync(client, ReadKeyFile(auth), "The service account key file", cancellationToken).ConfigureAwait(false);
+                case GoogleAuthType.Custom:
+                    return await FromCredentialAsync(client, await CallProviderAsync(client, auth.Provider, cancellationToken).ConfigureAwait(false),
+                        $"The key from credential provider '{auth.Provider}'", cancellationToken).ConfigureAwait(false);
+                case GoogleAuthType.Command:
+                    return await FromCredentialAsync(client, await CredentialCommand.RunAsync(auth.Command, baseDirectory, cancellationToken).ConfigureAwait(false),
+                        $"The key printed by '{auth.Command}'", cancellationToken).ConfigureAwait(false);
                 default:
-                    return (null, null);
+                    return new ResolvedAuth(null, null, null);
             }
+        }
+
+        private async Task<GoogleCredential> CallProviderAsync(HttpClient client, string? name, CancellationToken cancellationToken)
+        {
+            IGoogleCredentialProvider provider = GoogleCredentialProviders.Find(credentialProviders, name);
+            GoogleCredential? credential;
+            try
+            {
+                credential = await provider.GetCredentialAsync(new GoogleCredentialRequest(source, baseDirectory, Scopes, client), cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (!(exception is OperationCanceledException && cancellationToken.IsCancellationRequested) && !(exception is GoogleSourceException))
+            {
+                throw new GoogleSourceException($"The credential provider '{name}' failed: {exception.GetType().Name}: {exception.Message}", $"Fix {provider.GetType().FullName}.GetCredentialAsync.");
+            }
+
+            return credential ?? throw new GoogleSourceException($"The credential provider '{name}' returned no credentials.", "Return GoogleCredential.None for a public spreadsheet.");
+        }
+
+        private async Task<ResolvedAuth> FromCredentialAsync(HttpClient client, GoogleCredential credential, string keyDescription, CancellationToken cancellationToken)
+        {
+            if (credential.ServiceAccountKeyJson != null)
+            {
+                return await ExchangeServiceAccountKeyAsync(client, credential.ServiceAccountKeyJson, keyDescription, cancellationToken).ConfigureAwait(false);
+            }
+
+            return new ResolvedAuth(credential.ApiKey, credential.AccessToken, credential.Account);
         }
 
         // Google explains a 403 in the body. "SERVICE_DISABLED" means the API is off in the credentials' Cloud project,
@@ -618,7 +660,7 @@ namespace UGS.Core.Sources
             return string.IsNullOrEmpty(name) ? null : Environment.GetEnvironmentVariable(name);
         }
 
-        private async Task<string> FetchServiceAccountTokenAsync(HttpClient client, GoogleAuthConfig auth, CancellationToken cancellationToken)
+        private string ReadKeyFile(GoogleAuthConfig auth)
         {
             if (string.IsNullOrEmpty(auth.KeyFile))
             {
@@ -631,19 +673,25 @@ namespace UGS.Core.Sources
                 throw new GoogleSourceException($"The service account key file '{keyPath}' does not exist.", "Fix auth.keyFile; the path is relative to the config file.");
             }
 
+            return File.ReadAllText(keyPath);
+        }
+
+        // keyDescription names where the key came from, for the message when it cannot be read.
+        private static async Task<ResolvedAuth> ExchangeServiceAccountKeyAsync(HttpClient client, string keyJson, string keyDescription, CancellationToken cancellationToken)
+        {
             string email;
             string tokenUri;
             RSAParameters key;
             try
             {
-                JsonObject json = JsonValue.Parse(File.ReadAllText(keyPath)).AsObject ?? throw new JsonFormatException("not an object");
+                JsonObject json = JsonValue.Parse(keyJson).AsObject ?? throw new JsonFormatException("not an object");
                 email = json.GetString("client_email") ?? throw new JsonFormatException("client_email is missing");
                 tokenUri = json.GetString("token_uri") ?? "https://oauth2.googleapis.com/token";
                 key = Pkcs8.ReadRsaPrivateKey(json.GetString("private_key") ?? throw new JsonFormatException("private_key is missing"));
             }
             catch (Exception exception) when (exception is JsonFormatException or FormatException)
             {
-                throw new GoogleSourceException($"The service account key file could not be read: {exception.Message}", "Download a new JSON key for the service account from Google Cloud.");
+                throw new GoogleSourceException($"{keyDescription} could not be read as a service account key: {exception.Message}", "Download a new JSON key for the service account from Google Cloud.");
             }
 
             // A self-signed JWT is exchanged for a short-lived access token (OAuth 2.0 JWT bearer flow).
@@ -677,11 +725,11 @@ namespace UGS.Core.Sources
 
             if (!response.IsSuccessStatusCode || token == null)
             {
-                throw new GoogleSourceException($"Google did not issue a token for the service account ({(int)response.StatusCode}).",
+                throw new GoogleSourceException($"Google did not issue a token for the service account {email} ({(int)response.StatusCode}).",
                     "Check that the key was not deleted or disabled in Google Cloud, and that this machine's clock is correct.");
             }
 
-            return token;
+            return new ResolvedAuth(null, token, email);
         }
 
         private static string Base64Url(byte[] bytes)
@@ -689,18 +737,24 @@ namespace UGS.Core.Sources
             return Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         }
 
-        private void WriteSnapshot(IReadOnlyList<string> names, IReadOnlyList<string> texts, bool complete = true)
+        private void WriteSnapshot(string workbookName, IReadOnlyList<string> names, IReadOnlyList<string> texts, bool complete = true)
         {
             if (snapshotDirectory != null)
             {
-                WriteSnapshot(snapshotDirectory, names, texts, complete);
+                WriteSnapshot(snapshotDirectory, workbookName, names, texts, complete);
             }
         }
 
-        // Saves what was fetched, one CSV per tab, and, when the fetch was complete, removes CSV files of tabs that no longer exist.
-        internal static void WriteSnapshot(string snapshotDirectory, IReadOnlyList<string> names, IReadOnlyList<string> texts, bool complete)
+        /// <summary>
+        /// Saves what was fetched, one CSV per tab, and, when the fetch was complete, removes the CSV files of tabs that no longer exist.
+        /// Only files an earlier snapshot wrote are ever removed: they are listed in <see cref="SnapshotIndex"/>, so other files that
+        /// share the folder are left alone. The index also keeps the workbook name, so an offline build names the workbook exactly
+        /// as the online build did (the spreadsheet's title, not its id).
+        /// </summary>
+        internal static void WriteSnapshot(string snapshotDirectory, string workbookName, IReadOnlyList<string> names, IReadOnlyList<string> texts, bool complete)
         {
             Directory.CreateDirectory(snapshotDirectory);
+            SnapshotIndex previous = SnapshotIndex.Read(snapshotDirectory);
             var kept = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var encoding = new UTF8Encoding(false);
 
@@ -716,17 +770,36 @@ namespace UGS.Core.Sources
                 }
             }
 
-            foreach (string file in complete ? Directory.GetFiles(snapshotDirectory, "*.csv", SearchOption.TopDirectoryOnly) : Array.Empty<string>())
+            var owned = new SortedSet<string>(kept, StringComparer.OrdinalIgnoreCase);
+            foreach (string file in previous.Files)
             {
-                if (!kept.Contains(Path.GetFileName(file)))
+                if (kept.Contains(file))
                 {
-                    File.Delete(file);
+                    continue;
+                }
+
+                if (complete)
+                {
+                    File.Delete(Path.Combine(snapshotDirectory, file));
+                }
+                else
+                {
+                    // A partial fetch leaves the other tabs as they were, and they stay the snapshot's own.
+                    owned.Add(file);
                 }
             }
+
+            SnapshotIndex.Write(snapshotDirectory, workbookName, owned);
         }
 
         internal static string SafeFileName(string name)
         {
+            // "." and ".." would name the folder itself or its parent.
+            if (name.Length == 0 || name == "." || name == "..")
+            {
+                return "_" + name;
+            }
+
             var builder = new StringBuilder(name.Length);
             foreach (char c in name)
             {
@@ -866,6 +939,120 @@ namespace UGS.Core.Sources
 
                 return (_position, length);
             }
+        }
+    }
+
+    /// <summary>
+    /// What a snapshot folder records about itself: the workbook it holds and the CSV files the snapshot wrote. Only those files
+    /// are ever deleted from the folder, and an offline build takes the workbook name from here.
+    /// </summary>
+    internal sealed class SnapshotIndex
+    {
+        /// <summary>Starts with a dot so Unity does not import it when the snapshot is under Assets.</summary>
+        public const string FileName = ".ugs-snapshot";
+
+        private const string Header = "ugs-snapshot 1";
+
+        private SnapshotIndex(string? workbook, IReadOnlyCollection<string> files)
+        {
+            Workbook = workbook;
+            Files = files;
+        }
+
+        /// <summary>The workbook name the last online build used. Null for a snapshot written before the index existed.</summary>
+        public string? Workbook { get; }
+
+        public IReadOnlyCollection<string> Files { get; }
+
+        public static SnapshotIndex Read(string directory)
+        {
+            string path = Path.Combine(directory, FileName);
+            var files = new List<string>();
+            string? workbook = null;
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    return new SnapshotIndex(null, files);
+                }
+
+                string[] lines = File.ReadAllText(path, Encoding.UTF8).Split('\n');
+                if (lines.Length == 0 || lines[0].TrimEnd('\r') != Header)
+                {
+                    return new SnapshotIndex(null, files);
+                }
+
+                foreach (string raw in lines.Skip(1))
+                {
+                    string line = raw.TrimEnd('\r');
+                    int tab = line.IndexOf('\t');
+                    if (tab < 0)
+                    {
+                        continue;
+                    }
+
+                    string key = line.Substring(0, tab);
+                    string value = Unescape(line.Substring(tab + 1));
+                    if (key == "workbook")
+                    {
+                        workbook = value;
+                    }
+                    else if (key == "file" && IsOwnFileName(value))
+                    {
+                        files.Add(value);
+                    }
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Unreadable: own nothing, so nothing is deleted.
+            }
+
+            return new SnapshotIndex(workbook, files);
+        }
+
+        public static void Write(string directory, string workbook, IEnumerable<string> files)
+        {
+            var text = new StringBuilder();
+            text.Append(Header).Append('\n');
+            text.Append("# Written by UGS. Only the files listed here are replaced or removed by the next online build.\n");
+            text.Append("workbook\t").Append(Escape(workbook)).Append('\n');
+            foreach (string file in files)
+            {
+                text.Append("file\t").Append(Escape(file)).Append('\n');
+            }
+
+            string path = Path.Combine(directory, FileName);
+            string content = text.ToString();
+            if (!File.Exists(path) || File.ReadAllText(path, Encoding.UTF8) != content)
+            {
+                File.WriteAllText(path, content, new UTF8Encoding(false));
+            }
+        }
+
+        // A plain .csv name in this folder. A hand-edited index must never point the tool at a file elsewhere.
+        private static bool IsOwnFileName(string name) =>
+            name.Length > 0 && name == Path.GetFileName(name) && name != "." && name != ".." && name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
+
+        private static string Escape(string text) => text.Replace("\\", "\\\\").Replace("\t", "\\t").Replace("\n", "\\n").Replace("\r", "\\r");
+
+        private static string Unescape(string text)
+        {
+            var builder = new StringBuilder(text.Length);
+            for (int index = 0; index < text.Length; index++)
+            {
+                char c = text[index];
+                if (c != '\\' || index + 1 == text.Length)
+                {
+                    builder.Append(c);
+                    continue;
+                }
+
+                char next = text[++index];
+                builder.Append(next switch { 't' => '\t', 'n' => '\n', 'r' => '\r', _ => next });
+            }
+
+            return builder.ToString();
         }
     }
 }

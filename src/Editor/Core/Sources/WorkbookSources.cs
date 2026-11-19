@@ -204,7 +204,7 @@ namespace UGS.Core.Sources
     /// <summary>Creates the sources a config lists.</summary>
     public static class WorkbookSources
     {
-        public static IReadOnlyList<IWorkbookSource> Create(UgsConfig config, ICsvParser parser, bool offline = false, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null)
+        public static IReadOnlyList<IWorkbookSource> Create(UgsConfig config, ICsvParser parser, bool offline = false, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null, IReadOnlyList<IGoogleCredentialProvider>? credentialProviders = null)
         {
             var sources = new List<IWorkbookSource>(config.Sources.Count);
             // Copies of Google files by Drive version, so unchanged files are not downloaded again.
@@ -222,19 +222,22 @@ namespace UGS.Core.Sources
                     case SourceType.GoogleFolder:
                     {
                         string? folderSnapshot = source.Snapshot == null ? null : config.Resolve(source.Snapshot);
-                        sources.Add(new GoogleFolderSource(source, config.BaseDirectory, parser, folderSnapshot, httpHandler, endpoints, only, offline && folderSnapshot != null, remoteCache));
+                        sources.Add(new GoogleFolderSource(source, config.BaseDirectory, parser, folderSnapshot, httpHandler, endpoints, only, offline && folderSnapshot != null, remoteCache, credentialProviders));
                         break;
                     }
                     default:
                         string? snapshot = source.Snapshot == null ? null : config.Resolve(source.Snapshot);
                         if (offline && snapshot != null)
                         {
-                            // Offline builds read the CSV that the last online build saved.
-                            sources.Add(new CsvDirectorySource(snapshot, parser, source.Name ?? source.SpreadsheetId, only));
+                            // Offline builds read the CSV that the last online build saved, under the name that build used:
+                            // without a configured name it is the spreadsheet's title, which only the snapshot remembers.
+                            // A different name would make a partial build miss the cached workbook.
+                            string? savedName = Directory.Exists(snapshot) ? SnapshotIndex.Read(snapshot).Workbook : null;
+                            sources.Add(new CsvDirectorySource(snapshot, parser, source.Name ?? savedName ?? source.SpreadsheetId, only));
                         }
                         else
                         {
-                            sources.Add(new GoogleSheetsSource(source, config.BaseDirectory, parser, snapshot, httpHandler, endpoints, only, remoteCache));
+                            sources.Add(new GoogleSheetsSource(source, config.BaseDirectory, parser, snapshot, httpHandler, endpoints, only, remoteCache, credentialProviders));
                         }
 
                         break;

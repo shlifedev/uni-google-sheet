@@ -275,6 +275,22 @@ public class GoogleFolderTests
     }
 
     [Fact]
+    public void The_snapshot_leaves_folders_it_did_not_make_alone()
+    {
+        using var temp = new TempDir();
+        Directory.CreateDirectory(temp.Combine("Snapshot", "Art"));
+        File.WriteAllText(temp.Combine("Snapshot", "Art", "keep.txt"), "not a workbook");
+
+        (BuildResult online, _) = Build(Folder("Snapshot"), Drive(), temp.Path);
+        Assert.True(online.Success, Sheets.Errors(online));
+        (BuildResult again, _) = Build(Folder("Snapshot"), Drive(removeWorkbook: true), temp.Path);
+        Assert.True(again.Success, Sheets.Errors(again));
+
+        Assert.False(Directory.Exists(temp.Combine("Snapshot", "Game.xlsx")));
+        Assert.True(File.Exists(temp.Combine("Snapshot", "Art", "keep.txt")));
+    }
+
+    [Fact]
     public void The_config_keeps_a_folder_source_and_takes_a_pasted_url()
     {
         UgsConfig parsed = UgsConfig.Parse("""{ "sources": [ { "type": "googleFolder", "folderId": "https://drive.google.com/drive/folders/1AbC_d-9?usp=sharing", "auth": { "type": "apiKey", "apiKeyEnv": "KEY" }, "snapshot": "Snap" } ] }""", "/tmp");
