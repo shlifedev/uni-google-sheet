@@ -245,7 +245,7 @@ public class TransformRuleTests
     [Fact]
     public void Repeated_field_names_merge_into_one_array()
     {
-        BuildResult result = Sheets.Build(Sheets.Of("Item", "Key<int>,int,int,int[]\nId,Socket,Socket,Socket\n,,,\n1,3,,4|5\n2,,,\n"));
+        BuildResult result = Sheets.Build(Sheets.Of("Item", "Key<int>,int,int,int[]\nId,Socket,Socket,Socket\n,,,\n1,3,,\"4,5\"\n2,,,\n"));
         Assert.True(result.Success, Sheets.Errors(result));
         TableSchema schema = result.Tables.Single().Schema;
         Assert.Equal("int[]", schema.Columns[1].Type.CanonicalName);

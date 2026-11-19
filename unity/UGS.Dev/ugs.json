@@ -30,7 +30,7 @@
   },
   "sheet": {
     "header": ["type", "name", "comment"],
-    "arraySeparator": "|"
+    "arraySeparator": ","
   },
   "csv": {
     "backend": "auto"

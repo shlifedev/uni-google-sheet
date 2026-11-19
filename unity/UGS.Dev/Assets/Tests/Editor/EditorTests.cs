@@ -390,16 +390,13 @@ namespace UGS.Dev.Tests
                 yield return null;
                 // Workbooks are open, tables built from several sheets are closed. The top of the tree:
                 CollectionAssert.AreEqual(new[] { "Excel", "Character.xlsx", "Job", "Level", "Skill" }, TreeNames(root).Take(5).ToArray());
-                // The demo reads xlsx and CSV, so the tree starts with one node per kind of source.
+                // The demo connects several sources, so the tree starts with one node per source.
                 // Searching does not filter: the tree keeps every node, scrolls to the match and marks it in yellow.
                 TreeView tree = root.Q<TreeView>();
                 int rootCount = tree.GetRootIds().Count();
-                // Each kind of source is a section: a header row, not a parent, so its workbooks sit at the top level.
-                VisualElement excelHeader = root.Query(className: "ugs-tree-row").ToList().First(row => Plain(row.Q<Label>(className: "ugs-tree-row__name").text) == "Excel");
-                Assert.IsTrue(excelHeader.ClassListContains("ugs-tree-row--header"));
-                Assert.AreEqual(DisplayStyle.None, excelHeader.Q<Image>().resolvedStyle.display, "A header has no icon.");
-                Assert.IsFalse(root.Query(className: "ugs-tree-row").ToList().First(row => Plain(row.Q<Label>(className: "ugs-tree-row__name").text) == "Character.xlsx").ClassListContains("ugs-tree-row--header"));
-                Assert.Greater(rootCount, 3, "Workbooks are roots, next to the source headers.");
+                // Each connected source (xlsx, CSV, and the Google Drive folder once it has been read) is a node; its workbooks are under it.
+                Assert.That(rootCount, Is.InRange(2, 3), "One root per connected source.");
+                Assert.AreEqual("ugs:excel", root.Query(className: "ugs-tree-row").ToList().First(row => Plain(row.Q<Label>(className: "ugs-tree-row__name").text) == "Excel").Q<Image>().image.name, "A source node carries its kind's icon.");
                 Label matchCount = root.Q<Label>(className: "ugs-search__count");
                 ScrollView treeScroll = tree.Q<ScrollView>();
                 // A match already in view does not move the tree; one out of sight is scrolled to.
@@ -615,7 +612,7 @@ namespace UGS.Dev.Tests
                 // xlsx workbooks carry the Excel icon.
                 Assert.AreEqual("ugs:excel", root.Query(className: "ugs-tree-row").ToList().First(row => Plain(row.Q<Label>(className: "ugs-tree-row__name").text) == "Monster.xlsx").Q<Image>().image.name);
 
-                // Several nodes can be selected; the bar under the tree builds just those.
+                // Several nodes can be selected; the bar under the tree names them and the toolbar builds just those.
                 tree = root.Q<TreeView>();
                 int at = tree.selectedIndex;
                 Label selectionLabel = root.Q<Label>(className: "ugs-selection__label");
@@ -624,13 +621,13 @@ namespace UGS.Dev.Tests
                 tree.SetSelection(new[] { at + 1, at + 3 });
                 yield return null;
                 Assert.AreEqual("2 sheets", selectionLabel.text);
-                Assert.AreEqual("Build (2)", selectionBuild.text);
+                Assert.AreEqual("Build selection (2)", selectionBuild.text);
                 StringAssert.Contains("Drop, Spawn", selectionBuild.tooltip);
                 StringAssert.Contains("Monster.xlsx / Drop", root.Q(className: "ugs-selection").tooltip);
                 tree.SetSelection(new[] { at, at + 2 });
                 yield return null;
                 Assert.AreEqual("Monster.xlsx", selectionLabel.text, "A selected workbook covers its tables.");
-                Assert.AreEqual("Build (3 · enum 1)", selectionBuild.text, "Drop, Monster and Spawn. The workbook's Battle.Enums sheet is read again too.");
+                Assert.AreEqual("Build selection (3 · enum 1)", selectionBuild.text, "Drop, Monster and Spawn. The workbook's Battle.Enums sheet is read again too.");
                 tree.SetSelection(new[] { 0 });
                 yield return null;
                 StringAssert.IsMatch(@"^Excel · \d+ workbooks$", selectionLabel.text, "A source node covers the workbooks under it.");
@@ -638,7 +635,7 @@ namespace UGS.Dev.Tests
                 yield return null;
                 // Monster is built from Monster and Monster.Boss.
                 Assert.AreEqual("Monster · 2 sheets", selectionLabel.text);
-                Assert.AreEqual("Build (1)", selectionBuild.text, "Two sheets, one table.");
+                Assert.AreEqual("Build selection (1)", selectionBuild.text, "Two sheets, one table.");
 
                 // Enums are in the tree too: those of an Enums sheet under its workbook, Mapping enums under their table.
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "EStat";
@@ -650,7 +647,7 @@ namespace UGS.Dev.Tests
                 Assert.AreEqual(12, root.Q<MultiColumnListView>().itemsSource.Count);
                 Assert.AreEqual(new[] { "Member", "Value", "Comment" }, root.Q<MultiColumnListView>().columns.Select(column => column.title).ToArray());
                 // An Enums sheet builds no table, but its enums are read again: the whole sheet, so all 12 of them.
-                Assert.AreEqual("Build (enum 12)", root.Q<UnityEditor.UIElements.ToolbarButton>(className: "ugs-selection__build").text);
+                Assert.AreEqual("Build selection (enum 12)", root.Q<UnityEditor.UIElements.ToolbarButton>(className: "ugs-selection__build").text);
 
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "ugs-search").value = "EItemTag";
                 PressEnterInSearch(root);

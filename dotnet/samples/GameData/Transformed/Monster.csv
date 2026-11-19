@@ -2,5 +2,5 @@ Key<int>,Mapping<EMonsterId>,string,int,Ref<Item>[],Ref<Item>?,Ref<Item>,Enum<EI
 Id,Code,Name,Hp,Drops,Rare,Weapon,Weak,Zone
 Monster id,Name in code,Display name,Hit points,Items it can drop,"Rare drop, if any",Weapon it carries,Kinds of item it is weak to,Where it lives
 1,Slime,Slime,30,2001,,1001,,meadow
-2,Goblin,Goblin,80,1001|2001,1002,1001,Weapon,meadow
-3,Dragon,Dragon,5000,9001|9002|3001,9001,9001,Weapon|Consumable,volcano
+2,Goblin,Goblin,80,"1001,2001",1002,1001,Weapon,meadow
+3,Dragon,Dragon,5000,"9001,9002,3001",9001,9001,"Weapon,Consumable",volcano

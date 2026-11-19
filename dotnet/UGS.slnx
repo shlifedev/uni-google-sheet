@@ -7,6 +7,8 @@
   <Project Path="UGS.Cli/UGS.Cli.csproj" />
   <Project Path="UGS.Core/UGS.Core.csproj" />
   <Project Path="UGS.Csv.Sep/UGS.Csv.Sep.csproj" />
+  <Project Path="UGS.Desktop.Host/UGS.Desktop.Host.csproj" />
   <Project Path="UGS.Runtime/UGS.Runtime.csproj" />
   <Project Path="UGS.Tests/UGS.Tests.csproj" />
+  <Project Path="UGS.Tooling/UGS.Tooling.csproj" />
 </Solution>

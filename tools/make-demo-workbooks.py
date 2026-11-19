@@ -100,7 +100,7 @@ def common(folder):
         ["int", "MaxPartySize", "파티 최대 인원", 4],
         ["int", "InventorySlots", "기본 인벤토리 칸 수", 120],
         ["Ref<Map>", "StartMap", "캐릭터가 처음 서는 맵", 1000],
-        ["Ref<Item>[]", "StarterItems", "시작 아이템", "10001|10002|30101"],
+        ["Ref<Item>[]", "StarterItems", "시작 아이템", "10001,10002,30101"],
         ["float", "ExpRate", "경험치 배율", 1.0],
         ["float", "DropRate", "드롭 배율", 1.0],
         ["DateTime", "SeasonStartsAt", "시즌 시작 (UTC)", datetime.datetime(2026, 12, 1, 0, 0, 0)],
@@ -117,10 +117,10 @@ def common(folder):
 
 
 JOBS = [
-    (100, "Warrior", "전사", "Str", "Sword|Axe", 160, 40),
-    (200, "Mage", "마법사", "Int", "Staff|Wand", 90, 140),
-    (300, "Archer", "궁수", "Dex", "Bow|Crossbow", 110, 70),
-    (400, "Rogue", "도적", "Luk", "Dagger|Claw", 120, 60),
+    (100, "Warrior", "전사", "Str", "Sword,Axe", 160, 40),
+    (200, "Mage", "마법사", "Int", "Staff,Wand", 90, 140),
+    (300, "Archer", "궁수", "Dex", "Bow,Crossbow", 110, 70),
+    (400, "Rogue", "도적", "Luk", "Dagger,Claw", 120, 60),
 ]
 ADVANCED = [
     (110, "Knight", "기사", 100, "Str", "Sword", 220, 50),
@@ -182,7 +182,7 @@ def character(folder):
         for order, (code, name, element) in enumerate(entries):
             skill_id += 1
             base = 1.2 + order * 0.6 + (0.8 if job % 100 else 0)
-            damage = "|".join(f"{base + step * 0.15:.2f}" for step in range(5))
+            damage = ",".join(f"{base + step * 0.15:.2f}" for step in range(5))
             required = (10 if job % 100 == 0 else 30) + order * 5
             skills.append([skill_id, code, name, job, element, required, 10 if order < 2 else 5,
                            round(3 + order * 4.5, 1), 8 + order * 6, damage])
@@ -295,8 +295,8 @@ def item(folder):
         bonus = max(1, level // 5)
         equipment.append([iid, iid, "Weapon", wtype, job, level, atk, matk, 0, main if level > 1 else None, str(bonus) if level > 1 else None])
     for (iid, code, name, slot, level, defense) in ARMORS:
-        stats = "MaxHp|Def" if slot in ("Body", "Legs") else "Crit" if slot == "Ring" else "MaxMp" if slot == "Necklace" else None
-        values = f"{level * 6}|{level // 2}" if slot in ("Body", "Legs") else str(max(1, level // 10)) if stats else None
+        stats = "MaxHp,Def" if slot in ("Body", "Legs") else "Crit" if slot == "Ring" else "MaxMp" if slot == "Necklace" else None
+        values = f"{level * 6},{level // 2}" if slot in ("Body", "Legs") else str(max(1, level // 10)) if stats else None
         equipment.append([iid, iid, slot, "None", None, level, 0, 0, defense, stats, values])
     table(wb, "Equipment", equipment_columns, equipment)
 
@@ -323,9 +323,9 @@ def item(folder):
         ("EStat[]", "Stats", "세트 효과 능력치"),
         ("int[]", "Values", "세트 효과 값"),
     ], [
-        [1, "초보 모험가 세트", "21001|21002|21003|21004", 3, "MaxHp|Def", "100|10"],
-        [2, "수호자 세트", "21011|21012|21013|21014", 4, "MaxHp|Def|MDef", "1200|80|60"],
-        [3, "원소 장신구", "21021|21022", 2, "MAtk|Crit", "40|5"],
+        [1, "초보 모험가 세트", "21001,21002,21003,21004", 3, "MaxHp,Def", "100,10"],
+        [2, "수호자 세트", "21011,21012,21013,21014", 4, "MaxHp,Def,MDef", "1200,80,60"],
+        [3, "원소 장신구", "21021,21022", 2, "MAtk,Crit", "40,5"],
     ])
 
     enhance = []
@@ -497,15 +497,15 @@ def monster(folder):
         ("int", "GoldMin", "최소 골드"),
         ("int", "GoldMax", "최대 골드"),
     ], [
-        [1, "들판 일반", "10001|30101|30104", "0.08|0.12|0.10", 3, 12],
-        [2, "들판 정예", "10003|30102|20002", "0.15|0.20|0.01", 20, 60],
-        [3, "황야 일반", "10003|30102|30106", "0.10|0.15|0.05", 25, 70],
-        [4, "황야 정예", "10004|30106|20003|20004", "0.20|0.25|0.005|0.005", 120, 300],
-        [5, "서리 일반", "10003|30103|30107", "0.12|0.10|0.06", 60, 140],
-        [6, "서리 정예", "10005|30107|21021|21022", "0.05|0.25|0.01|0.01", 250, 600],
-        [7, "유적 일반", "10005|30108", "0.08|0.12", 150, 320],
-        [8, "보스 공통", "10102|30111|21012", "1.0|0.5|0.05", 3000, 8000],
-        [9, "레이드 보스", "10102|30109|30111|21012|21011", "1.0|0.3|1.0|0.2|0.2", 50000, 120000],
+        [1, "들판 일반", "10001,30101,30104", "0.08,0.12,0.10", 3, 12],
+        [2, "들판 정예", "10003,30102,20002", "0.15,0.20,0.01", 20, 60],
+        [3, "황야 일반", "10003,30102,30106", "0.10,0.15,0.05", 25, 70],
+        [4, "황야 정예", "10004,30106,20003,20004", "0.20,0.25,0.005,0.005", 120, 300],
+        [5, "서리 일반", "10003,30103,30107", "0.12,0.10,0.06", 60, 140],
+        [6, "서리 정예", "10005,30107,21021,21022", "0.05,0.25,0.01,0.01", 250, 600],
+        [7, "유적 일반", "10005,30108", "0.08,0.12", 150, 320],
+        [8, "보스 공통", "10102,30111,21012", "1.0,0.5,0.05", 3000, 8000],
+        [9, "레이드 보스", "10102,30109,30111,21012,21011", "1.0,0.3,1.0,0.2,0.2", 50000, 120000],
     ])
     save(wb, folder, "Monster.xlsx")
 
@@ -533,10 +533,10 @@ def quest(folder):
         [6, "잿빛 황야로", "Main", 20, 5, 4, 20000, 2500, "10006", "5"],
         [7, "불씨의 심장", "Main", 35, 6, 4, 90000, 9000, "30106", "5"],
         [8, "서리 항구의 의뢰", "Main", 40, 7, 5, 150000, 12000, "10005", "3"],
-        [9, "빙하 금고", "Main", 50, 8, 5, 320000, 20000, "30107|30111", "3|5"],
+        [9, "빙하 금고", "Main", 50, 8, 5, 320000, 20000, "30107,30111", "3,5"],
         [10, "심연으로", "Main", 60, 9, 6, 800000, 50000, "30108", "10"],
         [21, "편지 배달", "Side", 5, None, 1, 300, 200, "10001", "5"],
-        [22, "대장장이의 부탁", "Side", 12, None, 3, 2000, 600, "30101|30104", "10|10"],
+        [22, "대장장이의 부탁", "Side", 12, None, 3, 2000, 600, "30101,30104", "10,10"],
         [23, "항구의 진주", "Side", 42, None, 5, 120000, 8000, "30107", "2"],
     ]
     table(wb, "Quest", columns, main)
@@ -612,8 +612,8 @@ def shop(folder):
         ("float[]", "Weights", "가중치"),
         ("DateTime", "EndsAt", "종료 시각 (UTC)"),
     ], [
-        [1, "모험가 지원 상자", "Gem", 100, "10003|10004|10005|30110", "40|40|15|5", datetime.datetime(2027, 1, 31, 23, 59, 59)],
-        [2, "전설의 대장간", "Gem", 300, "20003|20004|20012|20022|30111|30109", "15|15|15|15|38|2", datetime.datetime(2027, 2, 28, 23, 59, 59)],
+        [1, "모험가 지원 상자", "Gem", 100, "10003,10004,10005,30110", "40,40,15,5", datetime.datetime(2027, 1, 31, 23, 59, 59)],
+        [2, "전설의 대장간", "Gem", 300, "20003,20004,20012,20022,30111,30109", "15,15,15,15,38,2", datetime.datetime(2027, 2, 28, 23, 59, 59)],
     ])
     save(wb, folder, "Shop.xlsx")
 

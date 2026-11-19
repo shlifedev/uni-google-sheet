@@ -63,7 +63,7 @@ A table sheet has three header rows (configurable) and then data:
 |---|---|---|---|---|---|
 | **Id** | **Name** | **Kind** | **Price** | **Stats** | |
 | Item id | Display name | Kind of item | Price in gold | Stat values | Designer notes |
-| 1001 | Wooden Sword | Weapon | 100 | 3\|1.5 | starter |
+| 1001 | Wooden Sword | Weapon | 100 | 3, 1.5 | starter |
 | ~2002 | Not ready | Weapon | 0 | | this row is skipped |
 
 ## Sheet rules
@@ -96,12 +96,37 @@ row; a byte order mark is ignored; nothing is trimmed. Google Sheets are fetched
 |---|---|---|
 | `bool` `byte` `sbyte` `short` `ushort` `int` `uint` `long` `ulong` `float` `double` `string` | the same | An empty cell is the default (`0`, `false`, `""`). Parsing never depends on the machine's culture. |
 | `DateTime` | `DateTime` (UTC) | `2026-01-31`, `2026-01-31 13:30:00`, ISO 8601. |
-| `T[]` (also `List<T>`) | `ReadOnlyArray<T>` | `1\|2\|3` or `[1, 2, 3]`. The separator is configurable. |
-| `Enum<EKind>` or just `EKind` | `EKind` | Member name. Flags cells take `A, B` or `A\|B`. |
+| `T[]` (also `List<T>`) | `ReadOnlyArray<T>` | `1, 2, 3` or `[1, 2, 3]`. See [Arrays](#arrays). |
+| `Enum<EKind>` or just `EKind` | `EKind` | Member name. Flags cells take `A, B` or `A\|B`; inside an array element, `A\|B`. |
 | `Key<T>` | lookup | Unique. The first key is the primary key (`Get`, `Find`, `TryGet`, `Contains`, indexer); others get `GetByField`. Integers, text or enums. |
 | `Index<T>` | lookup | Not unique: `ListByField(value)` returns every matching row. |
 | `Ref<Table>` | `TableRef` | The key of a row in another table; checked at build time. `Ref<Table>?` allows an empty cell; `Ref<Table>[]` is an array of keys. |
 | `Mapping<EName>` | an enum | The column's text becomes enum members whose values are the row keys. Not stored. |
+
+### Arrays
+
+An array cell lists its elements separated by commas. Brackets are optional, and spaces around elements are ignored.
+Put an element in double quotes when it holds a comma, a bracket or leading/trailing spaces; inside quotes, `\"` is a
+quote and `\\` a backslash. A blank cell or `[]` is an empty array.
+
+| Cell | Elements |
+|---|---|
+| `1, 2, 3` or `[1, 2, 3]` | `1` `2` `3` |
+| `sword, blade` | `sword` `blade` |
+| `"Hello, world", plain` | `Hello, world` `plain` |
+| `"say \"hi\""` | `say "hi"` |
+| `Read\|Write, Read` (a Flags enum array) | `Read \| Write` `Read` |
+
+The build warns about two cells that parse but probably mean something else:
+
+- **A number shown with thousands separators.** Google Sheets hands over what a cell displays, so `1000` formatted as
+  `1,000` arrives as two elements, `1` and `0`. Format array columns as plain text, or write a real list in brackets
+  (`[1,000]`) to say it is one.
+- **Text still written with `|`.** `sword|blade` in a `string[]` column is one element. Write `sword, blade`, or quote it
+  (`"sword|blade"`) if the bar belongs to the text.
+
+`sheet.arraySeparator` changes the separator (one character). Projects whose `ugs.json` says `"|"` keep reading `1|2|3`;
+`[1, 2]` and quoted elements work with any separator.
 
 Every problem is reported with its cell and a fix, and a build with any error writes nothing:
 
@@ -237,7 +262,7 @@ about 0.5 s.
   ],
   "output":  { "code": "Assets/Game/Generated/Tables", "data": "Assets/StreamingAssets/Tables", "csv": null, "schema": true },
   "codegen": { "namespace": "Game.Data", "tablesClass": "GameTables", "serializer": "memorypack" },
-  "sheet":   { "header": ["type", "name", "comment"], "arraySeparator": "|" },
+  "sheet":   { "header": ["type", "name", "comment"], "arraySeparator": "," },
   "csv":     { "backend": "auto" },
   "signing": { "publicKey": "rsa:…", "privateKeyFile": "ugs.private.key", "privateKeyEnv": "UGS_PRIVATE_KEY" },
   "build":   { "label": null, "parallel": true, "cache": ".ugs/cache" }

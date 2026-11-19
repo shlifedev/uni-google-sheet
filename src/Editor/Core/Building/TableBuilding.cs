@@ -201,38 +201,24 @@ namespace UGS.Core.Building
         /// <summary>Splits one cell into array elements and parses each. A blank cell adds nothing.</summary>
         public static bool TryParseElements(ColumnType elementType, string text, char arraySeparator, List<object> elements, out string reason)
         {
-            reason = "";
-            string trimmed = text.Trim();
-            if (trimmed.Length == 0)
+            var parts = new List<ArrayElement>();
+            if (!ArraySplitter.TrySplit(text, arraySeparator, parts, out char separator, out reason))
             {
-                return true;
+                return false;
             }
 
-            // "[a,b,c]" is accepted as another way to write "a|b|c".
-            char separator = arraySeparator;
-            if (trimmed.Length >= 2 && trimmed[0] == '[' && trimmed[^1] == ']')
+            for (int index = 0; index < parts.Count; index++)
             {
-                trimmed = trimmed[1..^1];
-                separator = trimmed.Contains(arraySeparator) ? arraySeparator : ',';
-                if (trimmed.Trim().Length == 0)
-                {
-                    return true;
-                }
-            }
-
-            string[] parts = trimmed.Split(separator);
-            for (int index = 0; index < parts.Length; index++)
-            {
-                string part = parts[index].Trim();
-                if (part.Length == 0)
+                ArrayElement part = parts[index];
+                if (part.Text.Length == 0 && !part.Quoted)
                 {
                     reason = $"has an empty element at position {index + 1}. Check for a '{separator}' at the start or end, or two in a row";
                     return false;
                 }
 
-                if (!TryParseSingle(elementType, part, out object element, out string elementReason, isElement: true))
+                if (!TryParseSingle(elementType, part.Text, out object element, out string elementReason, isElement: true))
                 {
-                    reason = $"has a bad element at position {index + 1}: '{part}' {elementReason}";
+                    reason = $"has a bad element at position {index + 1}: '{part.Text}' {elementReason}";
                     return false;
                 }
 
@@ -240,6 +226,63 @@ namespace UGS.Core.Building
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// A warning for an array cell that parsed but probably not as the author meant, or null.
+        /// Catches a number shown with thousands separators ("1,000" becomes 1 and 0) and text still written with the old '|' separator.
+        /// </summary>
+        public static string? AmbiguityWarning(ColumnType elementType, string text, char arraySeparator, out string hint)
+        {
+            hint = "";
+            string trimmed = text.Trim();
+            if (trimmed.Length == 0 || ArraySplitter.IsBracketed(trimmed))
+            {
+                return null;
+            }
+
+            if (arraySeparator == ',' && IsNumeric(elementType) && LooksLikeGroupedNumber(trimmed))
+            {
+                hint = $"If it is one number, format the column as plain text or turn off the thousands separator in the sheet. If it is a list, write it in brackets: [{trimmed}].";
+                return $"'{trimmed}' looks like one number with thousands separators, but it was read as {trimmed.Split(',').Length} elements.";
+            }
+
+            if (arraySeparator != '|' && elementType.Kind == ColumnKind.Scalar && elementType.Scalar == ScalarKind.String
+                && ArraySplitter.ContainsOutsideQuotes(trimmed, '|') && !ArraySplitter.ContainsOutsideQuotes(trimmed, arraySeparator))
+            {
+                hint = $"Separate the elements with '{arraySeparator}'. If the '|' is part of the text, put the element in quotes: \"{trimmed.Replace("\"", "\\\"")}\".";
+                return $"'{trimmed}' contains '|', but arrays are separated by '{arraySeparator}', so it was read as one element.";
+            }
+
+            return null;
+        }
+
+        private static bool IsNumeric(ColumnType elementType)
+        {
+            ColumnType value = elementType.Kind == ColumnKind.Reference ? elementType.KeyType! : elementType;
+            return value.Kind == ColumnKind.Scalar && (Scalars.IsInteger(value.Scalar) || value.Scalar is ScalarKind.Float or ScalarKind.Double);
+        }
+
+        // "1,000", "-12,345,678", "1,000.5": what a sheet shows for a number with a thousands-separator format.
+        private static bool LooksLikeGroupedNumber(string text)
+        {
+            int start = text[0] == '-' ? 1 : 0;
+            int end = text.IndexOf('.') is var dot && dot >= 0 ? dot : text.Length;
+            string[] groups = text[start..end].Split(',');
+            if (groups.Length < 2 || groups[0].Length is < 1 or > 3)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < groups.Length; index++)
+            {
+                if ((index > 0 && groups[index].Length != 3) || !groups[index].All(c => c is >= '0' and <= '9'))
+                {
+                    return false;
+                }
+            }
+
+            return end == text.Length || (end + 1 < text.Length && text[(end + 1)..].All(c => c is >= '0' and <= '9'));
         }
 
         private static bool TryParseSingle(ColumnType type, string text, out object value, out string reason, bool isElement = false)
@@ -352,8 +395,12 @@ namespace UGS.Core.Building
                             Cell part = source[sourceIndex];
                             if (!CellParser.TryParseElements(column.Type.ElementType, part.Text, arraySeparator, elements, out string partReason))
                             {
-                                diagnostics.AddError(part, $"'{part.Trimmed}' {partReason}.", Hint(column));
+                                diagnostics.AddError(part, $"'{part.Trimmed}' {partReason}.", Hint(column, arraySeparator, part.Text));
                                 valid = false;
+                            }
+                            else
+                            {
+                                WarnIfAmbiguous(column, part, arraySeparator, diagnostics);
                             }
                         }
 
@@ -373,10 +420,14 @@ namespace UGS.Core.Building
                     if (CellParser.TryParse(column.Type, text, arraySeparator, out object value, out string reason))
                     {
                         values[index] = value;
+                        if (column.Type.IsArray)
+                        {
+                            WarnIfAmbiguous(column, cell, arraySeparator, diagnostics);
+                        }
                     }
                     else
                     {
-                        diagnostics.AddError(cell, cell.IsBlank ? $"The cell {reason}." : $"'{cell.Trimmed}' {reason}.", Hint(column));
+                        diagnostics.AddError(cell, cell.IsBlank ? $"The cell {reason}." : $"'{cell.Trimmed}' {reason}.", Hint(column, arraySeparator, text));
                         valid = false;
                     }
                 }
@@ -396,9 +447,24 @@ namespace UGS.Core.Building
             return new TableData(schema, rows);
         }
 
-        private static string Hint(ColumnSchema column)
+        private static void WarnIfAmbiguous(ColumnSchema column, Cell cell, char arraySeparator, DiagnosticBag diagnostics)
         {
-            return $"The column '{column.Field}' is {column.Type.CanonicalName}. Example: {(column.Type.IsArray ? column.Type.Example + "|" + column.Type.Example : column.Type.Example)}";
+            if (CellParser.AmbiguityWarning(column.Type.ElementType, cell.Text, arraySeparator, out string hint) is { } warning)
+            {
+                diagnostics.AddWarning(cell, warning, hint);
+            }
+        }
+
+        private static string Hint(ColumnSchema column, char arraySeparator, string text)
+        {
+            string example = column.Type.Example;
+            string hint = $"The column '{column.Field}' is {column.Type.CanonicalName}. Example: {(column.Type.IsArray ? $"[{example}, {example}]" : example)}";
+            if (column.Type.IsArray && arraySeparator != '|' && text.Contains('|') && column.Type.Enum is not { IsFlags: true })
+            {
+                hint += $". Arrays are separated by '{arraySeparator}': write {example}{arraySeparator} {example}, not {example}|{example}";
+            }
+
+            return hint;
         }
     }
 
@@ -480,5 +546,149 @@ namespace UGS.Core.Building
         private static object Comparable(object value) => value is string ? value : Scalars.ToInt64(value);
 
         private static string Display(object value) => System.Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
+    }
+
+    /// <summary>One element of an array cell. A quoted element keeps its text exactly, even when empty.</summary>
+    public readonly struct ArrayElement
+    {
+        public ArrayElement(string text, bool quoted)
+        {
+            Text = text;
+            Quoted = quoted;
+        }
+
+        public string Text { get; }
+
+        public bool Quoted { get; }
+    }
+
+    /// <summary>
+    /// Splits the text of an array cell. Elements are separated by the array separator, and the whole list may be wrapped in
+    /// [ ]. An element in double quotes may contain the separator, brackets and spaces; \" and \\ inside quotes stand for " and \.
+    ///   1, 2, 3          [1, 2, 3]          ["Hello, world", plain]          "say \"hi\""
+    /// </summary>
+    public static class ArraySplitter
+    {
+        public static bool IsBracketed(string trimmed) => trimmed.Length >= 2 && trimmed[0] == '[' && trimmed[trimmed.Length - 1] == ']';
+
+        public static bool TrySplit(string text, char arraySeparator, List<ArrayElement> parts, out char separator, out string reason)
+        {
+            reason = "";
+            separator = arraySeparator;
+            string body = text.Trim();
+            if (IsBracketed(body))
+            {
+                // Inside brackets ',' always works. A different configured separator is used when the list contains it.
+                body = body.Substring(1, body.Length - 2);
+                separator = arraySeparator != ',' && ContainsOutsideQuotes(body, arraySeparator) ? arraySeparator : ',';
+            }
+
+            if (body.Trim().Length == 0)
+            {
+                return true;
+            }
+
+            int position = 0;
+            while (true)
+            {
+                SkipSpace(body, ref position, separator);
+                if (position < body.Length && IsQuote(body[position]))
+                {
+                    if (!TryReadQuoted(body, ref position, out string quoted))
+                    {
+                        reason = $"opens a quote in element {parts.Count + 1} but never closes it";
+                        return false;
+                    }
+
+                    SkipSpace(body, ref position, separator);
+                    if (position < body.Length && body[position] != separator)
+                    {
+                        reason = $"has text after the closing quote of element {parts.Count + 1}. To use a quote inside quoted text, write \\\"";
+                        return false;
+                    }
+
+                    parts.Add(new ArrayElement(quoted, true));
+                }
+                else
+                {
+                    int end = body.IndexOf(separator, position);
+                    if (end < 0)
+                    {
+                        end = body.Length;
+                    }
+
+                    parts.Add(new ArrayElement(body.Substring(position, end - position).Trim(), false));
+                    position = end;
+                }
+
+                if (position >= body.Length)
+                {
+                    return true;
+                }
+
+                position++; // the separator
+            }
+        }
+
+        /// <summary>True when the character appears outside double-quoted elements.</summary>
+        public static bool ContainsOutsideQuotes(string text, char character)
+        {
+            bool inQuotes = false;
+            for (int index = 0; index < text.Length; index++)
+            {
+                char c = text[index];
+                if (inQuotes && c == '\\' && index + 1 < text.Length)
+                {
+                    index++;
+                }
+                else if (IsQuote(c))
+                {
+                    inQuotes = !inQuotes;
+                }
+                else if (!inQuotes && c == character)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Curly quotes count too: they come in when text is pasted from a word processor.
+        private static bool IsQuote(char c) => c is '"' or '“' or '”';
+
+        private static void SkipSpace(string text, ref int position, char separator)
+        {
+            while (position < text.Length && text[position] != separator && char.IsWhiteSpace(text[position]))
+            {
+                position++;
+            }
+        }
+
+        private static bool TryReadQuoted(string text, ref int position, out string value)
+        {
+            var builder = new System.Text.StringBuilder();
+            for (int index = position + 1; index < text.Length; index++)
+            {
+                char c = text[index];
+                if (c == '\\' && index + 1 < text.Length && (text[index + 1] == '\\' || IsQuote(text[index + 1])))
+                {
+                    builder.Append(text[++index]);
+                }
+                else if (IsQuote(c))
+                {
+                    position = index + 1;
+                    value = builder.ToString();
+                    return true;
+                }
+                else
+                {
+                    builder.Append(c);
+                }
+            }
+
+            value = "";
+            return false;
+        }
     }
 }

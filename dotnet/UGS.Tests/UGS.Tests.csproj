@@ -21,6 +21,7 @@
     <ProjectReference Include="../UGS.Csv.Sep/UGS.Csv.Sep.csproj" />
     <ProjectReference Include="../UGS.Runtime/UGS.Runtime.csproj" />
     <ProjectReference Include="../UGS.Cli/UGS.Cli.csproj" />
+    <ProjectReference Include="../UGS.Desktop.Host/UGS.Desktop.Host.csproj" />
     <ProjectReference Include="../samples/Sample.Tables.MemoryPack/Sample.Tables.MemoryPack.csproj" />
     <ProjectReference Include="../samples/Sample.Tables.MessagePack/Sample.Tables.MessagePack.csproj" />
   </ItemGroup>

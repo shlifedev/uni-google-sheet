@@ -224,7 +224,11 @@ namespace UGS.Editor
 
             _checkButton = new ToolbarButton(() => Run(commit: false)) { text = T("Check"), tooltip = T("Read and validate the sheets. Writes nothing.") };
             toolbar.Add(_checkButton);
-            _buildButton = new ToolbarButton(() => Run(commit: true)) { text = T("Build"), tooltip = T("Write generated code and data (Ctrl+Shift+Alt+B).") };
+            // Both builds are here: only what is selected in the tree (everything else comes from the last build), and all of it.
+            _selectionBuild = new ToolbarButton(() => RunSelection(commit: true));
+            _selectionBuild.AddToClassList("ugs-selection__build");
+            toolbar.Add(_selectionBuild);
+            _buildButton = new ToolbarButton(() => Run(commit: true)) { text = T("Build all"), tooltip = T("Write generated code and data (Ctrl+Shift+Alt+B).") };
             _buildButton.AddToClassList("ugs-build");
             toolbar.Add(_buildButton);
             return toolbar;
@@ -246,7 +250,7 @@ namespace UGS.Editor
             bool canRun = _config != null && !UgsProject.IsRunning;
             _checkButton.SetEnabled(canRun);
             _buildButton.SetEnabled(canRun);
-            _selectionBar?.Query<ToolbarButton>().ForEach(button => button.SetEnabled(canRun));
+            RefreshSelectionBuild();
 
             UgsRunResult? result = UgsProject.LastResult;
             string icon = "";
@@ -701,7 +705,7 @@ namespace UGS.Editor
             /// <summary>Identifies the node across rebuilds of the tree, so a selection survives filtering.</summary>
             public string Key = "";
 
-            /// <summary>Set on source group nodes (Excel, Google Drive, …): the workbooks shown under it.</summary>
+            /// <summary>Set on source nodes (one per connected source): the workbooks shown under it.</summary>
             public string[]? GroupWorkbooks;
 
             /// <summary>Set on an enum node: one enum from an Enums sheet or a Mapping column.</summary>
@@ -713,7 +717,7 @@ namespace UGS.Editor
             public bool IsEnum => Enum != null || EnumSheet != null;
         }
 
-        /// <summary>The top level of the tree when a project reads from more than one kind of source.</summary>
+        /// <summary>The kind of source a workbook came from; the tree's top level groups by connection.</summary>
         private enum SourceGroup
         {
             Excel,
@@ -744,6 +748,38 @@ namespace UGS.Editor
                     return SourceGroup.GoogleDrive;
                 default:
                     return SourceGroup.Other;
+            }
+        }
+
+        // The connection a workbook came from: its kind and the path, spreadsheet id or folder id in ugs.json.
+        private (SourceGroup Kind, string Source) ConnectionOf(string workbook) =>
+            (GroupOf(workbook), _origins.TryGetValue(workbook, out WorkbookOrigin? origin) ? origin.Source : "");
+
+        // The last folder of a path, or the start of a Google id.
+        private static string ShortSource(string source)
+        {
+            string trimmed = source.TrimEnd('/', '\\');
+            int slash = trimmed.LastIndexOfAny(new[] { '/', '\\' });
+            if (slash >= 0)
+            {
+                return trimmed.Substring(slash + 1);
+            }
+
+            return trimmed.Length > 10 ? trimmed.Substring(0, 8) + "…" : trimmed;
+        }
+
+        private static string GroupIcon(SourceGroup group)
+        {
+            switch (group)
+            {
+                case SourceGroup.Excel:
+                    return ExcelIconName;
+                case SourceGroup.GoogleSheets:
+                    return GoogleSheetsIconName;
+                case SourceGroup.GoogleDrive:
+                    return "CloudConnect";
+                default:
+                    return "Folder Icon";
             }
         }
 
@@ -918,12 +954,7 @@ namespace UGS.Editor
             tree.bindItem = (element, index) =>
             {
                 TableNode node = tree.GetItemDataForIndex<TableNode>(index);
-                // A source header (Excel, CSV, Google Drive) is a section title with a rule, not a node with an icon.
-                bool header = node.GroupWorkbooks != null;
-                element.EnableInClassList("ugs-tree-row--header", header);
-                Image icon = element.Q<Image>();
-                icon.image = header ? null : TreeIcon(node.Icon);
-                icon.style.display = header ? DisplayStyle.None : DisplayStyle.Flex;
+                element.Q<Image>().image = TreeIcon(node.Icon);
                 Label name = element.Q<Label>(className: "ugs-tree-row__name");
                 string query = _tableFilter.Trim();
                 string marked = query.Length > 0 ? Highlight(node.Label, query) : "";
@@ -937,22 +968,15 @@ namespace UGS.Editor
             };
             side.Add(tree);
 
-            // Build or check only what is selected in the tree; everything else comes from the last build.
+            // What is selected in the tree: the toolbar's "Build selection" builds only that. Checking it is in the context menu.
             var selectionBar = new Toolbar();
             selectionBar.AddToClassList("ugs-selection");
             var selectionLabel = new Label();
             selectionLabel.AddToClassList("ugs-selection__label");
             selectionBar.Add(selectionLabel);
-            var selectionCheck = new ToolbarButton(() => RunSelection(commit: false)) { text = T("Check"), tooltip = T("Read only the selected sheets again and validate. Writes nothing.") };
-            var selectionBuild = new ToolbarButton(() => RunSelection(commit: true)) { text = T("Build"), tooltip = T("Read only the selected sheets again and write the result.") };
-            selectionBuild.AddToClassList("ugs-build");
-            selectionBuild.AddToClassList("ugs-selection__build");
-            selectionBar.Add(selectionCheck);
-            selectionBar.Add(selectionBuild);
             side.Add(selectionBar);
             _selectionBar = selectionBar;
             _selectionLabel = selectionLabel;
-            _selectionBuild = selectionBuild;
             // Double-click (or Enter) opens the workbook the node came from.
             tree.itemsChosen += _ =>
             {
@@ -1102,10 +1126,11 @@ namespace UGS.Editor
             (int Id, TableNode Node)? enumPrevious = null;
             ILookup<string, RawTable> tablesByWorkbook = tables.ToLookup(WorkbookOf);
             List<string> workbooks = tablesByWorkbook.Select(group => group.Key).Concat(sheetEnums.Keys).Distinct()
-                .OrderBy(name => (int)GroupOf(name)).ThenBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
-            // The source level appears once the project reads from more than one kind of source.
-            bool showGroups = workbooks.Select(GroupOf).Distinct().Count() > 1;
-            var workbookNodes = new List<(SourceGroup Group, string Workbook, TreeViewItemData<TableNode> Node)>();
+                .OrderBy(name => (int)GroupOf(name)).ThenBy(name => ConnectionOf(name).Source, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
+            // One node per connected source (each entry under "sources" in ugs.json), once there is more than one.
+            bool showGroups = workbooks.Select(ConnectionOf).Distinct().Count() > 1;
+            var workbookNodes = new List<((SourceGroup Kind, string Source) Group, string Workbook, TreeViewItemData<TableNode> Node)>();
             foreach (string workbookName in workbooks)
             {
                 var children = new List<TreeViewItemData<TableNode>>();
@@ -1229,7 +1254,7 @@ namespace UGS.Editor
                 if (children.Count > 0)
                 {
                     int workbookId = nextId++;
-                    workbookNodes.Add((GroupOf(workbookName), workbookName, new TreeViewItemData<TableNode>(workbookId, new TableNode
+                    workbookNodes.Add((ConnectionOf(workbookName), workbookName, new TreeViewItemData<TableNode>(workbookId, new TableNode
                     {
                         Label = workbookName,
                         Workbook = workbookName,
@@ -1250,23 +1275,32 @@ namespace UGS.Editor
             }
             else
             {
-                // Each kind of source is a section: a header row, then its workbooks at the top level. The header is not a
-                // parent node, so the workbooks are not indented one level deeper. Selecting it still covers its workbooks.
-                foreach (IGrouping<SourceGroup, (SourceGroup Group, string Workbook, TreeViewItemData<TableNode> Node)> group in workbookNodes.GroupBy(entry => entry.Group))
+                // A source with more than one connection of its kind (two Excel folders) is told apart by its folder or id.
+                var kinds = workbookNodes.Select(entry => entry.Group).Distinct().GroupBy(group => group.Kind)
+                    .ToDictionary(kind => kind.Key, kind => kind.Count());
+                foreach (IGrouping<(SourceGroup Kind, string Source), ((SourceGroup Kind, string Source) Group, string Workbook, TreeViewItemData<TableNode> Node)> group in workbookNodes.GroupBy(entry => entry.Group))
                 {
                     int groupId = nextId++;
-                    string label = GroupLabel(group.Key);
+                    string label = GroupLabel(group.Key.Kind);
+                    if (kinds[group.Key.Kind] > 1 && group.Key.Source.Length > 0)
+                    {
+                        label += " · " + ShortSource(group.Key.Source);
+                    }
+
+                    string key = "group:" + group.Key.Kind + ":" + group.Key.Source;
                     string[] names = group.Select(entry => entry.Workbook).ToArray();
                     roots.Add(new TreeViewItemData<TableNode>(groupId, new TableNode
                     {
                         Label = label,
-                        Key = "group:" + group.Key,
+                        Key = key,
+                        Icon = GroupIcon(group.Key.Kind),
                         Note = names.Length.ToString(),
                         GroupWorkbooks = names,
-                        Tooltip = Plural(names.Length, "workbook") + "\n" + string.Join("\n", names)
-                    }));
-                    keyed.Add(("group:" + group.Key, groupId));
-                    roots.AddRange(group.Select(entry => entry.Node));
+                        Tooltip = (group.Key.Source.Length > 0 ? GroupLabel(group.Key.Kind) + ": " + group.Key.Source + "\n" : "")
+                            + Plural(names.Length, "workbook") + "\n" + string.Join("\n", names)
+                    }, group.Select(entry => entry.Node).ToList()));
+                    keyed.Add((key, groupId));
+                    expand.Add(groupId);
                 }
             }
 
@@ -1475,35 +1509,48 @@ namespace UGS.Editor
             }
 
             _treeSelection = selection;
-            if (_selectionBar == null || _selectionLabel == null)
+            if (_selectionBar != null && _selectionLabel != null)
+            {
+                _selectionBar.style.display = selection.IsEmpty ? DisplayStyle.None : DisplayStyle.Flex;
+                _selectionLabel.text = DescribeSelection();
+                _selectionBar.tooltip = T("Reads these again; every other sheet comes from the last build on this machine.\n") + string.Join("\n", SelectionLines());
+            }
+
+            RefreshSelectionBuild();
+        }
+
+        // The toolbar's "Build selection (2)": shown on the Tables page while something is selected.
+        private void RefreshSelectionBuild()
+        {
+            if (_selectionBuild == null)
             {
                 return;
             }
 
-            _selectionBar.style.display = selection.IsEmpty ? DisplayStyle.None : DisplayStyle.Flex;
-            _selectionLabel.text = DescribeSelection();
-            _selectionBar.tooltip = T("Reads these again; every other sheet comes from the last build on this machine.\n") + string.Join("\n", SelectionLines());
-            if (_selectionBuild != null)
+            SheetSelection selection = _treeSelection;
+            bool shown = _config != null && _page == "Tables" && !selection.IsEmpty;
+            _selectionBuild.style.display = shown ? DisplayStyle.Flex : DisplayStyle.None;
+            _selectionBuild.SetEnabled(_config != null && !UgsProject.IsRunning);
+            if (!shown)
             {
-                // The number of tables the selection actually builds again: every table built from a selected sheet or workbook.
-                List<string> tables = (UgsProject.LastResult?.Build.RawTables ?? Array.Empty<RawTable>())
-                    .Where(table => SheetRefsOf(table).Any(entry => selection.Includes(entry.Workbook, entry.Sheet)))
-                    .Select(table => table.Name)
-                    .OrderBy(name => name, StringComparer.Ordinal)
-                    .ToList();
-                // Enums sheets build no table but do change the generated enums, so they are counted too.
-                List<string> enums = (UgsProject.LastResult?.Build.Enums ?? (IReadOnlyList<EnumDefinition>)Array.Empty<EnumDefinition>())
-                    .Where(definition => SplitLocation(definition.Location) is var at && IsEnumsSheet(at.Sheet) && selection.Includes(at.Workbook, at.Sheet))
-                    .Select(definition => definition.Name)
-                    .ToList();
-                string built = enums.Count == 0 ? tables.Count.ToString() : (tables.Count > 0 ? tables.Count + " · " : "") + "enum " + enums.Count;
-                _selectionBuild.text = F("Build ({0})", built);
-                _selectionBuild.tooltip = T("Read only the selected sheets again and write the result.") + "\n" + F("Tables built again: {0}", tables.Count > 0 ? string.Join(", ", tables) : "-")
-                    + (enums.Count > 0 ? "\n" + F("Enums read again: {0}", string.Join(", ", enums)) : "");
+                return;
             }
 
-            bool canRun = _config != null && !UgsProject.IsRunning;
-            _selectionBar.Query<ToolbarButton>().ForEach(button => button.SetEnabled(canRun));
+            // The number of tables the selection actually builds again: every table built from a selected sheet or workbook.
+            List<string> tables = (UgsProject.LastResult?.Build.RawTables ?? Array.Empty<RawTable>())
+                .Where(table => SheetRefsOf(table).Any(entry => selection.Includes(entry.Workbook, entry.Sheet)))
+                .Select(table => table.Name)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
+            // Enums sheets build no table but do change the generated enums, so they are counted too.
+            List<string> enums = (UgsProject.LastResult?.Build.Enums ?? (IReadOnlyList<EnumDefinition>)Array.Empty<EnumDefinition>())
+                .Where(definition => SplitLocation(definition.Location) is var at && IsEnumsSheet(at.Sheet) && selection.Includes(at.Workbook, at.Sheet))
+                .Select(definition => definition.Name)
+                .ToList();
+            string built = enums.Count == 0 ? tables.Count.ToString() : (tables.Count > 0 ? tables.Count + " · " : "") + "enum " + enums.Count;
+            _selectionBuild.text = F("Build selection ({0})", built);
+            _selectionBuild.tooltip = T("Read only the selected sheets again and write the result.") + "\n" + F("Tables built again: {0}", tables.Count > 0 ? string.Join(", ", tables) : "-")
+                + (enums.Count > 0 ? "\n" + F("Enums read again: {0}", string.Join(", ", enums)) : "") + "\n\n" + DescribeSelection();
         }
 
         private IEnumerable<string> SelectionLines()
@@ -1730,10 +1777,6 @@ namespace UGS.Editor
             var note = new Label();
             note.AddToClassList("ugs-tree-row__note");
             row.Add(note);
-            // The line after a source header's name; hidden on other rows.
-            var rule = new VisualElement();
-            rule.AddToClassList("ugs-tree-row__rule");
-            row.Add(rule);
             return row;
         }
 

@@ -202,7 +202,7 @@ public sealed class DataSafetyTests
     {
         BuildResult result = Sheets.Build(Sheets.Config("messagepack"),
             Sheets.Of("Item", "Key<byte>,int\nId,Price\n,\n1,10\n2,20\n"),
-            Sheets.Of("Monster", "Key<int>,Ref<Item>[],Ref<Item>\nId,Drops,Best\n,,\n1,1|2,2\n2,,1\n"));
+            Sheets.Of("Monster", "Key<int>,Ref<Item>[],Ref<Item>\nId,Drops,Best\n,,\n1,\"1,2\",2\n2,,1\n"));
         Assert.True(result.Success, Sheets.Errors(result));
 
         ByteRefRow[] rows = MessagePackSerializer.Deserialize<ByteRefRow[]>(result.Output!.DataFiles["Monster.bytes"]);

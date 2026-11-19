@@ -176,7 +176,7 @@ namespace UGS.Core.Config
         public List<string> Header { get; set; } = new() { TypeRole, NameRole, CommentRole };
 
         /// <summary>Separates the elements of an array written in one cell.</summary>
-        public char ArraySeparator { get; set; } = '|';
+        public char ArraySeparator { get; set; } = ',';
 
         public int TypeRow => Header.IndexOf(TypeRole);
 

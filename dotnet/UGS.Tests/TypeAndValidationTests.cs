@@ -117,7 +117,7 @@ public class ScalarTests
 
 public class EnumSheetTests
 {
-    private const string EnumsSheet = """
+    internal const string EnumsSheet = """
         byte,,Flags<int>,,
         EKind,,EAccess,,ESimple
         kinds,,access rights,,
@@ -167,7 +167,7 @@ public class EnumSheetTests
     public void Flags_cells_combine_members()
     {
         BuildResult result = Sheets.Build(Sheets.Of("Enums", EnumsSheet),
-            Sheets.Of("T", "Key<int>,EAccess,EAccess[]\nId,Access,Each\n,,\n1,\"Read, Write\",Read|Write\n2,Read Write,\n3,,All\n"));
+            Sheets.Of("T", "Key<int>,EAccess,EAccess[]\nId,Access,Each\n,,\n1,\"Read, Write\",\"Read, Write\"\n2,Read Write,\n3,,All\n"));
         Assert.True(result.Success, Sheets.Errors(result));
         Assert.Equal([3L, 3L, 0L], result.Tables.Single().Rows.Select(row => (long)row.Values[1]));
         Assert.Equal([1L, 2L], ((object[])result.Tables.Single().Rows[0].Values[2]).Cast<long>());
@@ -256,7 +256,7 @@ public class ValidationTests
     {
         BuildResult result = Sheets.Build(
             Sheets.Of("Item", "Key<int>\nId\n\n1\n2\n"),
-            Sheets.Of("Monster", "Key<int>,Ref<Item>,Ref<Item>[],Ref<Item>?\nId,Weapon,Drops,Rare\n,,,\n1,1,1|2,\n2,9,1|8,7\n"));
+            Sheets.Of("Monster", "Key<int>,Ref<Item>,Ref<Item>[],Ref<Item>?\nId,Weapon,Drops,Rare\n,,,\n1,1,\"1,2\",\n2,9,\"1,8\",7\n"));
         Assert.False(result.Success);
         Assert.Equal(["has no row with key '9'", "has no row with key '8'", "has no row with key '7'"],
             result.Diagnostics.Items.Select(item => item.Message.Replace("The table 'Item' ", "").TrimEnd('.')));
@@ -313,7 +313,7 @@ public class ValidationTests
     [Fact]
     public void Arrays_accept_both_separator_and_bracket_forms()
     {
-        BuildResult result = Sheets.Build(Sheets.Of("T", "Key<int>,int[],string[],float[]\nId,A,B,C\n,,,\n1,1|2|3,\"[x, y z, w]\",[1.5|2]\n2,[],,[ ]\n"));
+        BuildResult result = Sheets.Build(Sheets.Of("T", "Key<int>,int[],string[],float[]\nId,A,B,C\n,,,\n1,\"1,2,3\",\"[x, y z, w]\",\"[1.5, 2]\"\n2,[],,[ ]\n"));
         Assert.True(result.Success, Sheets.Errors(result));
         RowData first = result.Tables.Single().Rows[0];
         Assert.Equal([1, 2, 3], ((object[])first.Values[1]).Cast<int>());
@@ -326,9 +326,9 @@ public class ValidationTests
     }
 
     [Theory]
-    [InlineData("1||2", "has an empty element at position 2")]
-    [InlineData("1|x|3", "has a bad element at position 2: 'x' is not a whole number")]
-    [InlineData("|1", "has an empty element at position 1")]
+    [InlineData("\"1,,2\"", "has an empty element at position 2")]
+    [InlineData("\"1, x, 3\"", "has a bad element at position 2: 'x' is not a whole number")]
+    [InlineData("\",1\"", "has an empty element at position 1")]
     public void Array_mistakes_name_the_element(string cell, string expected)
     {
         Diagnostic error = SingleError(Sheets.Build(Sheets.Of("T", $"Key<int>,int[]\nId,A\n,\n1,{cell}\n")));
@@ -343,6 +343,101 @@ public class ValidationTests
         BuildResult result = Sheets.Build(config, Sheets.Of("T", "Key<int>,string[]\nId,A\n,\n1,a|b;c\n"));
         Assert.True(result.Success, Sheets.Errors(result));
         Assert.Equal(["a|b", "c"], ((object[])result.Tables.Single().Rows[0].Values[1]).Cast<string>());
+    }
+
+    [Fact]
+    public void Arrays_are_separated_by_commas_by_default()
+    {
+        Assert.Equal(',', new UGS.Core.Config.UgsConfig().Sheet.ArraySeparator);
+    }
+
+    [Theory]
+    [InlineData("a, b", new[] { "a", "b" })]
+    [InlineData("[a, b]", new[] { "a", "b" })]
+    [InlineData("\"Hello, world\", plain", new[] { "Hello, world", "plain" })]
+    [InlineData("[\"a, b\", c]", new[] { "a, b", "c" })]
+    [InlineData("\"  kept  \", \"\"", new[] { "  kept  ", "" })]
+    [InlineData("\"say \\\"hi\\\"\", \"back\\\\slash\"", new[] { "say \"hi\"", "back\\slash" })]
+    [InlineData("\u201Ccurly, quotes\u201D, x", new[] { "curly, quotes", "x" })]
+    [InlineData("5\" screen, C:\\dir", new[] { "5\" screen", "C:\\dir" })]
+    [InlineData("\"[x]\"", new[] { "[x]" })]
+    public void Quoted_elements_may_hold_commas_and_spaces(string cell, string[] expected)
+    {
+        Assert.True(CellParser.TryParse(ColumnType.OfScalar(ScalarKind.String, isArray: true), cell, ',', out object value, out string reason), reason);
+        Assert.Equal(expected, ((object[])value).Cast<string>());
+    }
+
+    [Theory]
+    [InlineData("\"open, b", "opens a quote in element 1 but never closes it")]
+    [InlineData("a, \"b\" c", "has text after the closing quote of element 2")]
+    public void Broken_quotes_are_errors(string cell, string expected)
+    {
+        Assert.False(CellParser.TryParse(ColumnType.OfScalar(ScalarKind.String, isArray: true), cell, ',', out _, out string reason));
+        Assert.Contains(expected, reason);
+    }
+
+    [Fact]
+    public void Numbers_may_be_quoted_too()
+    {
+        Assert.True(CellParser.TryParse(ColumnType.OfScalar(ScalarKind.Int, isArray: true), "\"1\", 2", ',', out object value, out string reason), reason);
+        Assert.Equal([1, 2], ((object[])value).Cast<int>());
+    }
+
+    [Fact]
+    public void A_number_shown_with_thousands_separators_is_warned_about()
+    {
+        // Google Sheets hands over what a cell shows, so 1000 formatted as "1,000" arrives as two elements.
+        BuildResult result = Sheets.Build(Sheets.Of("T", "Key<int>,int[],float[],int[],int[]\nId,A,B,C,D\n,,,,\n1,\"1,000\",\"-12,345.5\",\"[1,000]\",\"1,20\"\n"));
+        Assert.True(result.Success, Sheets.Errors(result));
+        Assert.Equal([1, 0], ((object[])result.Tables.Single().Rows[0].Values[1]).Cast<int>());
+        Diagnostic[] warnings = result.Diagnostics.Items.Where(item => item.Severity == Severity.Warning).ToArray();
+        Assert.Equal(2, warnings.Length);
+        Assert.Equal("'1,000' looks like one number with thousands separators, but it was read as 2 elements.", warnings[0].Message);
+        Assert.Contains("[1,000]", warnings[0].Hint);
+        Assert.StartsWith("'-12,345.5' looks like one number", warnings[1].Message);
+    }
+
+    [Fact]
+    public void Text_still_written_with_the_old_separator_is_warned_about()
+    {
+        BuildResult result = Sheets.Build(Sheets.Of("T", "Key<int>,string[],string[],string[]\nId,A,B,C\n,,,\n1,sword|blade,\"\"\"a|b\"\"\",\"x|y, z\"\n"));
+        Assert.True(result.Success, Sheets.Errors(result));
+        Assert.Equal(["sword|blade"], ((object[])result.Tables.Single().Rows[0].Values[1]).Cast<string>());
+        Diagnostic warning = Assert.Single(result.Diagnostics.Items, item => item.Severity == Severity.Warning);
+        Assert.Equal("'sword|blade' contains '|', but arrays are separated by ',', so it was read as one element.", warning.Message);
+        Assert.Contains("\"sword|blade\"", warning.Hint);
+    }
+
+    [Fact]
+    public void An_array_error_shows_an_example_and_points_out_the_old_separator()
+    {
+        Diagnostic error = SingleError(Sheets.Build(Sheets.Of("T", "Key<int>,int[]\nId,A\n,\n1,1|2\n")));
+        Assert.Contains("Example: [10, 10]", error.Hint);
+        Assert.Contains("Arrays are separated by ','", error.Hint);
+    }
+
+    [Fact]
+    public void Flags_inside_an_array_element_combine_with_a_bar()
+    {
+        BuildResult result = Sheets.Build(Sheets.Of("Enums", EnumSheetTests.EnumsSheet), Sheets.Of("T", "Key<int>,EAccess[]\nId,Each\n,\n1,\"Read|Write, Read\"\n"));
+        Assert.True(result.Success, Sheets.Errors(result));
+        Assert.Equal([3L, 1L], ((object[])result.Tables.Single().Rows[0].Values[1]).Cast<long>());
+        Assert.DoesNotContain(result.Diagnostics.Items, item => item.Severity == Severity.Warning);
+    }
+
+    [Fact]
+    public void Projects_that_keep_the_bar_separator_read_as_before()
+    {
+        var config = Sheets.Config();
+        config.Sheet.ArraySeparator = '|';
+        BuildResult result = Sheets.Build(config, Sheets.Of("T", "Key<int>,int[],float[],string[]\nId,A,B,C\n,,,\n1,1|2|3,[1.5|2],\"[x, y]\"\n2,1000,,\"a, b\"\n"));
+        Assert.True(result.Success, Sheets.Errors(result));
+        RowData first = result.Tables.Single().Rows[0];
+        Assert.Equal([1, 2, 3], ((object[])first.Values[1]).Cast<int>());
+        Assert.Equal([1.5f, 2f], ((object[])first.Values[2]).Cast<float>());
+        Assert.Equal(["x", "y"], ((object[])first.Values[3]).Cast<string>());
+        Assert.Equal(["a, b"], ((object[])result.Tables.Single().Rows[1].Values[3]).Cast<string>());
+        Assert.Empty(result.Diagnostics.Items);
     }
 
     [Fact]

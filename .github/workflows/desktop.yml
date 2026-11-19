@@ -1,0 +1,69 @@
+# Builds the desktop app (desktop/) for macOS and Windows and keeps the installers as run artifacts.
+# The engine sidecar (dotnet/UGS.Desktop.Host) is published by desktop/scripts/build-host.mjs, which the Tauri build runs.
+# Unsigned: code signing and notarization need certificates this workflow does not have yet.
+name: desktop
+
+on:
+  push:
+    paths: ["desktop/**", "dotnet/**", "src/Editor/Core/**", "src/Runtime/**", ".github/workflows/desktop.yml"]
+  pull_request:
+    paths: ["desktop/**", "dotnet/**", "src/Editor/Core/**", "src/Runtime/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis,msi
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - run: npm ci
+
+      - name: Engine tests
+        working-directory: .
+        run: dotnet test dotnet/UGS.Tests --filter "FullyQualifiedName~DesktopHostTests"
+
+      - name: Frontend tests
+        run: npm test
+
+      - name: Build
+        run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ugs-desktop-${{ matrix.target }}
+          path: |
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
+          if-no-files-found: error

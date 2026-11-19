@@ -1,10 +1,10 @@
 Key<int>,Key<string>,string,Enum<EItemKind>,EItemTag,Index<int>,int,float,double,bool,DateTime,float[],string[],long,int,int,Enum<ERarity>,int,int
 Id,Code,Name,Kind,Tags,Tier,Price,Weight,DropRate,Tradable,ReleasedAt,Stats,Aliases,Exp,Sockets,Sockets,Rarity,Attack,Defense
 Item id,Name used in code,Display name,Kind of item,Tags,"Tier, for grouping",Price in gold,Weight in kg,Chance to drop,Can be traded,Release date (UTC),Stat values,Other names,Experience,Socket sizes,Socket sizes,Rarity,Attack bonus,Defense bonus
-1001,wooden_sword,Wooden Sword,Weapon,Tradable,1,100,2.5,0.25,true,2026-01-31,3|1.5,sword|blade,10,1,2,Common,12,0
+1001,wooden_sword,Wooden Sword,Weapon,Tradable,1,100,2.5,0.25,true,2026-01-31,"3,1.5","sword,blade",10,1,2,Common,12,0
 1002,leather_armor,Leather Armor,Armor,Tradable,1,150,4,0.1,true,2026-01-31 13:30:00,5,,15,3,,,0,8
 2001,potion,포션 Potion,Consumable,"Tradable, Stackable",1,25,0.5,0.5,true,2026-01-31 13:30:00,,"[heal, hp]",0,,,Common,,
 3001,iron_ore,"Ore ""raw"", heavy
-second line",Material,Sellable,2,7,12.25,0.75,false,,1|2|3,,9007199254740991,,,Rare,,
-9001,dragon_blade,Dragon Blade,Weapon,Quest,3,99999,7.75,0.001,false,2026-12-25,120|45.5,legend,5000,4,4,Epic,250,10
+second line",Material,Sellable,2,7,12.25,0.75,false,,"1,2,3",,9007199254740991,,,Rare,,
+9001,dragon_blade,Dragon Blade,Weapon,Quest,3,99999,7.75,0.001,false,2026-12-25,"120,45.5",legend,5000,4,4,Epic,250,10
 9002,phoenix_mail,Phoenix Mail,Armor,,3,88888,9,0.002,false,,80,,4000,,,Epic,,

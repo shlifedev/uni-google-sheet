@@ -221,25 +221,6 @@
     color: var(--ugs-dim);
 }
 
-/* A source header: a small dim title, its workbook count and a rule, instead of a node one level up. */
-.ugs-tree-row__rule {
-    display: none;
-    flex-grow: 1;
-    height: 1px;
-    margin: 0 6px 0 6px;
-    background-color: var(--ugs-line);
-}
-
-.ugs-tree-row--header > .ugs-tree-row__rule {
-    display: flex;
-}
-
-.ugs-tree-row--header > .ugs-tree-row__name {
-    font-size: 10px;
-    -unity-font-style: bold;
-    color: var(--ugs-dim);
-}
-
 /* Under the tree: what is selected, and Check / Build for just that. */
 .ugs-selection {
     border-top-width: 1px;
