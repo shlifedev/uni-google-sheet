@@ -5,7 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 
-namespace UGS.Core.Config
+namespace HolySheet.Core.Config
 {
     public enum JsonKind
     {

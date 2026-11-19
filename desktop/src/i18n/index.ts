@@ -1,5 +1,5 @@
-// Texts are written in English and looked up by that English text, as in the Unity window (UgsText.cs), so the two
-// tools share one set of translations: ko.unity.json is exported from UgsText.cs (npm run i18n); ko.app.json holds
+// Texts are written in English and looked up by that English text, as in the Unity window (HolySheetText.cs), so the two
+// tools share one set of translations: ko.unity.json is exported from HolySheetText.cs (npm run i18n); ko.app.json holds
 // what only the desktop app says. Engine messages (problems, hints, the run summary) stay in English, as in Unity.
 import unity from "./ko.unity.json";
 import app from "./ko.app.json";

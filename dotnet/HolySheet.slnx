@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Sample.Server/Sample.Server.csproj" />
+    <Project Path="samples/Sample.Tables.MemoryPack/Sample.Tables.MemoryPack.csproj" />
+    <Project Path="samples/Sample.Tables.MessagePack/Sample.Tables.MessagePack.csproj" />
+  </Folder>
+  <Project Path="HolySheet.Cli/HolySheet.Cli.csproj" />
+  <Project Path="HolySheet.Core/HolySheet.Core.csproj" />
+  <Project Path="HolySheet.Csv.Sep/HolySheet.Csv.Sep.csproj" />
+  <Project Path="HolySheet.Desktop.Host/HolySheet.Desktop.Host.csproj" />
+  <Project Path="HolySheet.Runtime/HolySheet.Runtime.csproj" />
+  <Project Path="HolySheet.Tests/HolySheet.Tests.csproj" />
+  <Project Path="HolySheet.Tooling/HolySheet.Tooling.csproj" />
+</Solution>

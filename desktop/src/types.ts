@@ -1,4 +1,4 @@
-// The shapes the engine process (dotnet/UGS.Desktop.Host) sends. Keep in step with DesktopProject.cs, TableView.cs, Json.cs.
+// The shapes the engine process (dotnet/HolySheet.Desktop.Host) sends. Keep in step with DesktopProject.cs, TableView.cs, Json.cs.
 
 export type Severity = "error" | "warning";
 
@@ -83,8 +83,8 @@ export interface SourceConfig {
   snapshot?: string;
 }
 
-/** ugs.json as the engine writes it (UgsConfig.ToJson). Optional parts are left out when not set. */
-export interface UgsConfig {
+/** holysheet.json as the engine writes it (HolySheetConfig.ToJson). Optional parts are left out when not set. */
+export interface HolySheetConfig {
   sources: SourceConfig[];
   output: { code: string; data: string; csv?: string; schema: boolean; manifestFile?: string };
   codegen: { namespace: string; tablesClass: string; serializer: string };
@@ -106,7 +106,7 @@ export interface ProjectState {
   dir: string | null;
   configPath: string | null;
   hasConfig: boolean;
-  config: UgsConfig | null;
+  config: HolySheetConfig | null;
   configError: string | null;
   unityProject: boolean;
   sources: SourceState[];

@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { rpc, RpcError, type HostEvent } from "./rpc";
 import { setLanguage, T, type Language } from "./i18n";
 import { defaults, savePreferences, withRecent, type Preferences } from "./lib/settings";
-import type { AppInfo, ProjectState, RunResult, TableModel, UgsConfig } from "./types";
+import type { AppInfo, ProjectState, RunResult, TableModel, HolySheetConfig } from "./types";
 
 export type Page = "tables" | "settings";
 
@@ -39,7 +39,7 @@ interface AppState {
   initProject: (dir: string, sample: boolean, unity?: boolean) => Promise<void>;
   closeProject: () => Promise<void>;
   reload: () => Promise<void>;
-  saveConfig: (config: UgsConfig) => Promise<ProjectState | null>;
+  saveConfig: (config: HolySheetConfig) => Promise<ProjectState | null>;
   applyState: (state: ProjectState) => void;
   /** Offline follows the toolbar toggle unless given. */
   startRun: (commit: boolean, only?: string[], offline?: boolean) => Promise<void>;

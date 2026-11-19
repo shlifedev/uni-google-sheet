@@ -1,7 +1,7 @@
 #nullable enable
 using System;
 
-namespace UGS.Core
+namespace HolySheet.Core
 {
     internal static class Guard
     {

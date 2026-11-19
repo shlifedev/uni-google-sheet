@@ -6,7 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace UGS.Core.Schema
+namespace HolySheet.Core.Schema
 {
     /// <summary>One column of a table: it becomes one property of the generated row class.</summary>
     public sealed class ColumnSchema
@@ -199,7 +199,7 @@ namespace UGS.Core.Schema
             }
         }
 
-        /// <summary>SHA-256 as lowercase hex. Must produce the same text as UGS.TableHash in the runtime.</summary>
+        /// <summary>SHA-256 as lowercase hex. Must produce the same text as HolySheet.TableHash in the runtime.</summary>
         public static string Sha256Hex(byte[] data)
         {
             using SHA256 sha256 = SHA256.Create();

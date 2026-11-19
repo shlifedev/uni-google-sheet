@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
-namespace UGS.Core.Schema
+namespace HolySheet.Core.Schema
 {
     /// <summary>Names that can be used for tables, fields, enums and enum members: C# identifiers that are not keywords.</summary>
     public static class Identifier

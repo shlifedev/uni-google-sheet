@@ -3,7 +3,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 
-namespace UGS
+namespace HolySheet
 {
     /// <summary>
     /// A read-only view over an array owned by a loaded table.

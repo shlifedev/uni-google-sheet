@@ -6,13 +6,13 @@ import { F, T, systemLanguage, type Language } from "../i18n";
 import { openTarget, reveal } from "../lib/actions";
 import type { Theme } from "../lib/settings";
 import { csvBackends, edit, extractGoogleId, formatTabs, headerLayouts, optional, parseTabs } from "../lib/config";
-import type { AuthType, SourceConfig, SourceState, UgsConfig, VerifyReport } from "../types";
+import type { AuthType, SourceConfig, SourceState, HolySheetConfig, VerifyReport } from "../types";
 import { NodeIcon, Chevron, CloseIcon, PlusIcon } from "./Icons";
 import { showMenuBelow } from "./Menu";
 
 type Browse = "file" | "folder" | "workbookOrFolder" | "keyFile";
 
-// ---- Fields. Text saves when it loses focus or on Enter, so typing does not rewrite ugs.json on every key. ----
+// ---- Fields. Text saves when it loses focus or on Enter, so typing does not rewrite holysheet.json on every key. ----
 
 // What a field is for is its tooltip, as in the Unity window: the page stays a list of fields.
 function Row({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
@@ -148,7 +148,7 @@ export function SettingsPage() {
   const config = project?.config;
   if (!project || !config) return null;
 
-  const save = (change: (next: UgsConfig) => void) => void saveConfig(edit(config, change));
+  const save = (change: (next: HolySheetConfig) => void) => void saveConfig(edit(config, change));
   const signed = !!config.signing?.publicKey;
   const header = config.sheet.header.join(", ");
   const layouts = headerLayouts.map((layout) => layout.label);
@@ -169,15 +169,15 @@ export function SettingsPage() {
       const state = await rpc.createKeyPair();
       applyState(state);
       if (!state.keyIgnored) {
-        const add = await ask(T("The private key was written to ugs.private.key. It must not be committed.\n\nAdd it to .gitignore?"), {
-          title: "UGS",
+        const add = await ask(T("The private key was written to holysheet.private.key. It must not be committed.\n\nAdd it to .gitignore?"), {
+          title: "HolySheet",
           okLabel: T("Add"),
           cancelLabel: T("Not now"),
         });
         if (add) applyState(await rpc.ignoreKey());
       }
     } catch (error) {
-      await message(error instanceof Error ? error.message : String(error), { title: "UGS", kind: "warning" });
+      await message(error instanceof Error ? error.message : String(error), { title: "HolySheet", kind: "warning" });
     }
   };
 
@@ -385,7 +385,7 @@ export function SettingsPage() {
 
         <div className="settings-foot">
           <button className="button" onClick={() => project.configPath && void openTarget(project.configPath)}>
-            {T("Open ugs.json")}
+            {T("Open holysheet.json")}
           </button>
           <button className="button" onClick={() => project.configPath && void reveal(project.configPath)}>
             {T("Reveal")}
@@ -542,7 +542,7 @@ function SourceCard({
               <Row label={T("Key variable")} help={T("Environment variable that holds the API key.")}>
                 <TextField value={auth.apiKeyEnv ?? ""} onCommit={(value) => setAuth((next) => (next.apiKeyEnv = optional(value)))} mono />
               </Row>
-              <Row label={T("Key")} help={T("Or the key itself. Saved to ugs.json as plain text.")}>
+              <Row label={T("Key")} help={T("Or the key itself. Saved to holysheet.json as plain text.")}>
                 <TextField value={auth.apiKey ?? ""} onCommit={(value) => setAuth((next) => (next.apiKey = optional(value)))} password />
               </Row>
             </>

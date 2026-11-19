@@ -14,15 +14,15 @@ export function StartPage() {
   };
 
   const openConfig = async () => {
-    const picked = await open({ title: T("Open a config file"), filters: [{ name: "ugs.json", extensions: ["json"] }] });
+    const picked = await open({ title: T("Open a config file"), filters: [{ name: "holysheet.json", extensions: ["json"] }] });
     if (typeof picked === "string") await openProject(picked);
   };
 
   return (
     <div className="start">
       <div className="start-card">
-        <h1>UGS</h1>
-        <p className="lead">{T("Game tables from xlsx, CSV and Google Sheets: typed C# and binary data, the same as the Unity window and the ugs command line.")}</p>
+        <h1>HolySheet</h1>
+        <p className="lead">{T("Game tables from xlsx, CSV and Google Sheets: typed C# and binary data, the same as the Unity window and the holysheet command line.")}</p>
         <div className="actions">
           <button className="button primary" onClick={() => void openFolder()}>
             {T("Open folder…")}
@@ -61,7 +61,7 @@ export function StartPage() {
   );
 }
 
-/** A project folder without a ugs.json, or with one that does not parse. */
+/** A project folder without a holysheet.json, or with one that does not parse. */
 export function NoConfigPage() {
   const { project, initProject, reload, closeProject } = useApp();
   const [sample, setSample] = useState(false);
@@ -72,7 +72,7 @@ export function NoConfigPage() {
     return (
       <div className="start">
         <div className="start-card callout error">
-          <strong>{T("ugs.json could not be read")}</strong>
+          <strong>{T("holysheet.json could not be read")}</strong>
           <div className="selectable mono">{project.configError}</div>
           <div className="row">
             <button className="button" onClick={() => project.configPath && void openTarget(project.configPath)}>
@@ -94,9 +94,9 @@ export function NoConfigPage() {
   return (
     <div className="start">
       <div className="start-card callout">
-        <strong>{T("Create ugs.json")}</strong>
+        <strong>{T("Create holysheet.json")}</strong>
         <div className="muted">
-          {T("This project has no ugs.json yet. It holds the sources and output folders; the ugs command line reads the same file.")}
+          {T("This project has no holysheet.json yet. It holds the sources and output folders; the holysheet command line reads the same file.")}
         </div>
         <div className="mono faint selectable">{project.dir}</div>
         <label className="checkbox">
@@ -109,7 +109,7 @@ export function NoConfigPage() {
         </label>
         <div className="row">
           <button className="button primary" onClick={() => void initProject(project.dir!, sample, unity)}>
-            {T("Create ugs.json")}
+            {T("Create holysheet.json")}
           </button>
           <button className="button" onClick={() => void reveal(project.dir!)}>
             {T("Reveal")}

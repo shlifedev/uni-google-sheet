@@ -1,7 +1,7 @@
 #nullable enable
 using System;
 
-namespace UGS
+namespace HolySheet
 {
     /// <summary>Why a table set could not be loaded. Callers can branch on this instead of matching message text.</summary>
     public enum TableLoadError

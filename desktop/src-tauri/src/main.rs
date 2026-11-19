@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    ugs_desktop_lib::run()
+    holysheet_desktop_lib::run()
 }

@@ -3,11 +3,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using UGS.Core.Config;
-using UGS.Core.Csv;
-using UGS.Core.Schema;
+using HolySheet.Core.Config;
+using HolySheet.Core.Csv;
+using HolySheet.Core.Schema;
 
-namespace UGS.Core.Transform
+namespace HolySheet.Core.Transform
 {
     public enum SheetKind
     {

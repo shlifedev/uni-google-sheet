@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 
-namespace UGS
+namespace HolySheet
 {
     /// <summary>How a <see cref="TableWatcher{T}"/> notices that the data changed.</summary>
     public enum TableWatchMode

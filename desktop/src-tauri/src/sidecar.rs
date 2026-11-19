@@ -1,8 +1,8 @@
-//! The engine process (`ugs-host`, a .NET sidecar) and the JSON-RPC link to it.
+//! The engine process (`holysheet-host`, a .NET sidecar) and the JSON-RPC link to it.
 //!
 //! The host reads one JSON-RPC request per line on stdin and writes one response or notification per line on stdout.
 //! This module starts it on first use, matches responses to the requests waiting for them by id, forwards
-//! notifications to the web view as `ugs://event`, and starts the host again if it dies. The web view never gets
+//! notifications to the web view as `holysheet://event`, and starts the host again if it dies. The web view never gets
 //! shell access: it can only call the `rpc` command.
 
 use std::collections::HashMap;
@@ -86,16 +86,16 @@ impl Host {
     fn spawn(&self, app: &AppHandle) -> Result<Running, RpcError> {
         let (mut events, child) = app
             .shell()
-            .sidecar("ugs-host")
-            .map_err(|error| RpcError::host(format!("The engine (ugs-host) is missing from the app: {error}")))?
+            .sidecar("holysheet-host")
+            .map_err(|error| RpcError::host(format!("The engine (holysheet-host) is missing from the app: {error}")))?
             .set_raw_out(true)
             .spawn()
-            .map_err(|error| RpcError::host(format!("Could not start the engine (ugs-host): {error}")))?;
+            .map_err(|error| RpcError::host(format!("Could not start the engine (holysheet-host): {error}")))?;
 
         let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
         if generation > 1 {
             // The web view re-opens its project: the new host starts with nothing open.
-            let _ = app.emit("ugs://host-restarted", generation);
+            let _ = app.emit("holysheet://host-restarted", generation);
         }
 
         let pending = self.pending.clone();
@@ -118,9 +118,9 @@ impl Host {
                     }
                     CommandEvent::Stderr(bytes) => {
                         // The host writes nothing there on purpose; anything that does arrive is worth seeing in a dev log.
-                        eprint!("[ugs-host] {}", String::from_utf8_lossy(&bytes));
+                        eprint!("[holysheet-host] {}", String::from_utf8_lossy(&bytes));
                     }
-                    CommandEvent::Error(message) => eprintln!("[ugs-host] {message}"),
+                    CommandEvent::Error(message) => eprintln!("[holysheet-host] {message}"),
                     CommandEvent::Terminated(status) => {
                         let host = app.state::<Host>();
                         let mut running = host.running.lock().unwrap();
@@ -129,7 +129,7 @@ impl Host {
                         }
                         drop(running);
                         fail_all(&pending, "The engine process exited.");
-                        let _ = app.emit("ugs://host-exited", status.code);
+                        let _ = app.emit("holysheet://host-exited", status.code);
                         break;
                     }
                     _ => {}
@@ -158,19 +158,19 @@ fn dispatch(app: &AppHandle, pending: &Pending, line: &[u8]) {
     let message: Value = match serde_json::from_slice(line) {
         Ok(value) => value,
         Err(error) => {
-            eprintln!("[ugs-host] not JSON ({error}): {}", String::from_utf8_lossy(line));
+            eprintln!("[holysheet-host] not JSON ({error}): {}", String::from_utf8_lossy(line));
             return;
         }
     };
 
     // A notification has a method and no id: a build started or finished.
     if message.get("method").is_some() && message.get("id").is_none_or(Value::is_null) {
-        let _ = app.emit("ugs://event", &message);
+        let _ = app.emit("holysheet://event", &message);
         return;
     }
 
     let Some(id) = message.get("id").and_then(Value::as_u64) else {
-        eprintln!("[ugs-host] response without a usable id: {message}");
+        eprintln!("[holysheet-host] response without a usable id: {message}");
         return;
     };
 

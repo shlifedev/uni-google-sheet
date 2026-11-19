@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using Sample.MemoryPackData;
-using UGS;
+using HolySheet;
 
 // Usage: Sample.Server <dataDirectory> [--parallel] [--watch]
 //
 //   dotnet run --project dotnet/samples/Sample.Server -- dotnet/samples/GameData/Data/MemoryPack --watch
 //
-// With --watch it keeps running and reloads when the data changes: edit the sheet, run `ugs build` (or leave `ugs watch` running)
+// With --watch it keeps running and reloads when the data changes: edit the sheet, run `holysheet build` (or leave `holysheet watch` running)
 // and the new values appear here without a restart.
 
 if (args.Length == 0 || args[0].StartsWith('-'))

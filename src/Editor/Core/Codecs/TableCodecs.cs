@@ -4,9 +4,9 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using UGS.Core.Schema;
+using HolySheet.Core.Schema;
 
-namespace UGS.Core.Codecs
+namespace HolySheet.Core.Codecs
 {
     /// <summary>
     /// One serializer the generated code can use. A codec does two things that must agree with each other:

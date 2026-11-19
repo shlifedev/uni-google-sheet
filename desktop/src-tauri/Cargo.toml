@@ -1,14 +1,14 @@
 [package]
-name = "ugs-desktop"
+name = "holysheet-desktop"
 version = "2.0.0"
-description = "UGS desktop: game tables from xlsx, CSV and Google Sheets"
+description = "HolySheet desktop: game tables from xlsx, CSV and Google Sheets"
 authors = ["shlifedev"]
 license = "MIT"
 edition = "2024"
 
 [lib]
 # The `_lib` suffix keeps the lib name apart from the bin name (a Windows linker issue: rust-lang/cargo#8519).
-name = "ugs_desktop_lib"
+name = "holysheet_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

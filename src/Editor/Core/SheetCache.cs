@@ -4,9 +4,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using UGS.Core.Schema;
+using HolySheet.Core.Schema;
 
-namespace UGS.Core
+namespace HolySheet.Core
 {
     /// <summary>
     /// The sheets of the last build written on this machine, exactly as they were read. A partial build reads only the
@@ -23,10 +23,10 @@ namespace UGS.Core
     /// </summary>
     public sealed class SheetCache
     {
-        public const string DefaultDirectory = ".ugs/cache";
+        public const string DefaultDirectory = ".holysheet/cache";
         private const string IndexFileName = "sheets.index";
         // Version 2 added each workbook's origin. An older cache is not read: the next partial build asks for a full one.
-        private const string Header = "ugs-sheet-cache 2";
+        private const string Header = "holysheet-sheet-cache 2";
         private static readonly UTF8Encoding Utf8 = new(false);
 
         private SheetCache(IReadOnlyList<Workbook> workbooks, string manifestHash)
@@ -131,7 +131,7 @@ namespace UGS.Core
             string ignore = Path.Combine(directory, ".gitignore");
             if (!File.Exists(ignore))
             {
-                File.WriteAllText(ignore, "# Written by UGS: local build state, not for version control.\n*\n");
+                File.WriteAllText(ignore, "# Written by HolySheet: local build state, not for version control.\n*\n");
             }
 
             var index = new StringBuilder();

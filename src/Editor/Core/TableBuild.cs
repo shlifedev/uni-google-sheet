@@ -7,17 +7,17 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using UGS.Core.Building;
-using UGS.Core.Codecs;
-using UGS.Core.Config;
-using UGS.Core.Csv;
-using UGS.Core.Generation;
-using UGS.Core.Output;
-using UGS.Core.Schema;
-using UGS.Core.Sources;
-using UGS.Core.Transform;
+using HolySheet.Core.Building;
+using HolySheet.Core.Codecs;
+using HolySheet.Core.Config;
+using HolySheet.Core.Csv;
+using HolySheet.Core.Generation;
+using HolySheet.Core.Output;
+using HolySheet.Core.Schema;
+using HolySheet.Core.Sources;
+using HolySheet.Core.Transform;
 
-namespace UGS.Core
+namespace HolySheet.Core
 {
     /// <summary>Per-run settings that do not belong in the config file.</summary>
     public sealed class TableBuildOptions
@@ -152,9 +152,9 @@ namespace UGS.Core
     /// </summary>
     public static class TableBuild
     {
-        public const string ToolName = "ugs/2.0.0";
+        public const string ToolName = "holysheet/2.0.0";
 
-        public static async Task<BuildResult> RunAsync(UgsConfig config, TableBuildOptions? options = null, CancellationToken cancellationToken = default)
+        public static async Task<BuildResult> RunAsync(HolySheetConfig config, TableBuildOptions? options = null, CancellationToken cancellationToken = default)
         {
             Guard.NotNull(config, nameof(config));
             options ??= new TableBuildOptions();
@@ -299,13 +299,13 @@ namespace UGS.Core
         };
 
         /// <summary>Synchronous form of <see cref="RunAsync"/> for hosts without an async entry point.</summary>
-        public static BuildResult Run(UgsConfig config, TableBuildOptions? options = null, CancellationToken cancellationToken = default)
+        public static BuildResult Run(HolySheetConfig config, TableBuildOptions? options = null, CancellationToken cancellationToken = default)
         {
             return Task.Run(() => RunAsync(config, options, cancellationToken), cancellationToken).GetAwaiter().GetResult();
         }
 
         /// <summary>Writes a successful build to the folders the config names. Returns what changed on disk.</summary>
-        public static CommitReport Commit(UgsConfig config, BuildResult result)
+        public static CommitReport Commit(HolySheetConfig config, BuildResult result)
         {
             if (result.Output == null)
             {
@@ -332,7 +332,7 @@ namespace UGS.Core
         /// <summary>How long a commit waits for another build's commit to finish.</summary>
         internal static TimeSpan CommitLockTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
-        private static string? HashManifestOnDisk(UgsConfig config)
+        private static string? HashManifestOnDisk(HolySheetConfig config)
         {
             string manifestPath = Path.Combine(config.Resolve(config.Output.Data), config.Output.ManifestFile);
             try
@@ -348,7 +348,7 @@ namespace UGS.Core
 
         // The cache records what was just written. If it cannot be saved, the old one is removed rather than left behind:
         // a later partial build then asks for a full build instead of starting from sheets that no longer match the data.
-        private static void SaveCache(UgsConfig config, BuildResult result)
+        private static void SaveCache(HolySheetConfig config, BuildResult result)
         {
             string directory = config.Resolve(config.CacheDirectory);
             try
@@ -361,7 +361,7 @@ namespace UGS.Core
             }
         }
 
-        private static SheetCache? LoadCacheForPartialBuild(UgsConfig config, DiagnosticBag diagnostics)
+        private static SheetCache? LoadCacheForPartialBuild(HolySheetConfig config, DiagnosticBag diagnostics)
         {
             SheetCache? cache = SheetCache.Load(config.Resolve(config.CacheDirectory));
             if (cache == null)
@@ -482,7 +482,7 @@ namespace UGS.Core
             }
         }
 
-        private static GeneratedOutput? Generate(TableData[] tables, IReadOnlyList<RawTable> rawTables, List<EnumDefinition> enums, UgsConfig config, ITableCodec codec, DiagnosticBag diagnostics, CancellationToken cancellationToken)
+        private static GeneratedOutput? Generate(TableData[] tables, IReadOnlyList<RawTable> rawTables, List<EnumDefinition> enums, HolySheetConfig config, ITableCodec codec, DiagnosticBag diagnostics, CancellationToken cancellationToken)
         {
             // Signing is decided first: the public key is part of the generated code.
             string? publicKey = config.Signing.PublicKey;
@@ -603,7 +603,7 @@ namespace UGS.Core
         }
 
         // Generated type names (row, table, reference, enum, tables class) share one namespace and must not collide.
-        private static void ValidateNames(List<TableSchema> schemas, List<EnumDefinition> enums, UgsConfig config, DiagnosticBag diagnostics)
+        private static void ValidateNames(List<TableSchema> schemas, List<EnumDefinition> enums, HolySheetConfig config, DiagnosticBag diagnostics)
         {
             var owners = new Dictionary<string, string>(StringComparer.Ordinal) { [config.Codegen.TablesClass] = "the tables class" };
             void Claim(string name, string location)

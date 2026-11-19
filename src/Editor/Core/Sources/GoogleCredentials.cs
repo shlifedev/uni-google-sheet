@@ -10,17 +10,17 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using UGS.Core.Config;
+using HolySheet.Core.Config;
 
-namespace UGS.Core.Sources
+namespace HolySheet.Core.Sources
 {
     /// <summary>
     /// Supplies the credentials for Google sources whose auth is <c>{ "type": "custom", "provider": "&lt;name&gt;" }</c>,
-    /// for projects that keep them somewhere UGS does not read on its own: a secret manager, the OS keychain, a company token service.
+    /// for projects that keep them somewhere HolySheet does not read on its own: a secret manager, the OS keychain, a company token service.
     /// <para>
     /// In the Unity editor a provider needs no registration: any non-abstract class with a public parameterless constructor
     /// that implements this interface is found in the editor's assemblies. Its name is the class name, or the one given
-    /// with <see cref="UgsCredentialProviderAttribute"/>. Elsewhere, hand the instances to <see cref="TableBuildOptions.CredentialProviders"/>.
+    /// with <see cref="HolySheetCredentialProviderAttribute"/>. Elsewhere, hand the instances to <see cref="TableBuildOptions.CredentialProviders"/>.
     /// </para>
     /// <para>
     /// A new instance is made for every build, and it is called on a background thread, once per source that names it
@@ -34,9 +34,9 @@ namespace UGS.Core.Sources
 
     /// <summary>Names a credential provider in the config. Without it the provider's name is its class name.</summary>
     [AttributeUsage(AttributeTargets.Class, Inherited = false)]
-    public sealed class UgsCredentialProviderAttribute : Attribute
+    public sealed class HolySheetCredentialProviderAttribute : Attribute
     {
-        public UgsCredentialProviderAttribute(string? name = null)
+        public HolySheetCredentialProviderAttribute(string? name = null)
         {
             Name = name;
         }
@@ -91,7 +91,7 @@ namespace UGS.Core.Sources
         /// </summary>
         public static GoogleCredential FromAccessToken(string accessToken, string? account = null) => new GoogleCredential(null, Require(accessToken, nameof(accessToken)), null, account);
 
-        /// <summary>The contents of a service account's JSON key, kept somewhere other than a file. UGS signs and exchanges it for a token.</summary>
+        /// <summary>The contents of a service account's JSON key, kept somewhere other than a file. HolySheet signs and exchanges it for a token.</summary>
         public static GoogleCredential FromServiceAccountKey(string keyJson) => new GoogleCredential(null, null, Require(keyJson, nameof(keyJson)), null);
 
         public string? ApiKey { get; }
@@ -120,7 +120,7 @@ namespace UGS.Core.Sources
         public static string NameOf(Type type)
         {
             Guard.NotNull(type, nameof(type));
-            string? name = type.GetCustomAttribute<UgsCredentialProviderAttribute>(inherit: false)?.Name;
+            string? name = type.GetCustomAttribute<HolySheetCredentialProviderAttribute>(inherit: false)?.Name;
             return string.IsNullOrWhiteSpace(name) ? type.Name : name!.Trim();
         }
 
@@ -134,7 +134,7 @@ namespace UGS.Core.Sources
 
         /// <summary>
         /// Makes one provider from each provider class among <paramref name="types"/>. Classes marked with
-        /// <see cref="UgsCredentialProviderAttribute"/> that cannot be used, and constructors that throw, are reported
+        /// <see cref="HolySheetCredentialProviderAttribute"/> that cannot be used, and constructors that throw, are reported
         /// in <paramref name="problems"/> and skipped.
         /// </summary>
         public static IReadOnlyList<IGoogleCredentialProvider> Create(IEnumerable<Type> types, ICollection<string>? problems = null)
@@ -145,7 +145,7 @@ namespace UGS.Core.Sources
             {
                 if (!IsProvider(type))
                 {
-                    if (type.IsDefined(typeof(UgsCredentialProviderAttribute), inherit: false))
+                    if (type.IsDefined(typeof(HolySheetCredentialProviderAttribute), inherit: false))
                     {
                         problems?.Add($"{type.FullName} is marked as a credential provider but is not used: it must be a non-abstract class that implements {nameof(IGoogleCredentialProvider)} and has a public parameterless constructor.");
                     }
@@ -184,14 +184,14 @@ namespace UGS.Core.Sources
             if (matches.Count > 1)
             {
                 throw new GoogleSourceException($"{matches.Count} credential providers are named '{name}': {string.Join(", ", matches.Select(provider => provider.GetType().FullName))}.",
-                    "Give each a different name with [UgsCredentialProvider(\"name\")].");
+                    "Give each a different name with [HolySheetCredentialProvider(\"name\")].");
             }
 
             List<string> known = (providers ?? Array.Empty<IGoogleCredentialProvider>()).Select(provider => NameOf(provider.GetType())).OrderBy(known => known, StringComparer.Ordinal).ToList();
             throw new GoogleSourceException($"There is no credential provider named '{name}'" + (known.Count == 0 ? "." : $"; there are: {string.Join(", ", known)}."),
                 providers == null
                     ? "Custom providers are C# classes, so only the Unity editor can use them. Here, use auth type \"command\" with a command that prints the token, or build with --offline from the snapshot."
-                    : "Add a class that implements IGoogleCredentialProvider to an editor assembly, or fix auth.provider. The name is the class name, or the one in [UgsCredentialProvider(\"name\")].");
+                    : "Add a class that implements IGoogleCredentialProvider to an editor assembly, or fix auth.provider. The name is the class name, or the one in [HolySheetCredentialProvider(\"name\")].");
         }
     }
 

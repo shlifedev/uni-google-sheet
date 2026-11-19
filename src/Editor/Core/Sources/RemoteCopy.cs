@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace UGS.Core.Sources
+namespace HolySheet.Core.Sources
 {
     /// <summary>
     /// The tabs of a Google file as last downloaded, with the Drive version they were downloaded at. When Drive reports the
@@ -15,7 +15,7 @@ namespace UGS.Core.Sources
     internal static class RemoteCopy
     {
         private const string IndexFileName = "copy.index";
-        private const string Header = "ugs-remote-copy 1";
+        private const string Header = "holysheet-remote-copy 1";
         private static readonly UTF8Encoding Utf8 = new(false);
 
         public sealed record Copy(string Title, IReadOnlyList<(string Name, string Text)> Tabs);

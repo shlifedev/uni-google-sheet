@@ -1,0 +1,21 @@
+{
+    "name": "HolySheet.Demo.Editor",
+    "rootNamespace": "HolySheet.Demo.Editor",
+    "references": [
+        "HolySheet.Demo",
+        "HolySheet.Runtime",
+        "HolySheet.Editor",
+        "HolySheet.Core"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace UGS
+namespace HolySheet
 {
     /// <summary>One table line of a manifest.</summary>
     public sealed class TableManifestEntry
@@ -79,7 +79,7 @@ namespace UGS
     /// The list of data files in one build of the tables, written next to them by the tool.
     /// It is plain text, one fact per line, so it diffs cleanly in version control:
     /// <code>
-    /// ugs-manifest 1
+    /// holysheet-manifest 1
     /// serializer memorypack
     /// schema 9d92…                 hash of every table layout and enum; baked into the generated code
     /// content 5c1e…                hash of every data file hash; identifies this exact build of the data
@@ -95,7 +95,7 @@ namespace UGS
         public const string DataExtension = ".bytes";
         public const string SignatureAlgorithm = "rsa-sha256";
 
-        private const string HeaderKeyword = "ugs-manifest";
+        private const string HeaderKeyword = "holysheet-manifest";
         private const string SerializerKeyword = "serializer";
         private const string SchemaKeyword = "schema";
         private const string ContentKeyword = "content";

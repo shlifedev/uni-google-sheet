@@ -1,5 +1,5 @@
-// Small helpers for editing ugs.json in the Settings page; they follow the Unity window's rules.
-import type { SheetRef, UgsConfig } from "../types";
+// Small helpers for editing holysheet.json in the Settings page; they follow the Unity window's rules.
+import type { SheetRef, HolySheetConfig } from "../types";
 
 /** The header layouts the window offers, by label. A config's own layout is kept when it is none of these. */
 export const headerLayouts: { label: string; rows: string[] }[] = [
@@ -46,13 +46,13 @@ export function parseTabs(text: string): SheetRef[] | null {
   return tabs;
 }
 
-/** An empty text means "not set": the key is left out of ugs.json. */
+/** An empty text means "not set": the key is left out of holysheet.json. */
 export function optional(value: string): string | undefined {
   return value.trim().length > 0 ? value.trim() : undefined;
 }
 
 /** A copy to change and save; the engine parses it again before it is written. */
-export function edit(config: UgsConfig, change: (next: UgsConfig) => void): UgsConfig {
+export function edit(config: HolySheetConfig, change: (next: HolySheetConfig) => void): HolySheetConfig {
   const next = structuredClone(config);
   change(next);
   return next;

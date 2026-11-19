@@ -1,4 +1,4 @@
-// Sorting for the data view, ported from the Unity window (UgsWindow.SortRows / CompareNatural) so both sort alike.
+// Sorting for the data view, ported from the Unity window (HolySheetWindow.SortRows / CompareNatural) so both sort alike.
 import type { SortKind } from "../types";
 
 export interface SortSpec {

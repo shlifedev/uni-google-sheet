@@ -1,4 +1,4 @@
-// Every text the app shows through T() or F() has a Korean translation, from UgsText.cs or ko.app.json.
+// Every text the app shows through T() or F() has a Korean translation, from HolySheetText.cs or ko.app.json.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";

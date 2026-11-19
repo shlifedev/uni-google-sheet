@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace UGS.Core.Schema
+namespace HolySheet.Core.Schema
 {
     public enum TypeExpressionKind
     {

@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
-namespace UGS.Core
+namespace HolySheet.Core
 {
     /// <summary>
     /// Watches source files and folders and calls back once changes have settled.

@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace UGS.Core
+namespace HolySheet.Core
 {
     /// <summary>A cell's text and where it came from. Every later stage works on this text only.</summary>
     // A record struct by intent; written out by hand because Unity compiles C# 9. Equality, ToString and Deconstruct match what the compiler would generate.

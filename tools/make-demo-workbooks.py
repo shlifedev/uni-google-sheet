@@ -14,7 +14,7 @@ Needs openpyxl (pip install openpyxl). The output is checked in; run this only t
   Shop.xlsx        Shop, ShopGoods, Gacha
   Localization/Text.csv
 
-Every rule UGS supports appears somewhere: two Enums sheets, a Flags enum with a value column, a Config sheet, child sheets
+Every rule HolySheet supports appears somewhere: two Enums sheets, a Flags enum with a value column, a Config sheet, child sheets
 that add rows, a .Col sheet that adds columns, Mapping columns, keys, indexes, references across workbooks (required,
 optional and arrays), arrays of every kind, ignored sheets, columns and rows. All names are made up for this demo.
 """

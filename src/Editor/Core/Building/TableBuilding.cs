@@ -3,10 +3,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using UGS.Core.Schema;
-using UGS.Core.Transform;
+using HolySheet.Core.Schema;
+using HolySheet.Core.Transform;
 
-namespace UGS.Core.Building
+namespace HolySheet.Core.Building
 {
     /// <summary>Turns raw tables into typed schemas: resolves every type cell and merges repeated field names into arrays.</summary>
     public static class SchemaBuilder

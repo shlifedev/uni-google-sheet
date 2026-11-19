@@ -2,7 +2,7 @@
   <PropertyGroup>
     <Version>2.0.0</Version>
     <Authors>shlifedev</Authors>
-    <Product>UGS</Product>
+    <Product>HolySheet</Product>
     <RepositoryUrl>https://github.com/shlifedev/uni-google-sheets</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Nullable>enable</Nullable>

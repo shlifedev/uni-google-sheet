@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <!-- Real cultures are needed to prove that parsing ignores the machine culture. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <RootNamespace>HolySheet.Tests</RootNamespace>
+    <!-- Row classes are private-field types filled by the serializer; reading them through reflection in tests is intended. -->
+    <NoWarn>$(NoWarn);xUnit1031</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.9.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.*" />
+    <PackageReference Include="MemoryPack" Version="1.22.0" />
+    <PackageReference Include="MessagePack" Version="3.1.12" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../HolySheet.Core/HolySheet.Core.csproj" />
+    <ProjectReference Include="../HolySheet.Csv.Sep/HolySheet.Csv.Sep.csproj" />
+    <ProjectReference Include="../HolySheet.Runtime/HolySheet.Runtime.csproj" />
+    <ProjectReference Include="../HolySheet.Cli/HolySheet.Cli.csproj" />
+    <ProjectReference Include="../HolySheet.Desktop.Host/HolySheet.Desktop.Host.csproj" />
+    <ProjectReference Include="../samples/Sample.Tables.MemoryPack/Sample.Tables.MemoryPack.csproj" />
+    <ProjectReference Include="../samples/Sample.Tables.MessagePack/Sample.Tables.MessagePack.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <None Include="Fixtures/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -3,7 +3,7 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace UGS
+namespace HolySheet
 {
     /// <summary>SHA-256 as lowercase hex. The tool and the runtime must agree on this, so it lives in one place.</summary>
     public static class TableHash

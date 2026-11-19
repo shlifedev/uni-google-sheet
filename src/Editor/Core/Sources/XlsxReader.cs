@@ -7,7 +7,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Xml;
 
-namespace UGS.Core.Sources
+namespace HolySheet.Core.Sources
 {
     /// <summary>The file is not an xlsx workbook this reader understands.</summary>
     public sealed class XlsxFormatException : Exception

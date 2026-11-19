@@ -6,11 +6,11 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using UGS.Core.Config;
-using UGS.Core.Generation;
-using UGS.Core.Schema;
+using HolySheet.Core.Config;
+using HolySheet.Core.Generation;
+using HolySheet.Core.Schema;
 
-namespace UGS.Core.Output
+namespace HolySheet.Core.Output
 {
     /// <summary>Everything one build produces, held in memory. Nothing is on disk until <see cref="OutputCommitter"/> writes it.</summary>
     public sealed class GeneratedOutput
@@ -39,7 +39,7 @@ namespace UGS.Core.Output
     public sealed record ManifestTable(string Name, string File, int Rows, long Bytes, string Hash, string Schema);
 
     /// <summary>
-    /// Writes the manifest text. The format is defined by <c>UGS.TableManifest</c> in the runtime, which is the reader;
+    /// Writes the manifest text. The format is defined by <c>HolySheet.TableManifest</c> in the runtime, which is the reader;
     /// this writer must produce exactly what that class would, and the tests compare the two.
     /// </summary>
     public static class ManifestWriter
@@ -59,7 +59,7 @@ namespace UGS.Core.Output
 
             contentHash = SchemaHasher.Sha256Hex(content.ToString());
             var builder = new StringBuilder();
-            builder.Append("ugs-manifest 1\n");
+            builder.Append("holysheet-manifest 1\n");
             builder.Append("serializer ").Append(serializer).Append('\n');
             builder.Append("schema ").Append(schemaHash).Append('\n');
             builder.Append("content ").Append(contentHash).Append('\n');
@@ -91,7 +91,7 @@ namespace UGS.Core.Output
     /// </summary>
     public static class SigningKeys
     {
-        private const string PrivateHeader = "ugs-private-key 1";
+        private const string PrivateHeader = "holysheet-private-key 1";
 
         /// <summary>Creates a new RSA key pair. Returns the private key file text and the public key in its config form.</summary>
         public static (string PrivateKey, string PublicKey) Generate(int bits = 2048)
@@ -129,7 +129,7 @@ namespace UGS.Core.Output
                 {
                     if (line != PrivateHeader)
                     {
-                        throw new FormatException("This is not a UGS private key file. Create one with 'ugs keygen'.");
+                        throw new FormatException("This is not a HolySheet private key file. Create one with 'holysheet keygen'.");
                     }
 
                     headerSeen = true;
@@ -153,7 +153,7 @@ namespace UGS.Core.Output
             }
             catch (KeyNotFoundException)
             {
-                throw new FormatException("The private key file is incomplete. Create a new one with 'ugs keygen'.");
+                throw new FormatException("The private key file is incomplete. Create a new one with 'holysheet keygen'.");
             }
         }
 
@@ -168,7 +168,7 @@ namespace UGS.Core.Output
         }
 
         /// <summary>Finds the private key a config points at: the environment variable first, then the file. Null when neither is set.</summary>
-        public static string? ReadPrivateKey(UgsConfig config)
+        public static string? ReadPrivateKey(HolySheetConfig config)
         {
             if (!string.IsNullOrEmpty(config.Signing.PrivateKeyEnv) && Environment.GetEnvironmentVariable(config.Signing.PrivateKeyEnv) is { Length: > 0 } fromEnvironment)
             {
@@ -279,9 +279,9 @@ namespace UGS.Core.Output
         private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
         /// <summary>The list of CSV files the tool wrote into the CSV output folder. Starts with a dot so Unity does not import it.</summary>
-        public const string CsvListFileName = ".ugs-csv";
+        public const string CsvListFileName = ".holysheet-csv";
 
-        private const string CsvListHeader = "ugs-csv 1";
+        private const string CsvListHeader = "holysheet-csv 1";
 
         public static CommitReport Commit(GeneratedOutput output, string codeDirectory, string dataDirectory, string? csvDirectory = null)
         {
@@ -433,7 +433,7 @@ namespace UGS.Core.Output
         // The temporary name is unique, so two writers can never take each other's temporary file.
         private static void WriteAtomically(string path, byte[] content)
         {
-            string temporary = path + "." + Guid.NewGuid().ToString("N").Substring(0, 12) + ".ugs-tmp";
+            string temporary = path + "." + Guid.NewGuid().ToString("N").Substring(0, 12) + ".holysheet-tmp";
             File.WriteAllBytes(temporary, content);
             try
             {
@@ -490,7 +490,7 @@ namespace UGS.Core.Output
         {
             var text = new StringBuilder();
             text.Append(CsvListHeader).Append('\n');
-            text.Append("# Written by UGS: the CSV files it made here. Only these are ever replaced or removed by a build.\n");
+            text.Append("# Written by HolySheet: the CSV files it made here. Only these are ever replaced or removed by a build.\n");
             foreach (string file in files.OrderBy(file => file, StringComparer.Ordinal))
             {
                 text.Append(file).Append('\n');

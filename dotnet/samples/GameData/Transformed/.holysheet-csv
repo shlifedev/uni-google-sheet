@@ -1,0 +1,7 @@
+holysheet-csv 1
+# Written by HolySheet: the CSV files it made here. Only these are ever replaced or removed by a build.
+Game.csv
+Item.csv
+Limits.csv
+Monster.csv
+Text.csv

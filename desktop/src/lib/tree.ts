@@ -1,4 +1,4 @@
-// The table tree, built the way the Unity window builds it (UgsWindow.FillTree): one node per connected source once
+// The table tree, built the way the Unity window builds it (HolySheetWindow.FillTree): one node per connected source once
 // there is more than one, then workbooks, their tables (with the sheets a table was built from), and enums: those an
 // Enums sheet defines under their workbook, those a Mapping column makes under its table.
 import { Count, T, F } from "../i18n";
@@ -270,7 +270,7 @@ export function buildTree(model: TableModel): TreeNode[] {
     }
   }
 
-  // One node per connected source (each entry under "sources" in ugs.json), once there is more than one.
+  // One node per connected source (each entry under "sources" in holysheet.json), once there is more than one.
   const connections = new Map<string, { group: Group; source: string; entries: typeof workbookNodes }>();
   for (const entry of workbookNodes) {
     const id = entry.group + "\u0000" + entry.source;

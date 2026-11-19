@@ -5,7 +5,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace UGS
+namespace HolySheet
 {
     /// <summary>
     /// Where the manifest and data files come from. The loader only ever asks for a file by its name,

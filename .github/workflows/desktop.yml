@@ -1,5 +1,5 @@
 # Builds the desktop app (desktop/) for macOS and Windows and keeps the installers as run artifacts.
-# The engine sidecar (dotnet/UGS.Desktop.Host) is published by desktop/scripts/build-host.mjs, which the Tauri build runs.
+# The engine sidecar (dotnet/HolySheet.Desktop.Host) is published by desktop/scripts/build-host.mjs, which the Tauri build runs.
 # Unsigned: code signing and notarization need certificates this workflow does not have yet.
 name: desktop
 
@@ -51,7 +51,7 @@ jobs:
 
       - name: Engine tests
         working-directory: .
-        run: dotnet test dotnet/UGS.Tests --filter "FullyQualifiedName~DesktopHostTests"
+        run: dotnet test dotnet/HolySheet.Tests --filter "FullyQualifiedName~DesktopHostTests"
 
       - name: Frontend tests
         run: npm test
@@ -61,7 +61,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ugs-desktop-${{ matrix.target }}
+          name: holysheet-desktop-${{ matrix.target }}
           path: |
             desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe

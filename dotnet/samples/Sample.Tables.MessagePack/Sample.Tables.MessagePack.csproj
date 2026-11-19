@@ -6,7 +6,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../UGS.Runtime/UGS.Runtime.csproj" />
+    <ProjectReference Include="../../HolySheet.Runtime/HolySheet.Runtime.csproj" />
     <PackageReference Include="MessagePack" Version="3.1.12" />
   </ItemGroup>
 </Project>

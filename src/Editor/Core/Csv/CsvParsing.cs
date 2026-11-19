@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace UGS.Core.Csv
+namespace HolySheet.Core.Csv
 {
     /// <summary>The CSV text is malformed in a way that cannot be read around, such as a quote that is never closed.</summary>
     public sealed class CsvFormatException : Exception
@@ -242,7 +242,7 @@ namespace UGS.Core.Csv
         public const string Builtin = "builtin";
         public const string Sep = "sep";
 
-        private const string SepTypeName = "UGS.Csv.SepCsvParser, UGS.Csv.Sep";
+        private const string SepTypeName = "HolySheet.Csv.SepCsvParser, HolySheet.Csv.Sep";
 
         private static readonly object Gate = new();
         private static ICsvParser? _fast;
@@ -276,7 +276,7 @@ namespace UGS.Core.Csv
                             var type = Type.GetType(SepTypeName, throwOnError: false);
                             if (type == null)
                             {
-                                _unavailableReason = "the UGS.Csv.Sep assembly is not present on this runtime";
+                                _unavailableReason = "the HolySheet.Csv.Sep assembly is not present on this runtime";
                             }
                             else
                             {

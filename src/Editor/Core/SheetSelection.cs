@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace UGS.Core
+namespace HolySheet.Core
 {
     /// <summary>
     /// The workbooks and sheets a partial build reads again. Everything else comes from the sheet cache, as it was at the last

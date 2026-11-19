@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace UGS
+namespace HolySheet
 {
     /// <summary>A loaded table. Generated table classes implement this.</summary>
     public interface ITable

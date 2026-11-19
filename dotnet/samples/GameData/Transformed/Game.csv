@@ -1,4 +1,4 @@
 int,float,string,Ref<Item>,DateTime,bool
 MaxLevel,GoldRate,Title,StartItem,OpensAt,Maintenance
 Highest level a character can reach,Multiplier on gold drops,Name shown on the title screen,Item every character starts with,When the service opens (UTC),Reject logins
-60,1.5,UGS Sample,1001,2026-03-01 09:00:00,false
+60,1.5,HolySheet Sample,1001,2026-03-01 09:00:00,false

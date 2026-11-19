@@ -45,7 +45,7 @@ export function Toolbar() {
       {
         label: T("Open config file…"),
         action: async () => {
-          const picked = await open({ filters: [{ name: "ugs.json", extensions: ["json"] }] });
+          const picked = await open({ filters: [{ name: "holysheet.json", extensions: ["json"] }] });
           if (typeof picked === "string") await openProject(picked);
         },
       },

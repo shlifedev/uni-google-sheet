@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "UGS",
+  "productName": "HolySheet",
   "version": "2.0.0",
-  "identifier": "com.shlifedev.ugs.desktop",
+  "identifier": "com.shlifedev.holysheet.desktop",
   "build": {
     "beforeDevCommand": "npm run host && npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "UGS",
+        "title": "HolySheet",
         "width": 1280,
         "height": 820,
         "minWidth": 900,
@@ -39,7 +39,7 @@
     "shortDescription": "Game tables from xlsx, CSV and Google Sheets",
     "copyright": "MIT License",
     "externalBin": [
-      "binaries/ugs-host"
+      "binaries/holysheet-host"
     ],
     "icon": [
       "icons/32x32.png",

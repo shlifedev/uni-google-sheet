@@ -130,7 +130,7 @@ GameObject:
   - component: {fileID: 1117480985}
   - component: {fileID: 1117480984}
   m_Layer: 0
-  m_Name: UGS Demo
+  m_Name: HolySheet Demo
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -147,8 +147,8 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c95ec8f06668c48cd9b0b24baf0e8bb7, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: UGS.Demo::UGS.Demo.UgsDemo
-  resourcesFolder: UgsDemo
+  m_EditorClassIdentifier: HolySheet.Demo::HolySheet.Demo.HolySheetDemo
+  resourcesFolder: HolySheetDemo
   parallelLoad: 0
   watchInEditor: 1
 --- !u!4 &1117480985

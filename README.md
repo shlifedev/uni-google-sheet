@@ -1,7 +1,8 @@
-# UGS — game tables from sheets
+# HolySheet — game tables from sheets
 
-UGS turns xlsx workbooks, CSV folders and Google Sheets into typed, **read-only** C# tables with binary data files.
+HolySheet turns xlsx workbooks, CSV folders and Google Sheets into typed, **read-only** C# tables with binary data files.
 The generated code and data run on any .NET: a Unity client and a plain .NET server load the same files.
+Formerly UniGoogleSheets (UGS).
 
 ```csharp
 GameTables tables = GameTables.Load("Tables");            // every file is verified against the manifest
@@ -23,7 +24,7 @@ Version 2 is a rewrite. Nothing from 1.x carries over.
 | Sources | xlsx, CSV folders, Google Sheets (public link, API key, service account). Mix them freely. |
 | Output | C# row and table classes plus one binary file per table, for **MemoryPack** or **MessagePack**. |
 | Hosts | Unity 6000.0 and newer (Mono, IL2CPP, and the CoreCLR editor of Unity 7), and .NET (netstandard2.1 / .NET 8+). |
-| Tools | A Unity editor window and a `ugs` command line. Both read the same `ugs.json` and produce identical output. |
+| Tools | A Unity editor window and a `holysheet` command line. Both read the same `holysheet.json` and produce identical output. |
 | Safety | Loaded tables cannot be modified. Every data file is hash-checked on load; the manifest can be signed. |
 | Live reload | `GameTables.Watch(dir)` keeps tables current while the game or server runs. |
 
@@ -42,19 +43,19 @@ missing.
 **Command line** — needs the .NET 10 SDK:
 
 ```bash
-dotnet build dotnet/UGS.Cli -c Release
-dotnet dotnet/UGS.Cli/bin/Release/net10.0/ugs.dll help      # or: dotnet pack, then dotnet tool install
+dotnet build dotnet/HolySheet.Cli -c Release
+dotnet dotnet/HolySheet.Cli/bin/Release/net10.0/holysheet.dll help      # or: dotnet pack, then dotnet tool install
 ```
 
 ## Quick start
 
-In Unity open **Tools → UGS → Tables**, press *Create ugs.json*, put a workbook in the `Sheets` folder and press **Build**.
+In Unity open **Tools → HolySheet → Tables**, press *Create holysheet.json*, put a workbook in the `Sheets` folder and press **Build**.
 From a terminal the same thing is:
 
 ```bash
-ugs init --sample     # ugs.json plus a small sample workbook as CSV
-ugs build             # generated code and data
-ugs watch             # build again whenever a sheet is saved
+holysheet init --sample     # holysheet.json plus a small sample workbook as CSV
+holysheet build             # generated code and data
+holysheet watch             # build again whenever a sheet is saved
 ```
 
 A table sheet has three header rows (configurable) and then data:
@@ -69,7 +70,7 @@ A table sheet has three header rows (configurable) and then data:
 ## Sheet rules
 
 These rules are applied, in this order, before any cell is typed. Sheets that add rows or columns are merged in name order,
-so an xlsx file, a CSV folder and a Google spreadsheet holding the same sheets build the same bytes. `ugs build` can also write the result as CSV
+so an xlsx file, a CSV folder and a Google spreadsheet holding the same sheets build the same bytes. `holysheet build` can also write the result as CSV
 (`output.csv`) so you can see exactly what the build saw.
 
 | Rule | Effect |
@@ -125,7 +126,7 @@ The build warns about two cells that parse but probably mean something else:
 - **Text still written with `|`.** `sword|blade` in a `string[]` column is one element. Write `sword, blade`, or quote it
   (`"sword|blade"`) if the bar belongs to the text.
 
-`sheet.arraySeparator` changes the separator (one character). Projects whose `ugs.json` says `"|"` keep reading `1|2|3`;
+`sheet.arraySeparator` changes the separator (one character). Projects whose `holysheet.json` says `"|"` keep reading `1|2|3`;
 `[1, 2]` and quoted elements work with any separator.
 
 Every problem is reported with its cell and a fix, and a build with any error writes nothing:
@@ -182,7 +183,7 @@ data did not change are the same objects in both snapshots, so a reload after ed
 The watcher uses file system notifications with a debounce, falls back to polling where those are unavailable, and
 has a manual mode (`CheckNow()`) for platforms without threads. In Unity its events arrive on the main thread.
 
-Together with `ugs watch` (or *Auto build* in the editor window) this gives edit-sheet → see-it-in-the-running-game.
+Together with `holysheet watch` (or *Auto build* in the editor window) this gives edit-sheet → see-it-in-the-running-game.
 
 ## Tamper detection
 
@@ -193,9 +194,9 @@ generated code raises `SchemaMismatch` and names the table. Nothing is partially
 Hashes catch damage, not a deliberate replacement of both a file and the manifest. For that, sign the manifest:
 
 ```bash
-ugs keygen --write-config     # writes ugs.private.key, puts the public key in ugs.json
-ugs build                     # signs the manifest; bakes the public key into the generated code
-ugs verify Generated/Data     # checks hashes and signature of a data folder
+holysheet keygen --write-config     # writes holysheet.private.key, puts the public key in holysheet.json
+holysheet build                     # signs the manifest; bakes the public key into the generated code
+holysheet verify Generated/Data     # checks hashes and signature of a data folder
 ```
 
 The private key stays on the build machine (`signing.privateKeyFile`, or `signing.privateKeyEnv` in CI). Clients
@@ -203,19 +204,19 @@ verify with the public key and refuse an unsigned or wrongly signed manifest (`S
 
 ## Metadata for patching
 
-UGS does not ship a patch system; it leaves what one needs.
+HolySheet does not ship a patch system; it leaves what one needs.
 
 ```
-ugs-manifest 1
+holysheet-manifest 1
 serializer memorypack
 schema 9d92…                    every table layout and enum; equals GameTables.SchemaHash
 content 5c1e…                   every data file hash; identifies this exact build of the data
-build 1.4.0 (a1b2c3d)           your label: ugs build --label "…"
+build 1.4.0 (a1b2c3d)           your label: holysheet build --label "…"
 table Item file=Item.bytes rows=6 bytes=412 hash=… schema=…
 sign rsa-sha256 …
 ```
 
-- `TableManifest.Diff(installed, latest)` (and `ugs diff old new --json`) lists the tables added, changed and removed,
+- `TableManifest.Diff(installed, latest)` (and `holysheet diff old new --json`) lists the tables added, changed and removed,
   the files to download with their sizes and hashes, and whether the layout changed (`RequiresNewCode`): if it did
   not, a client can load the new data with the code it already has.
 - Each table has its own `schema` hash, so a patch can tell "new data" from "needs a new client" per table.
@@ -235,7 +236,7 @@ libraries and re-serializing.
 ## CSV readers
 
 The built-in CSV reader is used by default and works on every runtime. The [Sep](https://github.com/nietras/Sep)
-reader can be selected with `"csv": { "backend": "sep" }` wherever .NET 8+ is available: the `ugs` command line and
+reader can be selected with `"csv": { "backend": "sep" }` wherever .NET 8+ is available: the `holysheet` command line and
 the Unity 7 editor, which runs on CoreCLR (verified on 7000.0.0a16, .NET 10.0.10). Unity 6 runs on Mono, where Sep
 cannot load; the package excludes it there. Both readers give identical results, checked by a conformance suite.
 
@@ -246,7 +247,7 @@ about 0.5 s.
 
 ## Configuration
 
-`ugs.json` lives in the project root (next to `Assets` in Unity). Paths are relative to it.
+`holysheet.json` lives in the project root (next to `Assets` in Unity). Paths are relative to it.
 
 ```jsonc
 {
@@ -257,21 +258,21 @@ about 0.5 s.
       "auth": { "type": "serviceAccount", "keyFile": "secrets/sa.json" },   // or "public", "apiKey", "accessToken", "custom", "command"
       "snapshot": "Sheets/Snapshot" },                                       // saved CSV: diffs and --offline builds
     { "type": "googleFolder", "folderId": "1XyZ…",                          // every spreadsheet and .xlsx in a Drive folder
-      "auth": { "type": "apiKey", "apiKeyEnv": "UGS_GOOGLE_KEY" },
+      "auth": { "type": "apiKey", "apiKeyEnv": "HOLYSHEET_GOOGLE_KEY" },
       "snapshot": "Sheets/DriveSnapshot" }
   ],
   "output":  { "code": "Assets/Game/Generated/Tables", "data": "Assets/StreamingAssets/Tables", "csv": null, "schema": true },
   "codegen": { "namespace": "Game.Data", "tablesClass": "GameTables", "serializer": "memorypack" },
   "sheet":   { "header": ["type", "name", "comment"], "arraySeparator": "," },
   "csv":     { "backend": "auto" },
-  "signing": { "publicKey": "rsa:…", "privateKeyFile": "ugs.private.key", "privateKeyEnv": "UGS_PRIVATE_KEY" },
-  "build":   { "label": null, "parallel": true, "cache": ".ugs/cache" }
+  "signing": { "publicKey": "rsa:…", "privateKeyFile": "holysheet.private.key", "privateKeyEnv": "HOLYSHEET_PRIVATE_KEY" },
+  "build":   { "label": null, "parallel": true, "cache": ".holysheet/cache" }
 }
 ```
 
 ### Google Sheets and Google Drive
 
-Two kinds of Google source, both added from the window (Settings → Sources → Add) or in `ugs.json`:
+Two kinds of Google source, both added from the window (Settings → Sources → Add) or in `holysheet.json`:
 
 | Source | What it reads |
 |---|---|
@@ -292,8 +293,8 @@ Requests are kept few, because the Sheets API allows 60 reads a minute per accou
 - With credentials, a spreadsheet costs two Sheets API requests however many tabs it has: the tab list and one
   `values:batchGet` for all tabs.
 - Before downloading, one Drive request asks for the file's version (a Drive folder's listing already includes it). If
-  it is the version downloaded last time, the tabs are read from the local copy in `.ugs/cache/google` and nothing else
-  is requested. Frequent `ugs watch` polling therefore costs Drive requests only, until someone edits a file.
+  it is the version downloaded last time, the tabs are read from the local copy in `.holysheet/cache/google` and nothing else
+  is requested. Frequent `holysheet watch` polling therefore costs Drive requests only, until someone edits a file.
 - A "too many requests" answer or a server error is retried up to five times, waiting 1, 2, 4, 8 seconds plus up to a
   second at random, or as long as Google's `Retry-After` header says.
 
@@ -303,20 +304,20 @@ also saved as CSV (one folder per workbook for a Drive folder): commit it for re
 
 #### Your own credentials
 
-When the credentials live somewhere UGS does not read on its own (a secret manager, the OS keychain, a company token
+When the credentials live somewhere HolySheet does not read on its own (a secret manager, the OS keychain, a company token
 service), write a provider class in any editor assembly. Nothing registers it: the editor finds every class that
 implements `IGoogleCredentialProvider`, and lists it under Access → Custom provider by its class name, or by the name in
 the attribute.
 
 ```csharp
-using UGS.Core.Sources;
+using HolySheet.Core.Sources;
 
-[UgsCredentialProvider("vault")]   // optional; without it the name is "VaultCredentials"
+[HolySheetCredentialProvider("vault")]   // optional; without it the name is "VaultCredentials"
 public sealed class VaultCredentials : IGoogleCredentialProvider
 {
     public async Task<GoogleCredential> GetCredentialAsync(GoogleCredentialRequest request, CancellationToken cancellationToken)
     {
-        string keyJson = await MyVault.ReadAsync("google/ugs-reader", cancellationToken);
+        string keyJson = await MyVault.ReadAsync("google/holysheet-reader", cancellationToken);
         return GoogleCredential.FromServiceAccountKey(keyJson);   // or FromAccessToken(token, account), FromApiKey(key)
     }
 }
@@ -327,7 +328,7 @@ public sealed class VaultCredentials : IGoogleCredentialProvider
 ```
 
 The provider runs on a background thread, once per source per build, so it must not call Unity's API. A service
-account key is signed and exchanged for a token by UGS. The `ugs` CLI cannot load editor classes: for CI, use
+account key is signed and exchanged for a token by HolySheet. The `holysheet` CLI cannot load editor classes: for CI, use
 `"type": "command"` with a command that prints the same credentials, or build `--offline` from the snapshot.
 
 ## Partial builds
@@ -338,14 +339,14 @@ tabs to pick up one.
 
 - **Window**: select nodes in the tree (Ctrl/Cmd or Shift click). A workbook means all its sheets, a table means every
   sheet it is built from. The bar under the tree, or the right-click menu, runs Check or Build on just that.
-- **CLI**: `ugs build --only Item.xlsx --only "Monster.xlsx/Monster.Boss"` (or comma separated). A workbook is named
+- **CLI**: `holysheet build --only Item.xlsx --only "Monster.xlsx/Monster.Boss"` (or comma separated). A workbook is named
   as the tree shows it: the file name for xlsx, the folder name for CSV, the spreadsheet name for Google.
 
 Every table is still built, so the manifest, the tables class and the enums agree with each other; tables made only of
 unselected sheets come out byte for byte the same, so their files are not written again. Only the selected tabs are
 downloaded from Google.
 
-The unselected sheets come from the **sheet cache** (`build.cache`, default `.ugs/cache`): every successful build writes
+The unselected sheets come from the **sheet cache** (`build.cache`, default `.holysheet/cache`): every successful build writes
 the sheets it read there. The folder ignores itself in git. A partial build refuses to run when the manifest in the data
 folder is not the one this machine's last build wrote, for example after a pull: the cached sheets may be older than
 that data, and building from them would put old values back. Run a full build then.
@@ -353,67 +354,67 @@ that data, and building from them would put old values back. Run a full build th
 ## Command line
 
 ```
-ugs init [--sample] [--unity]     create ugs.json
-ugs build [--offline] [--label]   read the sources, write code and data
-ugs build --only Item.xlsx        partial build: read only these again (see below)
-ugs check                         read and validate only
-ugs watch [--interval 30]         build on every change (Google sources are polled)
-ugs diff <old> <new> [--json]     what changed between two manifests
-ugs verify <dataDir>              hashes and signature of a data folder
-ugs keygen [--write-config]       create a signing key pair
-ugs info                          runtime, CSV backends, serializers
+holysheet init [--sample] [--unity]     create holysheet.json
+holysheet build [--offline] [--label]   read the sources, write code and data
+holysheet build --only Item.xlsx        partial build: read only these again (see below)
+holysheet check                         read and validate only
+holysheet watch [--interval 30]         build on every change (Google sources are polled)
+holysheet diff <old> <new> [--json]     what changed between two manifests
+holysheet verify <dataDir>              hashes and signature of a data folder
+holysheet keygen [--write-config]       create a signing key pair
+holysheet info                          runtime, CSV backends, serializers
 ```
 
 `--json` gives machine-readable output on every command. Exit codes: `0` success, `1` sheet errors or failed
 verification, `2` bad command line, `3` the tool could not run. In CI without the .NET tool, Unity can build too:
 
 ```bash
-Unity -batchmode -quit -projectPath . -executeMethod UGS.Editor.UgsCommandLine.Build
+Unity -batchmode -quit -projectPath . -executeMethod HolySheet.Editor.HolySheetCommandLine.Build
 ```
 
 Custom sheet conventions plug into the transform pipeline:
 
 ```csharp
 [InitializeOnLoadMethod]
-static void AddRules() => UgsProject.CreatePipeline = () =>
+static void AddRules() => HolySheetProject.CreatePipeline = () =>
     TransformPipeline.CreateDefault().InsertAfter(ReadTablesStep.StepName, new MyStep());
 ```
 
 Editor scripts in the default assembly see the engine as is. An editor script inside its own assembly definition adds
-`UGS.Core` (the engine) and `UGS.Editor` (the window) to its references.
+`HolySheet.Core` (the engine) and `HolySheet.Editor` (the window) to its references.
 
 ## Repository layout
 
 ```
-src/                    the Unity package (com.shlifedev.ugs)
+src/                    the Unity package (com.shlifedev.holysheet)
   Runtime/              what generated code depends on; no dependencies; C# 9; compiled by Unity and by .NET unchanged
   Editor/               the window and the build runner
     Core/               the engine: sources, sheet rules, validation, code and data generation; C# 9; compiled by Unity and by .NET unchanged
     Plugins/CoreClr/    the optional Sep CSV backend as DLLs, loaded only by the Unity 7 (CoreCLR) editor
   Samples~/Demo/        a scene that loads, shows, reloads and tamper-tests the sample tables
 dotnet/
-  UGS.Core/             builds src/Editor/Core for .NET (netstandard2.1, no dependencies)
-  UGS.Csv.Sep/          the optional Sep CSV backend (.NET 8+)
-  UGS.Cli/              the ugs command
-  UGS.Runtime/          builds src/Runtime for .NET
-  UGS.Tests/            282 tests
+  HolySheet.Core/       builds src/Editor/Core for .NET (netstandard2.1, no dependencies)
+  HolySheet.Csv.Sep/    the optional Sep CSV backend (.NET 8+)
+  HolySheet.Cli/        the holysheet command
+  HolySheet.Runtime/    builds src/Runtime for .NET
+  HolySheet.Tests/      282 tests
   samples/              a sample workbook, its generated tables for both serializers, and a .NET server
-unity/UGS.Dev/          the Unity project used to develop and test the package
+unity/HolySheet.Dev/    the Unity project used to develop and test the package
 tools/                  build-unity-plugins.sh, make-sample-workbook.py
 ```
 
 ## Developing
 
 ```bash
-dotnet test dotnet/UGS.Tests                     # engine, runtime, both serializers, CLI
-tools/build-unity-plugins.sh                     # after changing dotnet/UGS.Csv.Sep
-unity test unity/UGS.Dev --mode EditMode         # the package inside a real editor
-unity test unity/UGS.Dev --mode PlayMode         # the demo scene
+dotnet test dotnet/HolySheet.Tests                     # engine, runtime, both serializers, CLI
+tools/build-unity-plugins.sh                           # after changing dotnet/HolySheet.Csv.Sep
+unity test unity/HolySheet.Dev --mode EditMode         # the package inside a real editor
+unity test unity/HolySheet.Dev --mode PlayMode         # the demo scene
 ```
 
 The Unity tests pass on 6000.3 (Mono) and on the 7000.0 alpha (CoreCLR). The engine is shipped to Unity as a compiled
 netstandard2.1 DLL because it is written in a newer C# than Unity compiles; the runtime is shipped as C# 9 source.
-`unity/UGS.Dev/Assets/Samples/Demo` is a symbolic link to `src/Samples~/Demo`, so the sample exists once.
+`unity/HolySheet.Dev/Assets/Samples/Demo` is a symbolic link to `src/Samples~/Demo`, so the sample exists once.
 
 ## License
 

@@ -11,10 +11,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using UGS.Core.Config;
-using UGS.Core.Csv;
+using HolySheet.Core.Config;
+using HolySheet.Core.Csv;
 
-namespace UGS.Core.Sources
+namespace HolySheet.Core.Sources
 {
     /// <summary>How the Google services are reached: their addresses and the retry policy. Replaceable so tests can point the sources at a stand-in.</summary>
     public sealed class GoogleEndpoints
@@ -949,9 +949,9 @@ namespace UGS.Core.Sources
     internal sealed class SnapshotIndex
     {
         /// <summary>Starts with a dot so Unity does not import it when the snapshot is under Assets.</summary>
-        public const string FileName = ".ugs-snapshot";
+        public const string FileName = ".holysheet-snapshot";
 
-        private const string Header = "ugs-snapshot 1";
+        private const string Header = "holysheet-snapshot 1";
 
         private SnapshotIndex(string? workbook, IReadOnlyCollection<string> files)
         {
@@ -1015,7 +1015,7 @@ namespace UGS.Core.Sources
         {
             var text = new StringBuilder();
             text.Append(Header).Append('\n');
-            text.Append("# Written by UGS. Only the files listed here are replaced or removed by the next online build.\n");
+            text.Append("# Written by HolySheet. Only the files listed here are replaced or removed by the next online build.\n");
             text.Append("workbook\t").Append(Escape(workbook)).Append('\n');
             foreach (string file in files)
             {

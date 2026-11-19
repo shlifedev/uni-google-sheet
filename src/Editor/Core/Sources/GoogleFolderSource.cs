@@ -8,10 +8,10 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using UGS.Core.Config;
-using UGS.Core.Csv;
+using HolySheet.Core.Config;
+using HolySheet.Core.Csv;
 
-namespace UGS.Core.Sources
+namespace HolySheet.Core.Sources
 {
     /// <summary>
     /// A Google Drive folder. Every Google spreadsheet and every .xlsx file directly inside it is a workbook, named after the

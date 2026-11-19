@@ -2,11 +2,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using UGS.Core.Config;
-using UGS.Core.Schema;
-using UGS.Core.Transform;
+using HolySheet.Core.Config;
+using HolySheet.Core.Schema;
+using HolySheet.Core.Transform;
 
-namespace UGS.Core.Building
+namespace HolySheet.Core.Building
 {
     /// <summary>
     /// Reads an Enums sheet. One column defines one enum, using the same header rows as a table:

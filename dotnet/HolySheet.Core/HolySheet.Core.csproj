@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!--
+      The tool's engine: read sheets, apply the transform rules, validate, generate code and data.
+      It knows nothing about consoles or windows; the CLI and the Unity editor window both sit on top of it.
+
+      The sources live in the Unity package (src/Editor/Core, an editor-only assembly) and are compiled here unchanged,
+      so the Unity editor and the .NET CLI run the same code and the package ships no engine DLL.
+      LangVersion is pinned to 9.0 because that is what Unity 6 and the Unity 7 alpha compile scripts with:
+      anything that builds here builds there.
+      netstandard2.1 keeps the API surface to what every Unity editor has.
+      It deliberately has no package dependencies: polyfills the compiler needs are in Polyfills.cs.
+    -->
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>HolySheet.Core</RootNamespace>
+    <AssemblyName>HolySheet.Core</AssemblyName>
+    <!-- AssemblyVersion and InternalsVisibleTo come from AssemblyInfo.cs, which Unity compiles too. -->
+    <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
+    <Description>HolySheet engine: spreadsheet sources, transform rules, validation, C# and binary generation.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Editor/Core/**/*.cs" LinkBase="Core" />
+  </ItemGroup>
+</Project>

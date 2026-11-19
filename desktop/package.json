@@ -1,5 +1,5 @@
 {
-  "name": "ugs-desktop",
+  "name": "holysheet-desktop",
   "private": true,
   "version": "2.0.0",
   "type": "module",
@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "host": "node scripts/build-host.mjs",
-    "i18n": "python3 ../tools/export-ugs-text.py",
+    "i18n": "python3 ../tools/export-holysheet-text.py",
     "test": "vitest run",
     "tauri": "tauri"
   },

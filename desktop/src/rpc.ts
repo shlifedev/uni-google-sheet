@@ -7,7 +7,7 @@ import type {
   ProjectState,
   RunResult,
   TableModel,
-  UgsConfig,
+  HolySheetConfig,
   VerifyReport,
 } from "./types";
 
@@ -44,7 +44,7 @@ export const rpc = {
   state: () => call<ProjectState>("project.state"),
   init: (dir: string, sample: boolean, unity?: boolean) => call<ProjectState>("project.init", { dir, sample, unity }),
   close: () => call<ProjectState>("project.close"),
-  saveConfig: (config: UgsConfig) => call<ProjectState>("config.save", { config }),
+  saveConfig: (config: HolySheetConfig) => call<ProjectState>("config.save", { config }),
   run: (commit: boolean, offline: boolean, only: string[] = []) => call<RunResult>("run", { commit, offline, only }),
   model: () => call<TableModel>("tables.model"),
   preview: (table: string, sheet?: string | null) => call<Preview>("tables.preview", { table, sheet: sheet ?? null }),
@@ -70,8 +70,8 @@ export async function onHostEvents(handlers: {
   restarted: () => void;
 }): Promise<UnlistenFn> {
   const unlisten = await Promise.all([
-    listen<HostEvent>("ugs://event", (message) => handlers.event(message.payload)),
-    listen("ugs://host-restarted", () => handlers.restarted()),
+    listen<HostEvent>("holysheet://event", (message) => handlers.event(message.payload)),
+    listen("holysheet://host-restarted", () => handlers.restarted()),
   ]);
   return () => unlisten.forEach((stop) => stop());
 }

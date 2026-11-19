@@ -1,5 +1,5 @@
-// Publishes the engine (dotnet/UGS.Desktop.Host) as a self-contained single file and puts it where Tauri looks for
-// the sidecar: src-tauri/binaries/ugs-host-<target triple>[.exe]. Runs before `tauri dev` and `tauri build`.
+// Publishes the engine (dotnet/HolySheet.Desktop.Host) as a self-contained single file and puts it where Tauri looks for
+// the sidecar: src-tauri/binaries/holysheet-host-<target triple>[.exe]. Runs before `tauri dev` and `tauri build`.
 //
 // The .NET SDK is taken from $DOTNET, then the macOS installer location (Homebrew's `dotnet` may be an older SDK),
 // then PATH. The target comes from TAURI_ENV_TARGET_TRIPLE (set by the Tauri CLI) or the Rust host triple.
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const desktop = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = resolve(desktop, "..");
-const project = join(repo, "dotnet", "UGS.Desktop.Host", "UGS.Desktop.Host.csproj");
+const project = join(repo, "dotnet", "HolySheet.Desktop.Host", "HolySheet.Desktop.Host.csproj");
 
 const rids = {
   "aarch64-apple-darwin": "osx-arm64",
@@ -41,8 +41,8 @@ if (!rid) throw new Error(`No .NET runtime identifier is known for the target '$
 // Not EnableCompressionInSingleFile: with it the published host crashed (AccessViolationException inside
 // System.Text.Json) on the second request, every time, on .NET 10.0.12 / osx-arm64. The installers compress anyway.
 const windows = triple.includes("windows");
-const out = join(desktop, "src-tauri", "target", "ugs-host", rid);
-console.log(`[build-host] publishing ugs-host for ${rid} (${triple})`);
+const out = join(desktop, "src-tauri", "target", "holysheet-host", rid);
+console.log(`[build-host] publishing holysheet-host for ${rid} (${triple})`);
 execFileSync(
   dotnet(),
   ["publish", project, "-c", "Release", "-r", rid, "--self-contained", "-p:PublishSingleFile=true", "-o", out, "--nologo", "-v", "quiet"],
@@ -51,8 +51,8 @@ execFileSync(
 
 const binaries = join(desktop, "src-tauri", "binaries");
 mkdirSync(binaries, { recursive: true });
-const source = join(out, windows ? "ugs-host.exe" : "ugs-host");
-const target = join(binaries, `ugs-host-${triple}${windows ? ".exe" : ""}`);
+const source = join(out, windows ? "holysheet-host.exe" : "holysheet-host");
+const target = join(binaries, `holysheet-host-${triple}${windows ? ".exe" : ""}`);
 copyFileSync(source, target);
 if (!windows) chmodSync(target, 0o755);
 console.log(`[build-host] ${target}`);

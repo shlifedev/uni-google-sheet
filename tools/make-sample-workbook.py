@@ -106,7 +106,7 @@ def main(path):
     add_sheet(workbook, "Game.Config", [
         ["int", "MaxLevel", "Highest level a character can reach", 60],
         ["float", "GoldRate", "Multiplier on gold drops", 1.5],
-        ["string", "Title", "Name shown on the title screen", "UGS Sample"],
+        ["string", "Title", "Name shown on the title screen", "HolySheet Sample"],
         ["Ref<Item>", "StartItem", "Item every character starts with", 1001],
         ["DateTime", "OpensAt", "When the service opens (UTC)", datetime.datetime(2026, 3, 1, 9, 0, 0)],
         ["bool", "Maintenance", "Reject logins", False],

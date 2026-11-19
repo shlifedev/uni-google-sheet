@@ -3,7 +3,7 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace UGS
+namespace HolySheet
 {
     /// <summary>
     /// Verifies that a manifest was produced by whoever holds the private key.
@@ -55,7 +55,7 @@ namespace UGS
             string[] parts = publicKey.Trim().Split(':');
             if (parts.Length != 3 || parts[0] + ":" != PublicKeyPrefix)
             {
-                throw new FormatException("The public key must look like 'rsa:<modulus>:<exponent>'. Run 'ugs keygen' to create one.");
+                throw new FormatException("The public key must look like 'rsa:<modulus>:<exponent>'. Run 'holysheet keygen' to create one.");
             }
 
             return new RSAParameters

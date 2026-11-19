@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 
-namespace UGS.Core
+namespace HolySheet.Core
 {
     public enum Severity
     {

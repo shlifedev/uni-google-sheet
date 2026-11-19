@@ -10,7 +10,7 @@ async fn rpc(app: AppHandle, host: State<'_, Host>, method: String, params: Opti
     host.call(&app, &method, params.unwrap_or(Value::Object(Default::default()))).await
 }
 
-/// A project given on the command line (`UGS path/to/ugs.json` or a folder), opened instead of the most recent one.
+/// A project given on the command line (`HolySheet path/to/holysheet.json` or a folder), opened instead of the most recent one.
 #[tauri::command]
 fn launch_path() -> Option<String> {
     std::env::args().skip(1).find(|arg| !arg.starts_with('-'))
@@ -27,7 +27,7 @@ pub fn run() {
         .manage(Host::default())
         .invoke_handler(tauri::generate_handler![rpc, launch_path])
         .build(tauri::generate_context!())
-        .expect("error while building the UGS app")
+        .expect("error while building the HolySheet app")
         .run(|app, event| {
             if let RunEvent::Exit = event {
                 app.state::<Host>().shutdown();

@@ -1,0 +1,16 @@
+{
+    "name": "HolySheet.Demo",
+    "rootNamespace": "HolySheet.Demo",
+    "references": [
+        "HolySheet.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

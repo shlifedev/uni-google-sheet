@@ -18,7 +18,7 @@ unity/*/Captures/
 unity/*/test-results*.xml
 
 # Signing keys must never be committed
-ugs.private.key
+holysheet.private.key
 *.private.key
 
 # OS and editor noise
@@ -26,7 +26,7 @@ ugs.private.key
 .idea/
 .vs/
 .vscode/
-*.ugs-tmp
+*.holysheet-tmp
 
 # LibreOffice lock files
 .~lock.*#

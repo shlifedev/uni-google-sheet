@@ -4,7 +4,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace UGS
+namespace HolySheet
 {
     /// <summary>
     /// Loads a table set: reads the manifest, checks it against the generated code, verifies every data file and decodes it.

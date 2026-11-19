@@ -1,0 +1,41 @@
+{
+  "sources": [
+    {
+      "type": "xlsx",
+      "path": "Assets/Samples/Demo/Sheets"
+    },
+    {
+      "type": "csv",
+      "path": "Assets/Samples/Demo/Sheets/Localization"
+    },
+    {
+      "type": "googleFolder",
+      "folderId": "17ERkp-5Su8aBrv46CVrGrF8uVKW718_z",
+      "auth": {
+        "type": "serviceAccount",
+        "keyFile": "/Users/shlifedev/Downloads/personal-services-514415-6b4450c7002b.json"
+      },
+      "snapshot": "Assets/Samples/Demo/GoogleGS"
+    }
+  ],
+  "output": {
+    "code": "Assets/Samples/Demo/Generated",
+    "data": "Assets/Samples/Demo/Resources/HolySheetDemo",
+    "schema": true
+  },
+  "codegen": {
+    "namespace": "HolySheet.Demo.Data",
+    "tablesClass": "DemoTables",
+    "serializer": "memorypack"
+  },
+  "sheet": {
+    "header": ["type", "name", "comment"],
+    "arraySeparator": ","
+  },
+  "csv": {
+    "backend": "auto"
+  },
+  "build": {
+    "parallel": true
+  }
+}

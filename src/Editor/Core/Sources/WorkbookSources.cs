@@ -7,10 +7,10 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using UGS.Core.Config;
-using UGS.Core.Csv;
+using HolySheet.Core.Config;
+using HolySheet.Core.Csv;
 
-namespace UGS.Core.Sources
+namespace HolySheet.Core.Sources
 {
     /// <summary>Where sheets come from. A source turns files or a remote spreadsheet into workbooks of plain text cells.</summary>
     public interface IWorkbookSource
@@ -204,7 +204,7 @@ namespace UGS.Core.Sources
     /// <summary>Creates the sources a config lists.</summary>
     public static class WorkbookSources
     {
-        public static IReadOnlyList<IWorkbookSource> Create(UgsConfig config, ICsvParser parser, bool offline = false, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null, IReadOnlyList<IGoogleCredentialProvider>? credentialProviders = null)
+        public static IReadOnlyList<IWorkbookSource> Create(HolySheetConfig config, ICsvParser parser, bool offline = false, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null, IReadOnlyList<IGoogleCredentialProvider>? credentialProviders = null)
         {
             var sources = new List<IWorkbookSource>(config.Sources.Count);
             // Copies of Google files by Drive version, so unchanged files are not downloaded again.

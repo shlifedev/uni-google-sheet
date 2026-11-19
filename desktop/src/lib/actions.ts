@@ -44,7 +44,7 @@ export async function openSource(workbook: string, sheet?: string | null): Promi
   }
 }
 
-/** Opens the file a problem points at; problems about the config open ugs.json. */
+/** Opens the file a problem points at; problems about the config open holysheet.json. */
 export async function openProblem(problem: Diagnostic): Promise<void> {
   try {
     await openLocated(await rpc.locateProblem(problem.location, problem.workbook, problem.sheet), problem.workbook ?? problem.location);

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <!--
-      The sample tables as a consumer would use them: the generated code, the UGS runtime and the MemoryPack package.
+      The sample tables as a consumer would use them: the generated code, the HolySheet runtime and the MemoryPack package.
       Built for netstandard2.1 as well as .NET 10 to prove that the generated code compiles for Unity's API surface.
       The MemoryPack source generator emits C# 11 for .NET 7+, so the language version follows the target.
     -->
@@ -11,7 +11,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../UGS.Runtime/UGS.Runtime.csproj" />
+    <ProjectReference Include="../../HolySheet.Runtime/HolySheet.Runtime.csproj" />
     <PackageReference Include="MemoryPack" Version="1.22.0" />
   </ItemGroup>
 </Project>
