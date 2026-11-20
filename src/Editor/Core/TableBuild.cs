@@ -562,8 +562,7 @@ namespace HolySheet.Core
             var properties = new SortedDictionary<string, string>(StringComparer.Ordinal) { ["tool"] = ToolName };
             if (!string.IsNullOrWhiteSpace(config.BuildLabel))
             {
-                // The manifest is line based: a label is kept on one line.
-                properties["build"] = config.BuildLabel!.Replace('\n', ' ').Replace('\r', ' ').Trim();
+                properties["build"] = config.BuildLabel!.Trim();
             }
 
             string signedText = ManifestWriter.Write(codec.Name, schemaHash, manifestTables, properties, out string contentHash);

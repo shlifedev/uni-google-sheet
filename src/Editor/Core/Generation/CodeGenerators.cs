@@ -244,7 +244,7 @@ namespace HolySheet.Core.Generation
             writer.Line();
             writer.Line("public int Count => _rows.Length;");
             writer.Line();
-            writer.Summary("The manifest line this table was loaded from.");
+            writer.Summary("The manifest entry this table was loaded from.");
             writer.Line("public global::HolySheet.TableManifestEntry Entry { get; }");
             writer.Line();
             writer.Summary("Every row, in sheet order.");

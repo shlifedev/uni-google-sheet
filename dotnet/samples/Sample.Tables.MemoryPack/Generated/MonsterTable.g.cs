@@ -28,7 +28,7 @@ namespace Sample.MemoryPackData
 
         public int Count => _rows.Length;
 
-        /// <summary>The manifest line this table was loaded from.</summary>
+        /// <summary>The manifest entry this table was loaded from.</summary>
         public global::HolySheet.TableManifestEntry Entry { get; }
 
         /// <summary>Every row, in sheet order.</summary>

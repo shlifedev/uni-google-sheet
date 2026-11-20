@@ -1,0 +1,14 @@
+{
+  "holysheet": 1,
+  "serializer": "messagepack",
+  "schema": "0ffb73b0f9c709c7c8055277253f5c63090104dd68b18ee5d452375120087ef4",
+  "content": "f978a29584a16479d65f9b11c37cac89147c78463cb2f07a17b740dce63b1397",
+  "tool": "holysheet/2.0.0",
+  "tables": [
+    { "name": "Game", "file": "Game.bytes", "rows": 1, "bytes": 35, "hash": "ac865a9b7f5236167f613d855a9b5425854a32e3cbbc13bceb72f1b811a2c64f", "schema": "dbb8f4c2acfffdb1454c23a68f38914da76d33547dde257e3da3a49eb2fcf8cb" },
+    { "name": "Item", "file": "Item.bytes", "rows": 6, "bytes": 511, "hash": "0c0afd2456722a0f804ea282832566710baa53ef1d8447895aabecb0b3866d61", "schema": "e8437a2c281d628515cdf0b7d07849c7e8e68befb4fcc913e483abcb3988d939" },
+    { "name": "Limits", "file": "Limits.bytes", "rows": 3, "bytes": 283, "hash": "a340b8001ebcc3318ea62cef16cdea8d5e93711865ef33f4e47fa2fd92ed3d9a", "schema": "a712367775f7ce2e51f92213cfcd729ada1fae5dd62eb1ed66a69fa8a998e4e0" },
+    { "name": "Monster", "file": "Monster.bytes", "rows": 3, "bytes": 100, "hash": "7cb255d6a23d56bb6cb814b3e1d63be89e3b9233a69e4552cca27dd9bc772496", "schema": "1fb7e86b38d57cdae4bb9cbacc3b302f370e06f94e0e97c1c708245218c94a14" },
+    { "name": "Text", "file": "Text.bytes", "rows": 3, "bytes": 57, "hash": "825537e59277df70938033657c951c07b41941fd4250e14920db347d19ab98b2", "schema": "5fe077fdbe2a47945f29653f38dcca9bc872187ee4561b913a26356e6b900d4f" }
+  ]
+}

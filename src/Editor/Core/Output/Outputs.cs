@@ -24,7 +24,7 @@ namespace HolySheet.Core.Output
         /// <summary>File name to CSV text of each table after the transform rules.</summary>
         public SortedDictionary<string, string> CsvFiles { get; } = new(StringComparer.Ordinal);
 
-        public string ManifestFileName { get; set; } = "tables.manifest.txt";
+        public string ManifestFileName { get; set; } = "tables.manifest.json";
 
         /// <summary>The manifest. It is written last, so its appearance on disk means every data file is already in place.</summary>
         public string ManifestText { get; set; } = "";
@@ -34,20 +34,19 @@ namespace HolySheet.Core.Output
         public string ContentHash { get; set; } = "";
     }
 
-    /// <summary>One table line of the manifest.</summary>
-    /// <summary>One table line of the manifest.</summary>
+    /// <summary>One table of the manifest.</summary>
     public sealed record ManifestTable(string Name, string File, int Rows, long Bytes, string Hash, string Schema);
 
     /// <summary>
-    /// Writes the manifest text. The format is defined by <c>HolySheet.TableManifest</c> in the runtime, which is the reader;
-    /// this writer must produce exactly what that class would, and the tests compare the two.
+    /// Writes the manifest JSON. The format is defined by <c>HolySheet.TableManifest</c> in the runtime, which is the reader;
+    /// this writer must produce exactly what that class would (its <c>SignedText</c> and <c>ToText</c>), and the tests compare the two.
     /// </summary>
     public static class ManifestWriter
     {
         public const string DataExtension = ".bytes";
         public const string SignatureAlgorithm = "rsa-sha256";
 
-        /// <summary>The text a signature covers: every line except the sign line.</summary>
+        /// <summary>The text a signature covers: the whole manifest without its signature member.</summary>
         public static string Write(string serializer, string schemaHash, IReadOnlyList<ManifestTable> tables, IReadOnlyDictionary<string, string> properties, out string contentHash)
         {
             List<ManifestTable> sorted = tables.OrderBy(table => table.Name, StringComparer.Ordinal).ToList();
@@ -59,30 +58,106 @@ namespace HolySheet.Core.Output
 
             contentHash = SchemaHasher.Sha256Hex(content.ToString());
             var builder = new StringBuilder();
-            builder.Append("holysheet-manifest 1\n");
-            builder.Append("serializer ").Append(serializer).Append('\n');
-            builder.Append("schema ").Append(schemaHash).Append('\n');
-            builder.Append("content ").Append(contentHash).Append('\n');
+            builder.Append("{\n");
+            builder.Append("  \"holysheet\": 1,\n");
+            Member(builder, "serializer", serializer);
+            Member(builder, "schema", schemaHash);
+            Member(builder, "content", contentHash);
             foreach (KeyValuePair<string, string> property in properties.OrderBy(property => property.Key, StringComparer.Ordinal))
             {
-                builder.Append(property.Key).Append(' ').Append(property.Value).Append('\n');
+                Member(builder, property.Key, property.Value);
             }
 
-            foreach (ManifestTable table in sorted)
+            builder.Append("  \"tables\": [");
+            for (int index = 0; index < sorted.Count; index++)
             {
-                builder.Append("table ").Append(table.Name)
-                    .Append(" file=").Append(table.File)
-                    .Append(" rows=").Append(table.Rows.ToString(CultureInfo.InvariantCulture))
-                    .Append(" bytes=").Append(table.Bytes.ToString(CultureInfo.InvariantCulture))
-                    .Append(" hash=").Append(table.Hash)
-                    .Append(" schema=").Append(table.Schema)
-                    .Append('\n');
+                ManifestTable table = sorted[index];
+                builder.Append(index == 0 ? "\n" : ",\n");
+                builder.Append("    { \"name\": ");
+                Quote(builder, table.Name);
+                builder.Append(", \"file\": ");
+                Quote(builder, table.File);
+                builder.Append(", \"rows\": ").Append(table.Rows.ToString(CultureInfo.InvariantCulture));
+                builder.Append(", \"bytes\": ").Append(table.Bytes.ToString(CultureInfo.InvariantCulture));
+                builder.Append(", \"hash\": ");
+                Quote(builder, table.Hash);
+                builder.Append(", \"schema\": ");
+                Quote(builder, table.Schema);
+                builder.Append(" }");
             }
 
+            builder.Append(sorted.Count == 0 ? "]\n" : "\n  ]\n");
+            builder.Append("}\n");
             return builder.ToString();
         }
 
-        public static string AppendSignature(string signedText, string signature) => signedText + "sign " + SignatureAlgorithm + " " + signature + "\n";
+        /// <summary>Adds the signature as the last member, in front of the closing brace.</summary>
+        public static string AppendSignature(string signedText, string signature)
+        {
+            var builder = new StringBuilder(signedText.Length + signature.Length + 64);
+            builder.Append(signedText, 0, signedText.Length - 3);
+            builder.Append(",\n  \"signature\": { \"algorithm\": ");
+            Quote(builder, SignatureAlgorithm);
+            builder.Append(", \"value\": ");
+            Quote(builder, signature);
+            builder.Append(" }\n}\n");
+            return builder.ToString();
+        }
+
+        private static void Member(StringBuilder builder, string name, string value)
+        {
+            builder.Append("  ");
+            Quote(builder, name);
+            builder.Append(": ");
+            Quote(builder, value);
+            builder.Append(",\n");
+        }
+
+        // The same escaping as the runtime's ManifestJson.WriteString: quotes, backslashes and control characters only.
+        private static void Quote(StringBuilder builder, string value)
+        {
+            builder.Append('"');
+            foreach (char character in value)
+            {
+                switch (character)
+                {
+                    case '"':
+                        builder.Append("\\\"");
+                        break;
+                    case '\\':
+                        builder.Append("\\\\");
+                        break;
+                    case '\n':
+                        builder.Append("\\n");
+                        break;
+                    case '\r':
+                        builder.Append("\\r");
+                        break;
+                    case '\t':
+                        builder.Append("\\t");
+                        break;
+                    case '\b':
+                        builder.Append("\\b");
+                        break;
+                    case '\f':
+                        builder.Append("\\f");
+                        break;
+                    default:
+                        if (character < 0x20)
+                        {
+                            builder.Append("\\u").Append(((int)character).ToString("x4", CultureInfo.InvariantCulture));
+                        }
+                        else
+                        {
+                            builder.Append(character);
+                        }
+
+                        break;
+                }
+            }
+
+            builder.Append('"');
+        }
     }
 
     /// <summary>
@@ -315,12 +390,27 @@ namespace HolySheet.Core.Output
 
             // Data files of tables that no longer exist are the ones the previous manifest lists and this build does not produce.
             string manifestPath = Path.Combine(dataDirectory, output.ManifestFileName);
-            foreach (string stale in ReadPreviousDataFiles(manifestPath))
+            List<string> previous = ReadPreviousDataFiles(manifestPath);
+
+            // A folder last built when the manifest was text: what it lists counts as the previous build, and the old manifest goes.
+            string legacyPath = Path.Combine(dataDirectory, LegacyManifestFileName);
+            List<string>? legacy = string.Equals(output.ManifestFileName, LegacyManifestFileName, StringComparison.OrdinalIgnoreCase) ? null : ReadLegacyDataFiles(legacyPath);
+            if (legacy != null)
+            {
+                previous.AddRange(legacy);
+            }
+
+            foreach (string stale in previous.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 if (!keptData.Contains(stale) && File.Exists(Path.Combine(dataDirectory, stale)))
                 {
                     PlanDelete(changes, Path.Combine(dataDirectory, stale), stale);
                 }
+            }
+
+            if (legacy != null)
+            {
+                PlanDelete(changes, legacyPath, LegacyManifestFileName);
             }
 
             if (csvDirectory != null)
@@ -543,7 +633,43 @@ namespace HolySheet.Core.Output
 
             try
             {
-                foreach (string line in File.ReadAllLines(manifestPath))
+                IReadOnlyList<JsonValue>? tables = JsonValue.Parse(File.ReadAllText(manifestPath)).AsObject?.GetArray("tables");
+                foreach (JsonValue table in tables ?? Array.Empty<JsonValue>())
+                {
+                    AddPlainFileName(files, table.AsObject?.GetString("file"));
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonFormatException)
+            {
+            }
+
+            return files;
+        }
+
+        /// <summary>The manifest name before it became JSON. A data folder from an older build still has one.</summary>
+        public const string LegacyManifestFileName = "tables.manifest.txt";
+
+        /// <summary>
+        /// The data files an old text manifest lists, when <paramref name="path"/> is one this tool wrote (its first line says so).
+        /// Null when it is not there or not ours: a file someone else named the same is left alone.
+        /// </summary>
+        private static List<string>? ReadLegacyDataFiles(string path)
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            try
+            {
+                string[] lines = File.ReadAllLines(path);
+                if (lines.Length == 0 || lines[0].Trim() != "holysheet-manifest 1")
+                {
+                    return null;
+                }
+
+                var files = new List<string>();
+                foreach (string line in lines)
                 {
                     if (!line.StartsWith("table ", StringComparison.Ordinal))
                     {
@@ -554,21 +680,26 @@ namespace HolySheet.Core.Output
                     {
                         if (part.StartsWith("file=", StringComparison.Ordinal))
                         {
-                            string file = part[5..];
-                            // Only plain file names: a manifest must never be able to make the tool delete something outside its folder.
-                            if (file.Length > 0 && file == Path.GetFileName(file))
-                            {
-                                files.Add(file);
-                            }
+                            AddPlainFileName(files, part[5..]);
                         }
                     }
                 }
-            }
-            catch (IOException)
-            {
-            }
 
-            return files;
+                return files;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        // Only plain file names: a manifest must never be able to make the tool delete something outside its folder.
+        private static void AddPlainFileName(List<string> files, string? file)
+        {
+            if (!string.IsNullOrEmpty(file) && file == Path.GetFileName(file))
+            {
+                files.Add(file!);
+            }
         }
 
         private sealed class Change

@@ -151,7 +151,7 @@ namespace HolySheet.Core.Config
         /// <summary>Write tables.schema.json next to the data: the full layout, for patch tools and other consumers that have no generated code.</summary>
         public bool Schema { get; set; } = true;
 
-        public string ManifestFile { get; set; } = "tables.manifest.txt";
+        public string ManifestFile { get; set; } = "tables.manifest.json";
     }
 
     public sealed class CodegenConfig

@@ -34,31 +34,101 @@ public class ManifestTests
     }
 
     [Fact]
-    public void Unknown_lines_and_attributes_are_kept_for_newer_tools()
+    public void The_manifest_is_plain_json_with_one_table_per_line()
+    {
+        using var build = new SampleBuild("memorypack");
+        string text = build.Result.Output!.ManifestText;
+
+        using var document = System.Text.Json.JsonDocument.Parse(text);
+        Assert.Equal(1, document.RootElement.GetProperty("holysheet").GetInt32());
+        Assert.Equal("memorypack", document.RootElement.GetProperty("serializer").GetString());
+        System.Text.Json.JsonElement item = document.RootElement.GetProperty("tables").EnumerateArray().Single(table => table.GetProperty("name").GetString() == "Item");
+        Assert.Equal("Item.bytes", item.GetProperty("file").GetString());
+        Assert.Equal(6, item.GetProperty("rows").GetInt32());
+        Assert.False(document.RootElement.TryGetProperty("signature", out _));
+
+        Assert.Contains("\n    { \"name\": \"Item\", \"file\": \"Item.bytes\", \"rows\": 6, ", text);
+        Assert.EndsWith("\n  ]\n}\n", text);
+    }
+
+    [Fact]
+    public void Unknown_members_are_kept_for_newer_tools()
     {
         const string hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        string text = $"holysheet-manifest 1\nserializer memorypack\nschema s1\nfuture-thing some value\ntable Item file=Item.bytes rows=1 bytes=2 hash={hash} schema=x compression=zstd\n";
+        string text = $$"""
+            {
+              "holysheet": 1, "serializer": "memorypack", "schema": "s1",
+              "future-thing": "some value",
+              "channels": { "beta": [1, 2.5, true, null] },
+              "tables": [ { "name": "Item", "file": "Item.bytes", "rows": 1, "bytes": 2, "hash": "{{hash}}", "schema": "x", "compression": "zstd", "chunks": 4 } ]
+            }
+            """;
         TableManifest manifest = TableManifest.Parse(text);
         Assert.Equal("some value", manifest.Properties["future-thing"]);
+        Assert.Equal("""{"beta":[1,2.5,true,null]}""", manifest.Properties["channels"]);
         Assert.Equal("zstd", manifest.FindTable("Item")!.Extra["compression"]);
-        Assert.Contains("compression=zstd", manifest.ToText());
-        Assert.Contains("future-thing some value", manifest.ToText());
+        Assert.Equal("4", manifest.FindTable("Item")!.Extra["chunks"]);
+
+        // Written back in the fixed form, with every unknown member still there and still covered by the signature.
+        string written = manifest.ToText();
+        Assert.Contains("\"future-thing\": \"some value\",\n", written);
+        Assert.Contains("\"channels\": {\"beta\":[1,2.5,true,null]},\n", written);
+        Assert.Contains("\"schema\": \"x\", \"chunks\": 4, \"compression\": \"zstd\" }", written);
+        Assert.Equal(written, TableManifest.Parse(written).ToText());
+        Assert.Equal(written, manifest.SignedText);
+        Assert.NotEqual(manifest.SignedText, TableManifest.Parse(written.Replace("\"chunks\": 4", "\"chunks\": 5")).SignedText);
     }
+
+    [Fact]
+    public void A_signature_is_the_last_member_and_whitespace_does_not_break_it()
+    {
+        var manifest = new TableManifest("memorypack", "s", [Entry("Item", "h1")], [new("tool", "t")]).WithSignature("c2lnbmVk");
+        string text = manifest.ToText();
+        Assert.EndsWith("  ],\n  \"signature\": { \"algorithm\": \"rsa-sha256\", \"value\": \"c2lnbmVk\" }\n}\n", text);
+        Assert.StartsWith(manifest.SignedText[..^4], text);
+
+        // A reformatted file still describes the same content, so it still verifies against the same signed text.
+        using var document = System.Text.Json.JsonDocument.Parse(text);
+        string reformatted = System.Text.Json.JsonSerializer.Serialize(document.RootElement, new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
+        TableManifest reread = TableManifest.Parse(reformatted);
+        Assert.Equal("c2lnbmVk", reread.Signature);
+        Assert.Equal(manifest.SignedText, reread.SignedText);
+        Assert.Equal(text, reread.ToText());
+    }
+
+    private static TableManifestEntry Entry(string name, string hash) => new(name, name + ".bytes", 1, 10, hash, "s");
+
+    private const string Valid = "\"holysheet\": 1, \"serializer\": \"m\", \"schema\": \"s\"";
 
     [Theory]
     [InlineData("", "it is empty")]
-    [InlineData("not a manifest\n", "the first line is")]
-    [InlineData("holysheet-manifest 2\nserializer m\nschema s\n", "format version 2")]
-    [InlineData("holysheet-manifest 1\nschema s\n", "line is missing")]
-    [InlineData("holysheet-manifest 1\nserializer m\nschema s\ntable Item rows=1\n", "missing hash= or rows=")]
-    [InlineData("holysheet-manifest 1\nserializer m\nschema s\ntable Item rows=x hash=h\n", "expected a number")]
-    [InlineData("holysheet-manifest 1\nserializer m\nschema s\nsign rsa-sha256 abc\ntable Item rows=1 hash=h\n", "comes after the signature")]
-    [InlineData("holysheet-manifest 1\nserializer m\nschema s\nsign md5 abc\n", "signature algorithm")]
+    [InlineData("not a manifest\n", "not valid JSON: line 1, column 1")]
+    [InlineData("holysheet-manifest 1\nserializer m\nschema s\n", "old text format")]
+    [InlineData("[]", "not a JSON object")]
+    [InlineData("{ \"serializer\": \"m\", \"schema\": \"s\", \"tables\": [] }", "no \"holysheet\" member")]
+    [InlineData("{ \"holysheet\": 2, \"serializer\": \"m\", \"schema\": \"s\", \"tables\": [] }", "format version 2")]
+    [InlineData("{ \"holysheet\": 1, \"schema\": \"s\", \"tables\": [] }", "member is missing")]
+    [InlineData("{ " + Valid + " }", "\"tables\" member is missing")]
+    [InlineData("{ " + Valid + ", \"tables\": [ { \"name\": \"Item\", \"rows\": 1 } ] }", "missing \"hash\" or \"rows\"")]
+    [InlineData("{ " + Valid + ", \"tables\": [ { \"name\": \"Item\", \"rows\": \"x\", \"hash\": \"h\" } ] }", "expected a whole number")]
+    [InlineData("{ " + Valid + ", \"tables\": [ { \"name\": \"Item\", \"rows\": 1, \"hash\": \"h\" }, { \"name\": \"Item\", \"rows\": 1, \"hash\": \"h\" } ] }", "listed twice")]
+    [InlineData("{ " + Valid + ", \"tables\": [], \"signature\": { \"algorithm\": \"md5\", \"value\": \"abc\" } }", "algorithm this runtime does not know")]
+    [InlineData("{ " + Valid + ", \"schema\": \"t\", \"tables\": [] }", "appears twice")]
+    [InlineData("{ " + Valid + ", \"tables\": [], }", "expected a member name")]
     public void A_broken_manifest_says_what_is_wrong(string text, string expected)
     {
         var exception = Assert.Throws<TableLoadException>(() => TableManifest.Parse(text));
         Assert.Equal(TableLoadError.ManifestInvalid, exception.Error);
         Assert.Contains(expected, exception.Message);
+    }
+
+    [Fact]
+    public void A_content_hash_that_disagrees_with_the_tables_is_a_hash_mismatch()
+    {
+        string text = new TableManifest("memorypack", "s", [Entry("Item", "h1")]).ToText();
+        string edited = text.Replace("\"hash\": \"h1\"", "\"hash\": \"h2\"");
+        var exception = Assert.Throws<TableLoadException>(() => TableManifest.Parse(edited));
+        Assert.Equal(TableLoadError.HashMismatch, exception.Error);
     }
 
     [Fact]
@@ -277,15 +347,14 @@ public class SignatureTests
     }
 
     [Fact]
-    public void A_stripped_signature_line_is_refused()
+    public void A_stripped_signature_is_refused()
     {
         using var temp = new TempDir();
         (SampleBuild build, string publicKey) = SignedBuild(temp);
         using (build)
         {
             string manifestPath = Path.Combine(build.DataDirectory, TableManifest.DefaultFileName);
-            string[] lines = File.ReadAllLines(manifestPath);
-            File.WriteAllText(manifestPath, string.Join("\n", lines.Where(line => !line.StartsWith("sign "))) + "\n");
+            File.WriteAllText(manifestPath, TableManifest.Parse(File.ReadAllText(manifestPath)).SignedText);
             var exception = Assert.Throws<TableLoadException>(() => Mem.GameTables.Load(build.DataDirectory, new TableLoadOptions { PublicKey = publicKey }));
             Assert.Equal(TableLoadError.SignatureInvalid, exception.Error);
         }
@@ -490,7 +559,7 @@ public class WatcherTests
 
         // A manifest for a layout this code was not generated for, as when data is deployed ahead of the code.
         string manifestPath = Path.Combine(build.DataDirectory, TableManifest.DefaultFileName);
-        File.WriteAllText(manifestPath, File.ReadAllText(manifestPath).Replace("schema " + Mem.GameTables.SchemaHash, "schema " + new string('0', 64)));
+        File.WriteAllText(manifestPath, File.ReadAllText(manifestPath).Replace("\"schema\": \"" + Mem.GameTables.SchemaHash, "\"schema\": \"" + new string('0', 64)));
 
         Exception exception = await failed.Task.WaitAsync(Timeout);
         Assert.Equal(TableLoadError.SchemaMismatch, Assert.IsType<TableLoadException>(exception).Error);

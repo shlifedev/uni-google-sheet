@@ -6,7 +6,7 @@ using System.Text;
 
 namespace HolySheet
 {
-    /// <summary>One table line of a manifest.</summary>
+    /// <summary>One table of a manifest.</summary>
     public sealed class TableManifestEntry
     {
         public string Name { get; }
@@ -25,10 +25,21 @@ namespace HolySheet
         /// <summary>Hash of this table's layout. It only changes when the generated row class would change.</summary>
         public string Schema { get; }
 
-        /// <summary>Attributes this runtime does not know. Kept so newer tools can add metadata without breaking older clients.</summary>
+        /// <summary>
+        /// Members this runtime does not know. Kept so newer tools can add metadata without breaking older clients.
+        /// A string member gives its text; any other member gives its JSON.
+        /// </summary>
         public IReadOnlyDictionary<string, string> Extra { get; }
 
+        /// <summary>The same members as <see cref="Extra"/>, each as its minified JSON. This is what is written back and signed.</summary>
+        internal IReadOnlyDictionary<string, string> RawExtra { get; }
+
         public TableManifestEntry(string name, string file, int rows, long bytes, string hash, string schema, IReadOnlyDictionary<string, string>? extra = null)
+            : this(name, file, rows, bytes, hash, schema, Quote(extra), raw: true)
+        {
+        }
+
+        internal TableManifestEntry(string name, string file, int rows, long bytes, string hash, string schema, Dictionary<string, string>? rawExtra, bool raw)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             File = file ?? throw new ArgumentNullException(nameof(file));
@@ -36,7 +47,42 @@ namespace HolySheet
             Bytes = bytes;
             Hash = hash ?? throw new ArgumentNullException(nameof(hash));
             Schema = schema ?? throw new ArgumentNullException(nameof(schema));
-            Extra = extra ?? EmptyExtra;
+            if (rawExtra == null || rawExtra.Count == 0)
+            {
+                RawExtra = EmptyExtra;
+                Extra = EmptyExtra;
+                return;
+            }
+
+            var decoded = new Dictionary<string, string>(rawExtra.Count, StringComparer.Ordinal);
+            foreach (KeyValuePair<string, string> member in rawExtra)
+            {
+                if (Array.IndexOf(TableManifest.TableMembers, member.Key) >= 0)
+                {
+                    throw new ArgumentException("\"" + member.Key + "\" is a table member of its own and cannot be an extra one.", nameof(rawExtra));
+                }
+
+                decoded[member.Key] = ManifestJson.Describe(member.Value);
+            }
+
+            RawExtra = rawExtra;
+            Extra = decoded;
+        }
+
+        private static Dictionary<string, string>? Quote(IReadOnlyDictionary<string, string>? extra)
+        {
+            if (extra == null || extra.Count == 0)
+            {
+                return null;
+            }
+
+            var raw = new Dictionary<string, string>(extra.Count, StringComparer.Ordinal);
+            foreach (KeyValuePair<string, string> member in extra)
+            {
+                raw[member.Key] = ManifestJson.Quote(member.Value ?? throw new ArgumentException("An extra member has no value.", nameof(extra)));
+            }
+
+            return raw;
         }
 
         private static readonly IReadOnlyDictionary<string, string> EmptyExtra = new Dictionary<string, string>(0);
@@ -76,34 +122,47 @@ namespace HolySheet
     }
 
     /// <summary>
-    /// The list of data files in one build of the tables, written next to them by the tool.
-    /// It is plain text, one fact per line, so it diffs cleanly in version control:
+    /// The list of data files in one build of the tables, written next to them by the tool as JSON.
+    /// The tool writes it in one fixed form, one table per line, so it diffs cleanly in version control:
     /// <code>
-    /// holysheet-manifest 1
-    /// serializer memorypack
-    /// schema 9d92…                 hash of every table layout and enum; baked into the generated code
-    /// content 5c1e…                hash of every data file hash; identifies this exact build of the data
-    /// table Item file=Item.bytes rows=12 bytes=345 hash=… schema=…
-    /// sign rsa-sha256 …            optional; covers every line above it
+    /// {
+    ///   "holysheet": 1,
+    ///   "serializer": "memorypack",
+    ///   "schema": "9d92…",           hash of every table layout and enum; baked into the generated code
+    ///   "content": "5c1e…",          hash of every data file hash; identifies this exact build of the data
+    ///   "tool": "holysheet/2.0.0",
+    ///   "tables": [
+    ///     { "name": "Item", "file": "Item.bytes", "rows": 12, "bytes": 345, "hash": "…", "schema": "…" }
+    ///   ],
+    ///   "signature": { "algorithm": "rsa-sha256", "value": "…" }     optional
+    /// }
     /// </code>
-    /// Unknown keywords and unknown table attributes are preserved, not rejected.
+    /// The signature covers <see cref="SignedText"/>: the fixed form of everything except the signature, rebuilt from what was read.
+    /// Members this runtime does not know, at the top or in a table, are kept and written back, not rejected.
     /// </summary>
     public sealed class TableManifest
     {
         public const int FormatVersion = 1;
-        public const string DefaultFileName = "tables.manifest.txt";
+        public const string DefaultFileName = "tables.manifest.json";
         public const string DataExtension = ".bytes";
         public const string SignatureAlgorithm = "rsa-sha256";
 
-        private const string HeaderKeyword = "holysheet-manifest";
-        private const string SerializerKeyword = "serializer";
-        private const string SchemaKeyword = "schema";
-        private const string ContentKeyword = "content";
-        private const string TableKeyword = "table";
-        private const string SignKeyword = "sign";
+        private const string FormatMember = "holysheet";
+        private const string SerializerMember = "serializer";
+        private const string SchemaMember = "schema";
+        private const string ContentMember = "content";
+        private const string TablesMember = "tables";
+        private const string SignatureMember = "signature";
+
+        /// <summary>Top-level members with a meaning of their own. Anything else is a property.</summary>
+        internal static readonly string[] TopMembers = { FormatMember, SerializerMember, SchemaMember, ContentMember, TablesMember, SignatureMember };
+
+        /// <summary>Table members with a meaning of their own. Anything else is an extra.</summary>
+        internal static readonly string[] TableMembers = { "name", "file", "rows", "bytes", "hash", "schema" };
 
         private readonly List<TableManifestEntry> _tables;
         private readonly Dictionary<string, TableManifestEntry> _tablesByName;
+        private readonly Dictionary<string, string> _rawProperties;
         private readonly Dictionary<string, string> _properties;
 
         /// <summary>"memorypack" or "messagepack".</summary>
@@ -118,16 +177,24 @@ namespace HolySheet
         /// <summary>Tables in ordinal name order.</summary>
         public IReadOnlyList<TableManifestEntry> Tables => _tables;
 
-        /// <summary>Top-level lines this runtime has no dedicated property for, keyed by their keyword. For example "build".</summary>
+        /// <summary>
+        /// Top-level members this runtime has no dedicated property for, keyed by name. For example "build" and "tool".
+        /// A string member gives its text; any other member gives its JSON.
+        /// </summary>
         public IReadOnlyDictionary<string, string> Properties => _properties;
 
         /// <summary>Base64 signature, or null when the manifest is not signed.</summary>
         public string? Signature { get; }
 
-        /// <summary>The exact text the signature covers: every line before the sign line.</summary>
+        /// <summary>The exact text the signature covers: the manifest in its fixed form, without the signature member.</summary>
         public string SignedText { get; }
 
         public TableManifest(string serializer, string schema, IEnumerable<TableManifestEntry> tables, IEnumerable<KeyValuePair<string, string>>? properties = null, string? signature = null)
+            : this(serializer, schema, tables, QuoteProperties(properties), signature)
+        {
+        }
+
+        private TableManifest(string serializer, string schema, IEnumerable<TableManifestEntry> tables, Dictionary<string, string> rawProperties, string? signature)
         {
             if (string.IsNullOrEmpty(serializer))
             {
@@ -151,16 +218,24 @@ namespace HolySheet
             _tablesByName = new Dictionary<string, TableManifestEntry>(_tables.Count, StringComparer.Ordinal);
             for (int index = 0; index < _tables.Count; index++)
             {
+                if (_tablesByName.ContainsKey(_tables[index].Name))
+                {
+                    throw new ArgumentException("The table " + _tables[index].Name + " is listed twice.", nameof(tables));
+                }
+
                 _tablesByName.Add(_tables[index].Name, _tables[index]);
             }
 
-            _properties = new Dictionary<string, string>(StringComparer.Ordinal);
-            if (properties != null)
+            _rawProperties = rawProperties;
+            _properties = new Dictionary<string, string>(rawProperties.Count, StringComparer.Ordinal);
+            foreach (KeyValuePair<string, string> property in rawProperties)
             {
-                foreach (KeyValuePair<string, string> property in properties)
+                if (Array.IndexOf(TopMembers, property.Key) >= 0)
                 {
-                    _properties[property.Key] = property.Value;
+                    throw new ArgumentException("\"" + property.Key + "\" is a manifest member of its own and cannot be a property.", nameof(rawProperties));
                 }
+
+                _properties[property.Key] = ManifestJson.Describe(property.Value);
             }
 
             Content = ComputeContent(_tables);
@@ -175,12 +250,13 @@ namespace HolySheet
             return _tablesByName.TryGetValue(name, out TableManifestEntry? entry) ? entry : null;
         }
 
-        /// <summary>Returns the same manifest with a signature line attached.</summary>
+        /// <summary>Returns the same manifest with a signature attached.</summary>
         public TableManifest WithSignature(string signature)
         {
-            return new TableManifest(Serializer, Schema, _tables, _properties, signature);
+            return new TableManifest(Serializer, Schema, _tables, _rawProperties, signature);
         }
 
+        /// <summary>The manifest file: <see cref="SignedText"/>, with the signature as the last member when there is one.</summary>
         public string ToText()
         {
             if (Signature == null)
@@ -188,7 +264,15 @@ namespace HolySheet
                 return SignedText;
             }
 
-            return SignedText + SignKeyword + " " + SignatureAlgorithm + " " + Signature + "\n";
+            // SignedText ends with "\n}\n". The signature goes in front of the closing brace.
+            var builder = new StringBuilder(SignedText.Length + Signature.Length + 64);
+            builder.Append(SignedText, 0, SignedText.Length - 3);
+            builder.Append(",\n  ").Append('"').Append(SignatureMember).Append("\": { \"algorithm\": ");
+            ManifestJson.WriteString(builder, SignatureAlgorithm);
+            builder.Append(", \"value\": ");
+            ManifestJson.WriteString(builder, Signature);
+            builder.Append(" }\n}\n");
+            return builder.ToString();
         }
 
         /// <summary>Compares an older manifest (or null for "nothing installed") with a newer one.</summary>
@@ -248,87 +332,91 @@ namespace HolySheet
                 throw new ArgumentNullException(nameof(text));
             }
 
-            bool headerRead = false;
-            string? serializer = null;
-            string? schema = null;
-            string? content = null;
-            string? signature = null;
-            List<TableManifestEntry> tables = new List<TableManifestEntry>();
-            Dictionary<string, string> properties = new Dictionary<string, string>(StringComparer.Ordinal);
-
-            int position = 0;
-            int lineNumber = 0;
-            while (position < text.Length)
+            if (text.TrimStart('\uFEFF', ' ', '\t', '\r', '\n').StartsWith("holysheet-manifest", StringComparison.Ordinal))
             {
-                int lineEnd = text.IndexOf('\n', position);
-                if (lineEnd < 0)
-                {
-                    lineEnd = text.Length;
-                }
-
-                string line = text.Substring(position, lineEnd - position).Trim();
-                position = lineEnd + 1;
-                lineNumber++;
-                if (line.Length == 0)
-                {
-                    continue;
-                }
-
-                if (signature != null)
-                {
-                    throw Invalid("line " + lineNumber + " comes after the signature. Nothing may follow the sign line.");
-                }
-
-                int space = line.IndexOf(' ');
-                string keyword = space < 0 ? line : line.Substring(0, space);
-                string rest = space < 0 ? "" : line.Substring(space + 1).Trim();
-                if (!headerRead)
-                {
-                    if (keyword != HeaderKeyword || !int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out int version))
-                    {
-                        throw Invalid("the first line is '" + line + "', expected '" + HeaderKeyword + " " + FormatVersion + "'.");
-                    }
-
-                    if (version != FormatVersion)
-                    {
-                        throw Invalid("it is format version " + version + ", but this runtime reads version " + FormatVersion + ". Use the tool that matches this runtime.");
-                    }
-
-                    headerRead = true;
-                    continue;
-                }
-
-                switch (keyword)
-                {
-                    case SerializerKeyword:
-                        serializer = rest;
-                        break;
-                    case SchemaKeyword:
-                        schema = rest;
-                        break;
-                    case ContentKeyword:
-                        content = rest;
-                        break;
-                    case TableKeyword:
-                        tables.Add(ParseTable(rest, lineNumber));
-                        break;
-                    case SignKeyword:
-                        signature = ParseSignature(rest, lineNumber);
-                        break;
-                    default:
-                        properties[keyword] = rest;
-                        break;
-                }
+                throw Invalid("it is in the old text format (tables.manifest.txt). Build the data again with the tool that matches this runtime.");
             }
 
-            if (!headerRead)
+            if (text.Trim().Length == 0)
             {
                 throw Invalid("it is empty.");
             }
 
+            object? document;
+            try
+            {
+                document = ManifestJson.Parse(text);
+            }
+            catch (FormatException exception)
+            {
+                throw Invalid("it is not valid JSON: " + exception.Message);
+            }
+
+            if (!(document is ManifestJsonObject root))
+            {
+                throw Invalid("it is not a JSON object.");
+            }
+
+            object? version = null;
+            bool versionSeen = false;
+            string? serializer = null;
+            string? schema = null;
+            string? content = null;
+            string? signature = null;
+            List<TableManifestEntry>? tables = null;
+            var properties = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, object?> member in root.Members)
+            {
+                switch (member.Key)
+                {
+                    case FormatMember:
+                        version = member.Value;
+                        versionSeen = true;
+                        break;
+                    case SerializerMember:
+                        serializer = RequireString(member.Value, SerializerMember);
+                        break;
+                    case SchemaMember:
+                        schema = RequireString(member.Value, SchemaMember);
+                        break;
+                    case ContentMember:
+                        content = RequireString(member.Value, ContentMember);
+                        break;
+                    case TablesMember:
+                        tables = ParseTables(member.Value);
+                        break;
+                    case SignatureMember:
+                        signature = ParseSignature(member.Value);
+                        break;
+                    default:
+                        properties[member.Key] = ManifestJson.Minify(member.Value);
+                        break;
+                }
+            }
+
+            if (!versionSeen)
+            {
+                throw Invalid("it has no \"" + FormatMember + "\" member. Expected \"" + FormatMember + "\": " + FormatVersion + ".");
+            }
+
+            if (!(version is ManifestJsonNumber number) || !int.TryParse(number.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int formatVersion))
+            {
+                throw Invalid("\"" + FormatMember + "\" is " + ManifestJson.Minify(version) + ", expected a format version number.");
+            }
+
+            if (formatVersion != FormatVersion)
+            {
+                throw Invalid("it is format version " + formatVersion + ", but this runtime reads version " + FormatVersion + ". Use the tool that matches this runtime.");
+            }
+
             if (string.IsNullOrEmpty(serializer) || string.IsNullOrEmpty(schema))
             {
-                throw Invalid("the '" + SerializerKeyword + "' or '" + SchemaKeyword + "' line is missing.");
+                throw Invalid("the \"" + SerializerMember + "\" or \"" + SchemaMember + "\" member is missing.");
+            }
+
+            if (tables == null)
+            {
+                throw Invalid("the \"" + TablesMember + "\" member is missing.");
             }
 
             TableManifest manifest;
@@ -338,133 +426,223 @@ namespace HolySheet
             }
             catch (ArgumentException exception)
             {
-                throw Invalid("a table is listed twice (" + exception.Message + ")");
+                throw Invalid(exception.Message);
             }
 
-            // The content line is derived data. If it disagrees with the table lines, someone edited one and not the other.
+            // The content member is derived data. If it disagrees with the tables, someone edited one and not the other.
             if (content != null && content != manifest.Content)
             {
                 throw new TableLoadException(TableLoadError.HashMismatch,
-                    "The manifest's content hash does not match its table lines (manifest says " + content + ", tables give " + manifest.Content + "). The manifest was edited by hand or is corrupted.");
+                    "The manifest's content hash does not match its tables (manifest says " + content + ", tables give " + manifest.Content + "). The manifest was edited by hand or is corrupted.");
             }
 
             return manifest;
         }
 
-        private static TableManifestEntry ParseTable(string rest, int lineNumber)
+        private static List<TableManifestEntry> ParseTables(object? value)
         {
-            string[] parts = rest.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0)
+            if (!(value is List<object?> items))
             {
-                throw Invalid("line " + lineNumber + " names no table.");
+                throw Invalid("\"" + TablesMember + "\" is not an array.");
             }
 
-            string name = parts[0];
+            var tables = new List<TableManifestEntry>(items.Count);
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            for (int index = 0; index < items.Count; index++)
+            {
+                TableManifestEntry table = ParseTable(items[index], index);
+                if (!names.Add(table.Name))
+                {
+                    throw Invalid("the table " + table.Name + " is listed twice.");
+                }
+
+                tables.Add(table);
+            }
+
+            return tables;
+        }
+
+        private static TableManifestEntry ParseTable(object? value, int index)
+        {
+            string where = "table " + (index + 1);
+            if (!(value is ManifestJsonObject table))
+            {
+                throw Invalid(where + " is not an object.");
+            }
+
+            string? name = null;
             string? file = null;
             string? hash = null;
             string schema = "";
             int rows = -1;
             long bytes = -1;
             Dictionary<string, string>? extra = null;
-            for (int index = 1; index < parts.Length; index++)
+            foreach (KeyValuePair<string, object?> member in table.Members)
             {
-                int equals = parts[index].IndexOf('=');
-                if (equals <= 0)
+                switch (member.Key)
                 {
-                    throw Invalid("line " + lineNumber + " has '" + parts[index] + "', expected key=value.");
-                }
-
-                string key = parts[index].Substring(0, equals);
-                string value = parts[index].Substring(equals + 1);
-                switch (key)
-                {
+                    case "name":
+                        name = RequireString(member.Value, where + " name");
+                        where = "table " + name;
+                        break;
                     case "file":
-                        file = value;
+                        file = RequireString(member.Value, where + " file");
                         break;
                     case "hash":
-                        hash = value;
+                        hash = RequireString(member.Value, where + " hash");
                         break;
                     case "schema":
-                        schema = value;
+                        schema = RequireString(member.Value, where + " schema");
                         break;
                     case "rows":
-                        if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out rows))
+                        if (!(member.Value is ManifestJsonNumber rowsNumber) || !int.TryParse(rowsNumber.Text, NumberStyles.None, CultureInfo.InvariantCulture, out rows))
                         {
-                            throw Invalid("line " + lineNumber + " has rows=" + value + ", expected a number.");
+                            throw Invalid(where + " has rows " + ManifestJson.Minify(member.Value) + ", expected a whole number.");
                         }
 
                         break;
                     case "bytes":
-                        if (!long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out bytes))
+                        if (!(member.Value is ManifestJsonNumber bytesNumber) || !long.TryParse(bytesNumber.Text, NumberStyles.None, CultureInfo.InvariantCulture, out bytes))
                         {
-                            throw Invalid("line " + lineNumber + " has bytes=" + value + ", expected a number.");
+                            throw Invalid(where + " has bytes " + ManifestJson.Minify(member.Value) + ", expected a whole number.");
                         }
 
                         break;
                     default:
                         extra ??= new Dictionary<string, string>(StringComparer.Ordinal);
-                        extra[key] = value;
+                        extra[member.Key] = ManifestJson.Minify(member.Value);
                         break;
                 }
             }
 
+            if (string.IsNullOrEmpty(name))
+            {
+                throw Invalid(where + " has no name.");
+            }
+
             if (hash == null || rows < 0)
             {
-                throw Invalid("line " + lineNumber + " (table " + name + ") is missing hash= or rows=.");
+                throw Invalid(where + " is missing \"hash\" or \"rows\".");
             }
 
-            return new TableManifestEntry(name, file ?? name + DataExtension, rows, bytes, hash, schema, extra);
+            return new TableManifestEntry(name!, file ?? name + DataExtension, rows, bytes, hash, schema, extra, raw: true);
         }
 
-        private static string ParseSignature(string rest, int lineNumber)
+        private static string ParseSignature(object? value)
         {
-            int space = rest.IndexOf(' ');
-            if (space <= 0 || rest.Substring(0, space) != SignatureAlgorithm)
+            if (!(value is ManifestJsonObject signature))
             {
-                throw Invalid("line " + lineNumber + " uses a signature algorithm this runtime does not know. Expected '" + SignatureAlgorithm + "'.");
+                throw Invalid("\"" + SignatureMember + "\" is not an object.");
             }
 
-            return rest.Substring(space + 1).Trim();
+            string? algorithm = null;
+            string? text = null;
+            foreach (KeyValuePair<string, object?> member in signature.Members)
+            {
+                if (member.Key == "algorithm")
+                {
+                    algorithm = RequireString(member.Value, "signature algorithm");
+                }
+                else if (member.Key == "value")
+                {
+                    text = RequireString(member.Value, "signature value");
+                }
+            }
+
+            if (algorithm != SignatureAlgorithm)
+            {
+                throw Invalid("the signature uses an algorithm this runtime does not know (" + (algorithm ?? "none") + "). Expected '" + SignatureAlgorithm + "'.");
+            }
+
+            if (string.IsNullOrEmpty(text))
+            {
+                throw Invalid("the signature has no value.");
+            }
+
+            return text!;
         }
 
+        private static string RequireString(object? value, string what)
+        {
+            if (!(value is string text))
+            {
+                throw Invalid(what + " is " + ManifestJson.Minify(value) + ", expected a string.");
+            }
+
+            return text;
+        }
+
+        private static Dictionary<string, string> QuoteProperties(IEnumerable<KeyValuePair<string, string>>? properties)
+        {
+            var raw = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (properties != null)
+            {
+                foreach (KeyValuePair<string, string> property in properties)
+                {
+                    raw[property.Key] = ManifestJson.Quote(property.Value ?? throw new ArgumentException("The property " + property.Key + " has no value.", nameof(properties)));
+                }
+            }
+
+            return raw;
+        }
+
+        // The tool's ManifestWriter writes this same text byte for byte; the tests compare the two.
         private string BuildSignedText()
         {
-            StringBuilder builder = new StringBuilder(256 + _tables.Count * 160);
-            builder.Append(HeaderKeyword).Append(' ').Append(FormatVersion.ToString(CultureInfo.InvariantCulture)).Append('\n');
-            builder.Append(SerializerKeyword).Append(' ').Append(Serializer).Append('\n');
-            builder.Append(SchemaKeyword).Append(' ').Append(Schema).Append('\n');
-            builder.Append(ContentKeyword).Append(' ').Append(Content).Append('\n');
+            var builder = new StringBuilder(256 + _tables.Count * 220);
+            builder.Append("{\n");
+            builder.Append("  \"").Append(FormatMember).Append("\": ").Append(FormatVersion.ToString(CultureInfo.InvariantCulture)).Append(",\n");
+            AppendMember(builder, SerializerMember, ManifestJson.Quote(Serializer));
+            AppendMember(builder, SchemaMember, ManifestJson.Quote(Schema));
+            AppendMember(builder, ContentMember, ManifestJson.Quote(Content));
 
-            List<string> keys = new List<string>(_properties.Keys);
+            var keys = new List<string>(_rawProperties.Keys);
             keys.Sort(StringComparer.Ordinal);
             for (int index = 0; index < keys.Count; index++)
             {
-                builder.Append(keys[index]).Append(' ').Append(_properties[keys[index]]).Append('\n');
+                AppendMember(builder, keys[index], _rawProperties[keys[index]]);
             }
 
+            builder.Append("  \"").Append(TablesMember).Append("\": [");
             for (int index = 0; index < _tables.Count; index++)
             {
                 TableManifestEntry table = _tables[index];
-                builder.Append(TableKeyword).Append(' ').Append(table.Name)
-                    .Append(" file=").Append(table.File)
-                    .Append(" rows=").Append(table.Rows.ToString(CultureInfo.InvariantCulture))
-                    .Append(" bytes=").Append(table.Bytes.ToString(CultureInfo.InvariantCulture))
-                    .Append(" hash=").Append(table.Hash)
-                    .Append(" schema=").Append(table.Schema);
-                if (table.Extra.Count > 0)
+                builder.Append(index == 0 ? "\n" : ",\n");
+                builder.Append("    { \"name\": ");
+                ManifestJson.WriteString(builder, table.Name);
+                builder.Append(", \"file\": ");
+                ManifestJson.WriteString(builder, table.File);
+                builder.Append(", \"rows\": ").Append(table.Rows.ToString(CultureInfo.InvariantCulture));
+                builder.Append(", \"bytes\": ").Append(table.Bytes.ToString(CultureInfo.InvariantCulture));
+                builder.Append(", \"hash\": ");
+                ManifestJson.WriteString(builder, table.Hash);
+                builder.Append(", \"schema\": ");
+                ManifestJson.WriteString(builder, table.Schema);
+                if (table.RawExtra.Count > 0)
                 {
-                    List<string> extraKeys = new List<string>(table.Extra.Keys);
+                    var extraKeys = new List<string>(table.RawExtra.Keys);
                     extraKeys.Sort(StringComparer.Ordinal);
                     for (int extraIndex = 0; extraIndex < extraKeys.Count; extraIndex++)
                     {
-                        builder.Append(' ').Append(extraKeys[extraIndex]).Append('=').Append(table.Extra[extraKeys[extraIndex]]);
+                        builder.Append(", ");
+                        ManifestJson.WriteString(builder, extraKeys[extraIndex]);
+                        builder.Append(": ").Append(table.RawExtra[extraKeys[extraIndex]]);
                     }
                 }
 
-                builder.Append('\n');
+                builder.Append(" }");
             }
 
+            builder.Append(_tables.Count == 0 ? "]\n" : "\n  ]\n");
+            builder.Append("}\n");
             return builder.ToString();
+        }
+
+        private static void AppendMember(StringBuilder builder, string name, string rawValue)
+        {
+            builder.Append("  ");
+            ManifestJson.WriteString(builder, name);
+            builder.Append(": ").Append(rawValue).Append(",\n");
         }
 
         private static string ComputeContent(List<TableManifestEntry> tables)

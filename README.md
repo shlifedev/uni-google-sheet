@@ -187,7 +187,7 @@ Together with `holysheet watch` (or *Auto build* in the editor window) this give
 
 ## Tamper detection
 
-Every data file is listed in `tables.manifest.txt` with its size and SHA-256, and checked on load. A modified,
+Every data file is listed in `tables.manifest.json` with its size and SHA-256, and checked on load. A modified,
 truncated or swapped file raises `TableLoadException` with `TableLoadError.HashMismatch`; data built for different
 generated code raises `SchemaMismatch` and names the table. Nothing is partially applied.
 
@@ -204,23 +204,34 @@ verify with the public key and refuse an unsigned or wrongly signed manifest (`S
 
 ## Metadata for patching
 
-HolySheet does not ship a patch system; it leaves what one needs.
+HolySheet does not ship a patch system; it leaves what one needs. The manifest is plain JSON, so any tool can read it:
 
-```
-holysheet-manifest 1
-serializer memorypack
-schema 9d92…                    every table layout and enum; equals GameTables.SchemaHash
-content 5c1e…                   every data file hash; identifies this exact build of the data
-build 1.4.0 (a1b2c3d)           your label: holysheet build --label "…"
-table Item file=Item.bytes rows=6 bytes=412 hash=… schema=…
-sign rsa-sha256 …
+```json
+{
+  "holysheet": 1,
+  "serializer": "memorypack",
+  "schema": "9d92…",
+  "content": "5c1e…",
+  "build": "1.4.0 (a1b2c3d)",
+  "tool": "holysheet/2.0.0",
+  "tables": [
+    { "name": "Item", "file": "Item.bytes", "rows": 6, "bytes": 412, "hash": "…", "schema": "…" }
+  ],
+  "signature": { "algorithm": "rsa-sha256", "value": "…" }
+}
 ```
 
+- `schema` covers every table layout and enum and equals `GameTables.SchemaHash`. `content` covers every data file
+  hash and identifies this exact build of the data. `build` is your label (`holysheet build --label "…"`).
+- The tool writes one table per line, so the file diffs cleanly in version control.
+- The signature covers everything except itself, in the form the tool writes. Reformatting the file does not break it;
+  changing any value does.
 - `TableManifest.Diff(installed, latest)` (and `holysheet diff old new --json`) lists the tables added, changed and removed,
   the files to download with their sizes and hashes, and whether the layout changed (`RequiresNewCode`): if it did
   not, a client can load the new data with the code it already has.
 - Each table has its own `schema` hash, so a patch can tell "new data" from "needs a new client" per table.
-- Unknown lines and attributes are preserved, so a patch tool can add its own without breaking older clients.
+- Unknown members, at the top or in a table, are preserved, so a patch tool can add its own without breaking older
+  clients.
 - `tables.schema.json` describes every column and enum for tools that have no generated code.
 - `TableLoader.ReadManifest` reads only the manifest, to decide whether anything needs fetching.
 

@@ -105,7 +105,7 @@ public sealed class PartialBuildTests
 
         project.Build();
         // Someone else's build arrives, for example through a pull.
-        File.AppendAllText(Path.Combine(project.Data, "tables.manifest.txt"), "\n");
+        File.AppendAllText(Path.Combine(project.Data, "tables.manifest.json"), "\n");
         BuildResult stale = project.Build("Sheets/Item").Result;
         Assert.False(stale.Success);
         Assert.Contains("not written by the last build on this machine", Sheets.Errors(stale));

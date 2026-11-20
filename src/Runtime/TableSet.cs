@@ -12,7 +12,7 @@ namespace HolySheet
         /// <summary>Number of rows.</summary>
         int Count { get; }
 
-        /// <summary>The manifest line this table was loaded from. Its hash identifies the exact data in memory.</summary>
+        /// <summary>The manifest entry this table was loaded from. Its hash identifies the exact data in memory.</summary>
         TableManifestEntry Entry { get; }
     }
 

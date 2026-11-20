@@ -50,7 +50,7 @@ public class CommitTests
     public void The_manifest_is_written_last()
     {
         using var build = new SampleBuild("memorypack");
-        Assert.Equal("tables.manifest.txt", build.Report.Written[^1]);
+        Assert.Equal("tables.manifest.json", build.Report.Written[^1]);
     }
 
     [Fact]
@@ -96,14 +96,14 @@ public class CommitTests
         File.WriteAllText(Path.Combine(sheets, "Item.csv"), "Key<int>,int\nId,Price\n,\n1,10\n");
         var config = new HolySheetConfig { BaseDirectory = temp.Path, Sources = { new SourceConfig { Type = SourceType.Csv, Path = "Sheets" } } };
         LoaderTests.Build(config);
-        string manifest = File.ReadAllText(Path.Combine(config.Resolve(config.Output.Data), "tables.manifest.txt"));
+        string manifest = File.ReadAllText(Path.Combine(config.Resolve(config.Output.Data), "tables.manifest.json"));
 
         File.WriteAllText(Path.Combine(sheets, "Item.csv"), "Key<int>,int\nId,Price\n,\n1,ten\n");
         BuildResult broken = TableBuild.Run(config);
         Assert.False(broken.Success);
         Assert.Null(broken.Output);
         Assert.Throws<InvalidOperationException>(() => TableBuild.Commit(config, broken));
-        Assert.Equal(manifest, File.ReadAllText(Path.Combine(config.Resolve(config.Output.Data), "tables.manifest.txt")));
+        Assert.Equal(manifest, File.ReadAllText(Path.Combine(config.Resolve(config.Output.Data), "tables.manifest.json")));
     }
 
     [Fact]
@@ -114,11 +114,41 @@ public class CommitTests
         File.WriteAllText(victim, "keep me");
         string data = temp.Combine("data");
         Directory.CreateDirectory(data);
+        File.WriteAllText(Path.Combine(data, "tables.manifest.json"),
+            "{ \"holysheet\": 1, \"serializer\": \"memorypack\", \"schema\": \"s\", \"tables\": [ { \"name\": \"Evil\", \"file\": \"../victim.txt\", \"rows\": 0, \"hash\": \"h\" } ] }");
+        // The old text manifest is read once to clean up after it, with the same rule.
         File.WriteAllText(Path.Combine(data, "tables.manifest.txt"), "holysheet-manifest 1\nserializer memorypack\nschema s\ntable Evil file=../victim.txt rows=0 bytes=0 hash=h schema=s\n");
 
-        var output = new GeneratedOutput { ManifestText = "holysheet-manifest 1\nserializer memorypack\nschema s\n" };
+        var output = new GeneratedOutput { ManifestText = "{ \"holysheet\": 1, \"serializer\": \"memorypack\", \"schema\": \"s\", \"tables\": [] }\n" };
         OutputCommitter.Commit(output, temp.Combine("code"), data);
         Assert.True(File.Exists(victim));
+    }
+
+    [Fact]
+    public void A_build_removes_the_old_text_manifest_and_the_files_only_it_listed()
+    {
+        using var temp = new TempDir();
+        string data = temp.Combine("data");
+        Directory.CreateDirectory(data);
+        File.WriteAllBytes(Path.Combine(data, "Old.bytes"), [1, 2, 3]);
+        File.WriteAllBytes(Path.Combine(data, "Kept.bytes"), [1]);
+        File.WriteAllText(Path.Combine(data, "tables.manifest.txt"),
+            "holysheet-manifest 1\nserializer memorypack\nschema s\ntable Kept file=Kept.bytes rows=0 bytes=1 hash=h schema=s\ntable Old file=Old.bytes rows=0 bytes=3 hash=h schema=s\n");
+        // A file of the same name that this tool did not write is someone else's.
+        string other = temp.Combine("other");
+        Directory.CreateDirectory(other);
+        File.WriteAllText(Path.Combine(other, "tables.manifest.txt"), "my notes\n");
+
+        var output = new GeneratedOutput { ManifestText = "{ \"holysheet\": 1, \"serializer\": \"memorypack\", \"schema\": \"s\", \"tables\": [] }\n" };
+        output.DataFiles["Kept.bytes"] = [1];
+        OutputCommitter.Commit(output, temp.Combine("code"), data);
+        Assert.False(File.Exists(Path.Combine(data, "tables.manifest.txt")));
+        Assert.False(File.Exists(Path.Combine(data, "Old.bytes")));
+        Assert.True(File.Exists(Path.Combine(data, "Kept.bytes")));
+        Assert.True(File.Exists(Path.Combine(data, "tables.manifest.json")));
+
+        OutputCommitter.Commit(output, temp.Combine("code"), other);
+        Assert.Equal("my notes\n", File.ReadAllText(Path.Combine(other, "tables.manifest.txt")));
     }
 
     [Fact]
@@ -525,7 +555,7 @@ public class CliTests
         (exitCode, output, _) = Run(temp.Path, "build");
         Assert.Equal(0, exitCode);
         Assert.Contains("built: 3 tables, 6 rows, 3 enums", output);
-        Assert.True(File.Exists(temp.Combine("Generated", "Data", "tables.manifest.txt")));
+        Assert.True(File.Exists(temp.Combine("Generated", "Data", "tables.manifest.json")));
 
         (exitCode, output, _) = Run(temp.Path, "build");
         Assert.Equal(0, exitCode);
@@ -544,7 +574,7 @@ public class CliTests
 
         // Keep the first build, change a price, build again and compare the two.
         Directory.CreateDirectory(temp.Combine("v1"));
-        File.Copy(temp.Combine("Generated", "Data", "tables.manifest.txt"), temp.Combine("v1", "tables.manifest.txt"));
+        File.Copy(temp.Combine("Generated", "Data", "tables.manifest.json"), temp.Combine("v1", "tables.manifest.json"));
         string itemPath = temp.Combine("Sheets", "Item.csv");
         File.WriteAllText(itemPath, File.ReadAllText(itemPath).Replace("Tradable,100,", "Tradable,120,"));
         Assert.Equal(0, Run(temp.Path, "build", "--label", "v2").ExitCode);
@@ -596,7 +626,7 @@ public class CliTests
         Assert.Equal(3, Run(temp.Path, "keygen").ExitCode);      // refuses to replace a key without --force
 
         Assert.Equal(0, Run(temp.Path, "build").ExitCode);
-        Assert.Contains("sign rsa-sha256 ", File.ReadAllText(temp.Combine("Generated", "Data", "tables.manifest.txt")));
+        Assert.Contains("\"signature\": { \"algorithm\": \"rsa-sha256\", \"value\": ", File.ReadAllText(temp.Combine("Generated", "Data", "tables.manifest.json")));
         (exitCode, output, _) = Run(temp.Path, "verify", "Generated/Data");
         Assert.Equal(0, exitCode);
         Assert.Contains("signature: valid", output);

@@ -125,7 +125,7 @@ namespace HolySheet.Dev.Tests
                 CollectionAssert.AreEqual(File.ReadAllBytes(Path.Combine(DataDirectory, file.Key)), file.Value, file.Key);
             }
 
-            Assert.AreEqual(File.ReadAllText(Path.Combine(DataDirectory, "tables.manifest.txt")), result.Output.ManifestText);
+            Assert.AreEqual(File.ReadAllText(Path.Combine(DataDirectory, "tables.manifest.json")), result.Output.ManifestText);
             Assert.AreEqual(DemoTables.SchemaHash, result.Output.SchemaHash);
         }
 
@@ -280,11 +280,11 @@ namespace HolySheet.Dev.Tests
 
             var options = new TableLoadOptions { PublicKey = publicKey };
             Assert.AreEqual(44, DemoTables.Load(data, options).Item.Count);
-            Assert.IsTrue(TableSignature.Verify(TableManifest.Parse(File.ReadAllText(Path.Combine(data, "tables.manifest.txt"))), publicKey));
+            Assert.IsTrue(TableSignature.Verify(TableManifest.Parse(File.ReadAllText(Path.Combine(data, "tables.manifest.json"))), publicKey));
 
-            // Any edit to the manifest, even to a line the loader does not otherwise use, breaks the signature.
-            string manifestPath = Path.Combine(data, "tables.manifest.txt");
-            File.WriteAllText(manifestPath, File.ReadAllText(manifestPath).Replace("tool holysheet/", "tool xyz/"));
+            // Any edit to the manifest, even to a member the loader does not otherwise use, breaks the signature.
+            string manifestPath = Path.Combine(data, "tables.manifest.json");
+            File.WriteAllText(manifestPath, File.ReadAllText(manifestPath).Replace("\"tool\": \"holysheet/", "\"tool\": \"xyz/"));
             TableLoadException exception = Assert.Throws<TableLoadException>(() => DemoTables.Load(data, options));
             Assert.AreEqual(TableLoadError.SignatureInvalid, exception.Error);
         }

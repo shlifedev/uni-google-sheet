@@ -107,7 +107,7 @@ namespace HolySheet
 
     /// <summary>
     /// Reads table data from a Resources folder. Each file is looked up as a TextAsset by its name without the last extension:
-    /// "Item.bytes" is <c>Resources.Load("folder/Item")</c> and "tables.manifest.txt" is <c>Resources.Load("folder/tables.manifest")</c>.
+    /// "Item.bytes" is <c>Resources.Load("folder/Item")</c> and "tables.manifest.json" is <c>Resources.Load("folder/tables.manifest")</c>.
     /// Must be used on the main thread, so it cannot be combined with <see cref="TableLoadOptions.Parallel"/>.
     /// </summary>
     public sealed class ResourcesTableSource : TableSource

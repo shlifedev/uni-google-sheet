@@ -24,7 +24,7 @@ namespace Sample.MessagePackData
 
         public const string Serializer = "messagepack";
 
-        public const string ManifestFileName = "tables.manifest.txt";
+        public const string ManifestFileName = "tables.manifest.json";
 
         /// <summary>Public key the manifest signature is checked against, or null when the tables are not signed.</summary>
         public const string? PublicKey = null;
