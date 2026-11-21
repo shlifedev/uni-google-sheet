@@ -6,3 +6,4 @@ using System.Runtime.CompilerServices;
 // and Unity would otherwise version this assembly as 0.0.0.0.
 [assembly: AssemblyVersion("2.0.0.0")]
 [assembly: InternalsVisibleTo("HolySheet.Tests")]
+[assembly: InternalsVisibleTo("HolySheet.Tooling")]

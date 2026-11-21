@@ -344,7 +344,7 @@ namespace HolySheet.Core.Output
     /// Puts a build's output on disk.
     /// <list type="bullet">
     /// <item>A file whose content is already right is not touched, so nothing recompiles or shows up in version control for no reason.</item>
-    /// <item>Only files this tool made are overwritten or deleted: .g.cs files that carry its marker, the data files the previous manifest lists, and the manifest. Anything else in the folders is left alone.</item>
+    /// <item>Before writing, checks ownership of every existing destination using the generated code marker, the previous manifest and schema, or the CSV list.</item>
     /// <item>The manifest is written last and by rename, so a reader that sees a manifest always finds the data files it lists.</item>
     /// <item>If writing fails part way, the files already changed are put back.</item>
     /// </list>
@@ -360,200 +360,112 @@ namespace HolySheet.Core.Output
 
         public static CommitReport Commit(GeneratedOutput output, string codeDirectory, string dataDirectory, string? csvDirectory = null)
         {
-            var report = new CommitReport();
-            var changes = new List<Change>();
+            var files = new FileChangeSet("HolySheet cannot identify it as its own output. Move the file or choose another output path.");
 
-            var keptCode = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var keptCode = new HashSet<string>(StringComparer.Ordinal);
             foreach (KeyValuePair<string, string> file in output.CodeFiles)
             {
                 keptCode.Add(file.Key);
-                PlanWrite(changes, report, Path.Combine(codeDirectory, file.Key), Utf8.GetBytes(file.Value), file.Key);
+                string path = Path.Combine(codeDirectory, file.Key);
+                files.PlanWrite(path, Utf8.GetBytes(file.Value), file.Key, canReplace: File.Exists(path) && IsGenerated(path));
             }
 
             if (Directory.Exists(codeDirectory))
             {
                 foreach (string path in Directory.GetFiles(codeDirectory, "*.g.cs", SearchOption.TopDirectoryOnly))
                 {
-                    if (!keptCode.Contains(Path.GetFileName(path)) && IsGenerated(path))
+                    if (!ListsFile(keptCode, codeDirectory, Path.GetFileName(path)) && IsGenerated(path))
                     {
-                        PlanDelete(changes, path, Path.GetFileName(path));
+                        files.PlanDelete(path, Path.GetFileName(path));
                     }
                 }
             }
 
-            var keptData = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { output.ManifestFileName };
-            foreach (KeyValuePair<string, byte[]> file in output.DataFiles)
-            {
-                keptData.Add(file.Key);
-                PlanWrite(changes, report, Path.Combine(dataDirectory, file.Key), file.Value, file.Key);
-            }
-
-            // Data files of tables that no longer exist are the ones the previous manifest lists and this build does not produce.
             string manifestPath = Path.Combine(dataDirectory, output.ManifestFileName);
-            List<string> previous = ReadPreviousDataFiles(manifestPath);
+            List<string>? manifestFiles = ReadPreviousDataFiles(manifestPath) ?? ReadLegacyDataFiles(manifestPath);
+            var previous = new HashSet<string>(manifestFiles ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
 
             // A folder last built when the manifest was text: what it lists counts as the previous build, and the old manifest goes.
             string legacyPath = Path.Combine(dataDirectory, LegacyManifestFileName);
             List<string>? legacy = string.Equals(output.ManifestFileName, LegacyManifestFileName, StringComparison.OrdinalIgnoreCase) ? null : ReadLegacyDataFiles(legacyPath);
             if (legacy != null)
             {
-                previous.AddRange(legacy);
+                previous.UnionWith(legacy);
             }
 
-            foreach (string stale in previous.Distinct(StringComparer.OrdinalIgnoreCase))
+            var keptData = new HashSet<string>(StringComparer.Ordinal) { output.ManifestFileName };
+            foreach (KeyValuePair<string, byte[]> file in output.DataFiles)
             {
-                if (!keptData.Contains(stale) && File.Exists(Path.Combine(dataDirectory, stale)))
+                keptData.Add(file.Key);
+                string path = Path.Combine(dataDirectory, file.Key);
+                bool owned = file.Key == SchemaJson.FileName
+                    ? (manifestFiles != null || legacy != null) && IsGeneratedSchema(path)
+                    : ListsFile(previous, dataDirectory, file.Key);
+                files.PlanWrite(path, file.Value, file.Key, canReplace: owned);
+            }
+
+            foreach (string stale in previous)
+            {
+                if (File.Exists(Path.Combine(dataDirectory, stale)) && !ListsFile(keptData, dataDirectory, stale))
                 {
-                    PlanDelete(changes, Path.Combine(dataDirectory, stale), stale);
+                    files.PlanDelete(Path.Combine(dataDirectory, stale), stale);
                 }
             }
 
             if (legacy != null)
             {
-                PlanDelete(changes, legacyPath, LegacyManifestFileName);
+                files.PlanDelete(legacyPath, LegacyManifestFileName);
             }
 
             if (csvDirectory != null)
             {
-                var keptCsv = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                // CSV files carry no marker, so the folder records the ones HolySheet may replace or remove.
+                string listPath = Path.Combine(csvDirectory, CsvListFileName);
+                HashSet<string>? previousCsv = ReadCsvList(listPath);
+                var keptCsv = new HashSet<string>(StringComparer.Ordinal);
                 foreach (KeyValuePair<string, string> file in output.CsvFiles)
                 {
                     keptCsv.Add(file.Key);
-                    PlanWrite(changes, report, Path.Combine(csvDirectory, file.Key), Utf8.GetBytes(file.Value), file.Key);
+                    files.PlanWrite(Path.Combine(csvDirectory, file.Key), Utf8.GetBytes(file.Value), file.Key, canReplace: ListsFile(previousCsv, csvDirectory, file.Key));
                 }
 
-                // CSV files carry no marker, so the folder keeps a list of the ones this tool wrote. Only those are removed
-                // when their table goes away; any other CSV in the folder, such as sheets people keep there, is left alone.
-                string listPath = Path.Combine(csvDirectory, CsvListFileName);
-                foreach (string stale in ReadCsvList(listPath))
+                foreach (string stale in previousCsv ?? Enumerable.Empty<string>())
                 {
-                    if (!keptCsv.Contains(stale) && File.Exists(Path.Combine(csvDirectory, stale)))
+                    if (File.Exists(Path.Combine(csvDirectory, stale)) && !ListsFile(keptCsv, csvDirectory, stale))
                     {
-                        PlanDelete(changes, Path.Combine(csvDirectory, stale), stale);
+                        files.PlanDelete(Path.Combine(csvDirectory, stale), stale);
                     }
                 }
 
-                PlanWrite(changes, report, listPath, Utf8.GetBytes(WriteCsvList(keptCsv)), CsvListFileName);
+                files.PlanWrite(listPath, Utf8.GetBytes(WriteCsvList(keptCsv)), CsvListFileName, canReplace: previousCsv != null);
             }
 
             // The manifest goes last: it is the signal that a complete build is in place.
-            PlanWrite(changes, report, manifestPath, Utf8.GetBytes(output.ManifestText), output.ManifestFileName);
-            if (changes.Count == 0)
-            {
-                return report;
-            }
-
-            int applied = 0;
-            try
-            {
-                foreach (Change change in changes)
-                {
-                    change.Original = File.Exists(change.Path) ? File.ReadAllBytes(change.Path) : null;
-                    applied++;
-                    if (change.Content == null)
-                    {
-                        File.Delete(change.Path);
-                        // Unity keeps a .meta file beside every asset; a deleted asset's .meta would otherwise linger and warn.
-                        if (File.Exists(change.Path + ".meta"))
-                        {
-                            change.OriginalMeta = File.ReadAllBytes(change.Path + ".meta");
-                            File.Delete(change.Path + ".meta");
-                        }
-
-                        report.Deleted.Add(change.Name);
-                    }
-                    else
-                    {
-                        Directory.CreateDirectory(Path.GetDirectoryName(change.Path)!);
-                        WriteAtomically(change.Path, change.Content);
-                        report.Written.Add(change.Name);
-                    }
-                }
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                for (int index = applied - 1; index >= 0; index--)
-                {
-                    Change change = changes[index];
-                    try
-                    {
-                        if (change.Original == null)
-                        {
-                            File.Delete(change.Path);
-                        }
-                        else
-                        {
-                            File.WriteAllBytes(change.Path, change.Original);
-                        }
-
-                        if (change.OriginalMeta != null)
-                        {
-                            File.WriteAllBytes(change.Path + ".meta", change.OriginalMeta);
-                        }
-                    }
-                    catch (Exception rollback) when (rollback is IOException or UnauthorizedAccessException)
-                    {
-                        // Keep restoring the rest; the original failure is what gets reported.
-                    }
-                }
-
-                throw new IOException($"The output could not be written ({exception.Message}). The files already changed were restored.", exception);
-            }
-
-            return report;
+            files.PlanWrite(manifestPath, Utf8.GetBytes(output.ManifestText), output.ManifestFileName, canReplace: manifestFiles != null);
+            return files.Apply();
         }
 
-        private static void PlanWrite(List<Change> changes, CommitReport report, string path, byte[] content, string name)
+        private static bool ListsFile(HashSet<string>? names, string directory, string name)
         {
-            if (File.Exists(path) && File.ReadAllBytes(path).AsSpan().SequenceEqual(content))
+            if (names == null)
             {
-                report.Unchanged++;
-                return;
+                return false;
             }
 
-            changes.Add(new Change(path, name, content));
-        }
-
-        private static void PlanDelete(List<Change> changes, string path, string name)
-        {
-            changes.Add(new Change(path, name, null));
-        }
-
-        // Write to a temporary file in the same folder, then rename over the target: a reader sees the old file or the new one, never half of one.
-        // The temporary name is unique, so two writers can never take each other's temporary file.
-        private static void WriteAtomically(string path, byte[] content)
-        {
-            string temporary = path + "." + Guid.NewGuid().ToString("N").Substring(0, 12) + ".holysheet-tmp";
-            File.WriteAllBytes(temporary, content);
-            try
+            if (names.Contains(name))
             {
-                if (File.Exists(path))
-                {
-                    try
-                    {
-                        File.Replace(temporary, path, null);
-                        return;
-                    }
-                    catch (Exception exception) when (exception is PlatformNotSupportedException or IOException)
-                    {
-                        // Some file systems cannot replace in one step. Fall back to delete and rename;
-                        // readers that land in the gap retry (the table watcher does).
-                        if (!File.Exists(temporary))
-                        {
-                            throw;
-                        }
-
-                        File.Delete(path);
-                    }
-                }
-
-                File.Move(temporary, path);
+                return true;
             }
-            catch
+
+            // A case-only table rename can address the same file. Require both spellings to resolve
+            // and only one directory entry, so a separate user file on a case-sensitive volume stays safe.
+            if (!File.Exists(Path.Combine(directory, name)) || !names.Any(other =>
+                string.Equals(other, name, StringComparison.OrdinalIgnoreCase) && File.Exists(Path.Combine(directory, other))))
             {
-                File.Delete(temporary);
-                throw;
+                return false;
             }
+
+            return Directory.EnumerateFiles(directory).Count(path => string.Equals(Path.GetFileName(path), name, StringComparison.OrdinalIgnoreCase)) == 1;
         }
 
         private static bool IsGenerated(string path)
@@ -589,58 +501,70 @@ namespace HolySheet.Core.Output
             return text.ToString();
         }
 
-        private static List<string> ReadCsvList(string path)
+        private static HashSet<string>? ReadCsvList(string path)
         {
-            var files = new List<string>();
-            try
+            if (!File.Exists(path))
             {
-                if (!File.Exists(path))
-                {
-                    return files;
-                }
-
-                string[] lines = File.ReadAllText(path, Utf8).Split('\n');
-                if (lines.Length == 0 || lines[0].TrimEnd('\r') != CsvListHeader)
-                {
-                    return files;
-                }
-
-                foreach (string raw in lines.Skip(1))
-                {
-                    string file = raw.TrimEnd('\r');
-                    // Only plain .csv names in this folder: a hand-edited list must never make the tool delete anything else.
-                    if (file.Length > 0 && !file.StartsWith("#", StringComparison.Ordinal) && file == Path.GetFileName(file)
-                        && file.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
-                    {
-                        files.Add(file);
-                    }
-                }
+                return null;
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+
+            string[] lines = File.ReadAllLines(path, Utf8);
+            if (lines.Length == 0 || lines[0] != CsvListHeader)
             {
+                return null;
+            }
+
+            var files = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string file in lines.Skip(1))
+            {
+                // Only plain .csv names in this folder: a hand-edited list must never make the tool delete anything else.
+                if (!file.StartsWith("#", StringComparison.Ordinal) && file == Path.GetFileName(file)
+                    && file.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                {
+                    files.Add(file);
+                }
             }
 
             return files;
         }
 
-        private static List<string> ReadPreviousDataFiles(string manifestPath)
+        private static JsonObject? ReadJsonObject(string path)
         {
-            var files = new List<string>();
-            if (!File.Exists(manifestPath))
+            if (!File.Exists(path))
             {
-                return files;
+                return null;
             }
 
             try
             {
-                IReadOnlyList<JsonValue>? tables = JsonValue.Parse(File.ReadAllText(manifestPath)).AsObject?.GetArray("tables");
-                foreach (JsonValue table in tables ?? Array.Empty<JsonValue>())
-                {
-                    AddPlainFileName(files, table.AsObject?.GetString("file"));
-                }
+                return JsonValue.Parse(File.ReadAllText(path)).AsObject;
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonFormatException)
+            catch (JsonFormatException)
             {
+                return null;
+            }
+        }
+
+        private static bool IsGeneratedSchema(string path)
+        {
+            JsonObject? schema = ReadJsonObject(path);
+            return schema?.GetNumber("format") == 1 && schema.GetString("serializer") != null && schema.GetString("schema") != null
+                && schema.GetArray("tables") != null && schema.GetArray("enums") != null;
+        }
+
+        private static List<string>? ReadPreviousDataFiles(string manifestPath)
+        {
+            JsonObject? manifest = ReadJsonObject(manifestPath);
+            if (manifest?.GetNumber("holysheet") != 1 || manifest.GetString("serializer") == null || manifest.GetString("schema") == null
+                || manifest.GetArray("tables") is not { } tables)
+            {
+                return null;
+            }
+
+            var files = new List<string>();
+            foreach (JsonValue table in tables)
+            {
+                AddDataFileName(files, table.AsObject?.GetString("file"));
             }
 
             return files;
@@ -680,7 +604,7 @@ namespace HolySheet.Core.Output
                     {
                         if (part.StartsWith("file=", StringComparison.Ordinal))
                         {
-                            AddPlainFileName(files, part[5..]);
+                            AddDataFileName(files, part[5..]);
                         }
                     }
                 }
@@ -693,34 +617,13 @@ namespace HolySheet.Core.Output
             }
         }
 
-        // Only plain file names: a manifest must never be able to make the tool delete something outside its folder.
-        private static void AddPlainFileName(List<string> files, string? file)
+        // A table owns only a plain data file in this folder.
+        private static void AddDataFileName(List<string> files, string? file)
         {
-            if (!string.IsNullOrEmpty(file) && file == Path.GetFileName(file))
+            if (file != null && file == Path.GetFileName(file) && file.EndsWith(ManifestWriter.DataExtension, StringComparison.OrdinalIgnoreCase))
             {
-                files.Add(file!);
+                files.Add(file);
             }
-        }
-
-        private sealed class Change
-        {
-            public Change(string path, string name, byte[]? content)
-            {
-                Path = path;
-                Name = name;
-                Content = content;
-            }
-
-            public string Path { get; }
-
-            public string Name { get; }
-
-            /// <summary>Null means delete.</summary>
-            public byte[]? Content { get; }
-
-            public byte[]? Original { get; set; }
-
-            public byte[]? OriginalMeta { get; set; }
         }
     }
 

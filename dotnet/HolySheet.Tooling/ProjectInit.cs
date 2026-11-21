@@ -1,4 +1,6 @@
+using System.Text;
 using HolySheet.Core.Config;
+using HolySheet.Core.Output;
 
 namespace HolySheet.Tooling;
 
@@ -17,11 +19,7 @@ public static class ProjectInit
     {
         directory = Path.GetFullPath(directory);
         string path = Path.Combine(directory, HolySheetConfig.DefaultFileName);
-        if (File.Exists(path) && !force)
-        {
-            throw new IOException($"'{path}' already exists.");
-        }
-
+        string sheets = Path.Combine(directory, "Sheets");
         var config = new HolySheetConfig { BaseDirectory = directory };
         config.Sources.Add(new SourceConfig { Type = sample ? SourceType.Csv : SourceType.Xlsx, Path = "Sheets" });
         if (unity ?? IsUnityProject(directory))
@@ -31,16 +29,18 @@ public static class ProjectInit
             config.Output.Data = "Assets/StreamingAssets/Tables";
         }
 
-        Directory.CreateDirectory(Path.Combine(directory, "Sheets"));
-        config.Save(path);
+        var files = new FileChangeSet("Use --force to replace existing initialization files.");
+        files.PlanWrite(path, Encoding.UTF8.GetBytes(config.ToJson()), HolySheetConfig.DefaultFileName, canReplace: force);
         if (sample)
         {
             foreach ((string name, string content) in SampleFiles)
             {
-                File.WriteAllText(Path.Combine(directory, "Sheets", name), content);
+                files.PlanWrite(Path.Combine(sheets, name), Encoding.UTF8.GetBytes(content), name, canReplace: force);
             }
         }
 
+        Directory.CreateDirectory(sheets);
+        files.Apply();
         return path;
     }
 

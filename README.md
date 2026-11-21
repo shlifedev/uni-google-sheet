@@ -4,6 +4,8 @@ HolySheet turns xlsx workbooks, CSV folders and Google Sheets into typed, **read
 The generated code and data run on any .NET: a Unity client and a plain .NET server load the same files.
 Formerly UniGoogleSheets (UGS).
 
+[한국어 사용자 가이드](docs/src/content/docs/index.md)
+
 ```csharp
 GameTables tables = GameTables.Load("Tables");            // every file is verified against the manifest
 
@@ -57,6 +59,9 @@ holysheet init --sample     # holysheet.json plus a small sample workbook as CSV
 holysheet build             # generated code and data
 holysheet watch             # build again whenever a sheet is saved
 ```
+
+`init --sample` stops before writing if the config or any sample CSV already exists. Add `--force` to replace those files deliberately.
+A build reports the path of any existing file it cannot identify as HolySheet output and stops before changing the output.
 
 A table sheet has three header rows (configurable) and then data:
 

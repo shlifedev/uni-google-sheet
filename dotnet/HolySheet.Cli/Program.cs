@@ -4,6 +4,7 @@ using HolySheet.Core.Config;
 using HolySheet.Core.Csv;
 using HolySheet.Core.Output;
 using HolySheet.Core.Schema;
+using HolySheet.Tooling;
 
 namespace HolySheet.Cli;
 
@@ -102,6 +103,7 @@ public static class Program
               --dir <path>         Where to create the config (default: current folder)        (init)
               --sample             Also create a sample workbook as CSV                        (init)
               --unity              Use output paths suited to a Unity project                  (init)
+              --force              Replace existing init files or the requested signing key    (init, keygen)
               --out <path>         Private key file to write (default: holysheet.private.key)  (keygen)
               --write-config       Store the public key in the config                          (keygen)
               --public-key <key>   Verify the signature with this key instead of the config's  (verify)
@@ -315,38 +317,18 @@ internal static class Commands
     public static int Init(Arguments arguments, Output console)
     {
         string directory = Path.GetFullPath(arguments.Get("--dir") ?? ".");
-        string path = Path.Combine(directory, HolySheetConfig.DefaultFileName);
-        if (File.Exists(path) && !arguments.Has("--force"))
-        {
-            console.Error($"'{path}' already exists. Use --force to replace it.");
-            return Program.ExitError;
-        }
-
-        bool unity = arguments.Has("--unity") || (Directory.Exists(Path.Combine(directory, "Assets")) && Directory.Exists(Path.Combine(directory, "ProjectSettings")));
-        var config = new HolySheetConfig { BaseDirectory = directory };
-        config.Sources.Add(new SourceConfig { Type = arguments.Has("--sample") ? SourceType.Csv : SourceType.Xlsx, Path = "Sheets" });
-        if (unity)
-        {
-            // Generated code is compiled by Unity; data goes to StreamingAssets so it is a plain file the watcher can follow.
-            config.Output.Code = "Assets/Game/Generated/Tables";
-            config.Output.Data = "Assets/StreamingAssets/Tables";
-        }
-
-        Directory.CreateDirectory(directory);
-        Directory.CreateDirectory(Path.Combine(directory, "Sheets"));
-        config.Save(path);
+        bool sample = arguments.Has("--sample");
+        string path = ProjectInit.Create(directory, sample, unity: arguments.Has("--unity") ? true : null, force: arguments.Has("--force"));
         console.Info($"created {path}");
-        if (arguments.Has("--sample"))
+        if (sample)
         {
-            foreach ((string name, string content) in Samples.Files)
+            foreach (var file in ProjectInit.SampleFiles)
             {
-                string samplePath = Path.Combine(directory, "Sheets", name);
-                File.WriteAllText(samplePath, content);
-                console.Info($"created {samplePath}");
+                console.Info($"created {Path.Combine(directory, "Sheets", file.Name)}");
             }
         }
 
-        console.Info(arguments.Has("--sample") ? "Run 'holysheet build' to generate code and data." : "Put .xlsx files in the Sheets folder, then run 'holysheet build'.");
+        console.Info(sample ? "Run 'holysheet build' to generate code and data." : "Put .xlsx files in the Sheets folder, then run 'holysheet build'.");
         console.Document(JsonValue.Object().Set("success", true).Set("config", path));
         return Program.ExitSuccess;
     }
@@ -727,16 +709,4 @@ internal static class Commands
             : "Put the public key in the config as signing.publicKey (or run again with --write-config).");
         return Program.ExitSuccess;
     }
-}
-
-/// <summary>A small workbook as CSV, so that 'holysheet init --sample' gives something that builds.</summary>
-internal static class Samples
-{
-    public static readonly (string Name, string Content)[] Files =
-    [
-        ("Enums.csv", "byte,,Flags<int>,\nEItemKind,,EItemTag,\nKind of item,,Tags an item can carry,\nNone,,None,0\nWeapon,,Tradable,1 << 0\nArmor,,Stackable,1 << 1\nConsumable,,Quest,1 << 2\n"),
-        ("Item.csv", "Key<int>,string,Enum<EItemKind>,Enum<EItemTag>,int,float[],#note\nId,Name,Kind,Tags,Price,Stats,\nItem id,Display name,Kind,Tags,Price in gold,Stat values,Designer notes\n1001,Wooden Sword,Weapon,Tradable,100,\"3, 1.5\",starter\n1002,Leather Armor,Armor,Tradable,150,5,\n2001,Potion,Consumable,\"Tradable, Stackable\",25,,\n~9999,Unfinished,Weapon,,0,,this row is skipped\n"),
-        ("Monster.csv", "Key<int>,Mapping<EMonsterId>,string,int,Ref<Item>[],Ref<Item>?\nId,Code,Name,Hp,Drops,Rare\nMonster id,Name in code,Display name,Hit points,Items it can drop,Rare drop\n1,Slime,Slime,30,2001,\n2,Goblin,Goblin,80,\"1001, 2001\",1002\n"),
-        ("Game.Config.csv", "int,MaxLevel,Highest level a character can reach,60\nfloat,GoldRate,Multiplier on gold drops,1.5\nstring,Version,Data version label,sample\n")
-    ];
 }

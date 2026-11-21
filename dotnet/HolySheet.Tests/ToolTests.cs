@@ -669,6 +669,56 @@ public class CliTests
         Assert.Equal(3, Run(temp.Path, "init").ExitCode);
         Assert.Equal(0, Run(temp.Path, "init", "--force").ExitCode);
     }
+
+    [Fact]
+    public void Init_sample_checks_every_destination_before_writing()
+    {
+        using var temp = new TempDir();
+        Directory.CreateDirectory(temp.Combine("Sheets"));
+        string item = temp.Combine("Sheets", "Item.csv");
+        byte[] original = Encoding.UTF8.GetBytes("Id,Name\r\n42,My Item\r\n");
+        File.WriteAllBytes(item, original);
+
+        var result = Run(temp.Path, "init", "--sample");
+
+        Assert.Equal(3, result.ExitCode);
+        Assert.Contains("Item.csv", result.Error);
+        Assert.Equal(original, File.ReadAllBytes(item));
+        Assert.Equal([item], Directory.GetFiles(temp.Path, "*", SearchOption.AllDirectories));
+
+        Assert.Equal(0, Run(temp.Path, "init").ExitCode);
+        Assert.Equal(original, File.ReadAllBytes(item));
+        Assert.Equal(0, Run(temp.Path, "init", "--sample", "--force").ExitCode);
+        Assert.Contains("Wooden Sword", File.ReadAllText(item));
+    }
+
+    [Theory]
+    [InlineData("Data", "Item.bytes")]
+    [InlineData("Code", "ItemRow.g.cs")]
+    [InlineData("Data", "tables.manifest.json")]
+    [InlineData("Data", "tables.schema.json")]
+    [InlineData("Csv", "Item.csv")]
+    [InlineData("Csv", OutputCommitter.CsvListFileName)]
+    public void First_build_checks_every_destination_before_writing(string folder, string name)
+    {
+        using var temp = new TempDir();
+        Assert.Equal(0, Run(temp.Path, "init", "--sample").ExitCode);
+        string path = temp.Combine("holysheet.json");
+        HolySheetConfig config = HolySheetConfig.Load(path);
+        config.Output.Csv = "Generated/Csv";
+        config.Save(path);
+        Directory.CreateDirectory(temp.Combine("Generated", folder));
+        string existing = temp.Combine("Generated", folder, name);
+        byte[] original = Encoding.UTF8.GetBytes("""{"tables":[{"file":"Notes.bytes"}]}""");
+        File.WriteAllBytes(existing, original);
+
+        var result = Run(temp.Path, "build");
+
+        Assert.Equal(3, result.ExitCode);
+        Assert.Contains(name, result.Error);
+        Assert.Equal(original, File.ReadAllBytes(existing));
+        Assert.Equal([existing], Directory.GetFiles(temp.Combine("Generated"), "*", SearchOption.AllDirectories));
+    }
 }
 
 [CollectionDefinition("console", DisableParallelization = true)]

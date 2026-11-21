@@ -65,6 +65,110 @@ public sealed class DataSafetyTests
         Assert.Equal("kept by a person\n", File.ReadAllText(Path.Combine(output, "Notes.csv")));
     }
 
+    [Theory]
+    [InlineData("New.bytes")]
+    [InlineData("New.csv")]
+    public void A_rebuild_preserves_unlisted_files_even_when_their_content_matches(string name)
+    {
+        using var project = new Project();
+        project.Config.Output.Csv = "Csv";
+        TableBuild.Commit(project.Config, project.Run());
+        string manifest = Path.Combine(project.Data, project.Config.Output.ManifestFile);
+        byte[] previousManifest = File.ReadAllBytes(manifest);
+        byte[] previousItem = File.ReadAllBytes(Path.Combine(project.Data, "Item.bytes"));
+
+        project.Write("Item", "Key<int>,int\nId,Price\n,\n1,11\n");
+        project.Write("New", "Key<int>\nId\n\n42\n");
+        File.Delete(Path.Combine(project.Sheets, "Monster.csv"));
+        BuildResult next = project.Run();
+        string existing;
+        if (name.EndsWith(".csv", StringComparison.Ordinal))
+        {
+            existing = project.Combine("Csv", name);
+            File.WriteAllText(existing, next.Output!.CsvFiles[name]);
+        }
+        else
+        {
+            existing = Path.Combine(project.Data, name);
+            File.WriteAllBytes(existing, next.Output!.DataFiles[name]);
+        }
+
+        byte[] original = File.ReadAllBytes(existing);
+        IOException conflict = Assert.Throws<IOException>(() => TableBuild.Commit(project.Config, next));
+        Assert.Contains(existing, conflict.Message);
+        Assert.Equal(original, File.ReadAllBytes(existing));
+        Assert.Equal(previousManifest, File.ReadAllBytes(manifest));
+        Assert.Equal(previousItem, File.ReadAllBytes(Path.Combine(project.Data, "Item.bytes")));
+        Assert.True(File.Exists(Path.Combine(project.Code, "MonsterRow.g.cs")));
+        Assert.False(File.Exists(Path.Combine(project.Code, "NewRow.g.cs")));
+
+        File.Move(existing, existing + ".backup");
+        TableBuild.Commit(project.Config, next);
+        Assert.Equal(original, File.ReadAllBytes(existing + ".backup"));
+        Assert.False(File.Exists(Path.Combine(project.Code, "MonsterRow.g.cs")));
+        Assert.True(File.Exists(Path.Combine(project.Code, "NewRow.g.cs")));
+    }
+
+    [Fact]
+    public void A_file_created_after_preflight_survives_commit_and_rollback()
+    {
+        using var temp = new TempDir();
+        string existing = temp.Combine("existing");
+        string created = temp.Combine("created");
+        string late = temp.Combine("late");
+        File.WriteAllText(existing, "previous build");
+        var files = new FileChangeSet("file already exists");
+        files.PlanWrite(existing, [1], "existing", canReplace: true);
+        files.PlanWrite(created, [2], "created", canReplace: false);
+        files.PlanWrite(late, [3], "late", canReplace: false);
+        File.WriteAllText(late, "created by someone else");
+
+        Assert.Throws<IOException>(() => files.Apply());
+        Assert.Equal("previous build", File.ReadAllText(existing));
+        Assert.False(File.Exists(created));
+        Assert.Equal("created by someone else", File.ReadAllText(late));
+    }
+
+    [Fact]
+    public void A_file_blocking_an_output_directory_is_reported_before_creating_other_outputs()
+    {
+        using var project = new Project();
+        Directory.CreateDirectory(project.Combine("Generated"));
+        File.WriteAllText(project.Data, "keep this file");
+
+        IOException conflict = Assert.Throws<IOException>(() => TableBuild.Commit(project.Config, project.Run()));
+        Assert.Contains(project.Data, conflict.Message);
+        Assert.Equal("keep this file", File.ReadAllText(project.Data));
+        Assert.False(Directory.Exists(project.Code));
+    }
+
+    [Fact]
+    public void A_manifest_and_a_table_cannot_claim_the_same_new_path()
+    {
+        using var project = new Project();
+        project.Config.Output.ManifestFile = "Item.bytes";
+
+        IOException conflict = Assert.Throws<IOException>(() => TableBuild.Commit(project.Config, project.Run()));
+        Assert.Contains("Item.bytes", conflict.Message);
+        Assert.False(Directory.Exists(project.Data));
+        Assert.False(Directory.Exists(project.Code));
+    }
+
+    [Fact]
+    public void A_case_only_table_rename_can_update_its_own_files()
+    {
+        using var project = new Project();
+        project.Config.Output.Csv = "Csv";
+        TableBuild.Commit(project.Config, project.Run());
+        File.Delete(Path.Combine(project.Sheets, "Item.csv"));
+        project.Write("ITEM", "Key<int>,int\nId,Price\n,\n1,20\n");
+
+        TableBuild.Commit(project.Config, project.Run());
+        Assert.True(File.Exists(Path.Combine(project.Data, "ITEM.bytes")));
+        Assert.Contains("1,20", File.ReadAllText(project.Combine("Csv", "ITEM.csv")));
+        Assert.False(TableBuild.Commit(project.Config, project.Run()).HasChanges);
+    }
+
     [Fact]
     public void Output_and_snapshot_folders_may_not_be_a_folder_of_sheets()
     {

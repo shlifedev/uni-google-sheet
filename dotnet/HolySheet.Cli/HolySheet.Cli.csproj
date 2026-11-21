@@ -25,5 +25,6 @@
     <ProjectReference Include="../HolySheet.Core/HolySheet.Core.csproj" />
     <ProjectReference Include="../HolySheet.Csv.Sep/HolySheet.Csv.Sep.csproj" />
     <ProjectReference Include="../HolySheet.Runtime/HolySheet.Runtime.csproj" />
+    <ProjectReference Include="../HolySheet.Tooling/HolySheet.Tooling.csproj" />
   </ItemGroup>
 </Project>

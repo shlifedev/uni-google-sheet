@@ -105,6 +105,7 @@ internal sealed class SampleBuild : IDisposable
         config.Output.Code = Path.Combine(outputRoot, "code");
         config.Output.Data = Path.Combine(outputRoot, "data");
         config.Output.Csv = null;
+        config.CacheDirectory = Path.Combine(outputRoot, SheetCache.DefaultDirectory);
         return config;
     }
 
