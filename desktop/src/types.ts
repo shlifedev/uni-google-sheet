@@ -159,7 +159,15 @@ export interface WorkbookInfo {
   link: string | null;
 }
 
+export interface GoogleTab {
+  workbook: string;
+  sheet: string;
+  localCopyUtc: string | null;
+  localPath: string | null;
+}
+
 export interface TableModel {
+  googleTabs?: GoogleTab[];
   workbooks: WorkbookInfo[];
   tables: TableInfo[];
   enums: EnumInfo[];

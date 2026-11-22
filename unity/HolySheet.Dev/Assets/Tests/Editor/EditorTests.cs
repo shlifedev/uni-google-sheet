@@ -3,12 +3,18 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using NUnit.Framework;
 using HolySheet.Core;
 using HolySheet.Core.Config;
 using HolySheet.Core.Csv;
 using HolySheet.Core.Output;
+using HolySheet.Core.Sources;
 using HolySheet.Demo.Data;
 using HolySheet.Demo.Editor;
 using HolySheet.Editor;
@@ -626,7 +632,7 @@ namespace HolySheet.Dev.Tests
                 var toolbar = root.Q<UnityEditor.UIElements.Toolbar>();
                 CollectionAssert.AreEqual(new[] { "Check", "Build all", "Build selection (2)" },
                     toolbar.Query<UnityEditor.UIElements.ToolbarButton>().ToList().Select(button => button.text).ToArray());
-                CollectionAssert.AreEqual(new[] { "Tables", "Settings", "Offline" },
+                CollectionAssert.AreEqual(new[] { "Tables", "Settings" },
                     toolbar.Query<UnityEditor.UIElements.ToolbarToggle>().ToList().Select(toggle => toggle.text).ToArray());
                 StringAssert.Contains("Drop, Spawn", selectionBuild.tooltip);
                 StringAssert.Contains("Monster.xlsx / Drop", root.Q(className: "holysheet-selection").tooltip);
@@ -766,6 +772,80 @@ namespace HolySheet.Dev.Tests
         }
 
         [UnityTest]
+        public IEnumerator Only_a_Google_tab_has_local_copy_actions_and_a_download_time()
+        {
+            var config = new HolySheetConfig { BaseDirectory = _temp };
+            var google = new SourceConfig { Type = SourceType.Google, Name = "Remote", SpreadsheetId = "test", Snapshot = "snapshot" };
+            google.Sheets.Add(new GoogleSheetRef("Hello", 7));
+            config.Sources.Add(google);
+            config.Sources.Add(new SourceConfig { Type = SourceType.Csv, Path = "local" });
+            const string csv = "Key<int>,int\nId,Power\n,\n1,150\n";
+            Directory.CreateDirectory(Path.Combine(_temp, "snapshot"));
+            Directory.CreateDirectory(Path.Combine(_temp, "local"));
+            File.WriteAllText(Path.Combine(_temp, "snapshot", "Hello.csv"), csv);
+            File.WriteAllText(Path.Combine(_temp, "local", "Local.csv"), csv);
+            using var server = new SingleTabCsv(csv);
+            var options = new TableBuildOptions { Offline = true, KeepGooglePreview = true, HttpHandler = server };
+            var build = TableBuild.Run(config, options);
+            build = GoogleTabCopies.ChangeAsync(config, build, "Remote", "Hello", true, options).GetAwaiter().GetResult();
+            var original = HolySheetProject.LastResult;
+            var last = typeof(HolySheetProject).GetProperty(nameof(HolySheetProject.LastResult));
+            last.SetValue(null, new HolySheetRunResult(build, null, null));
+            HolySheetWindow.Open();
+            var window = UnityEditor.EditorWindow.GetWindow<HolySheetWindow>();
+            try
+            {
+                yield return null;
+                yield return null;
+                var tree = window.rootVisualElement.Q<TreeView>();
+                var googleRow = Row("Hello");
+                StringAssert.IsMatch(@"Local copy · \d{2}:\d{2}", googleRow.Q<Label>(className: "holysheet-tree-row__note").text);
+                var actions = Actions(googleRow);
+                CollectionAssert.Contains(actions, "Download again from Google");
+                CollectionAssert.Contains(actions, "Show local CSV in folder");
+                CollectionAssert.Contains(actions, "Use Google original");
+                CollectionAssert.DoesNotContain(Actions(Row("Local")), "Use local copy");
+                CollectionAssert.DoesNotContain(Actions(Row("Remote")), "Download again from Google");
+
+                HolySheetText.Override = HolySheetLanguage.Korean;
+                window.SelectPage("Tables");
+                yield return null;
+                yield return null;
+                tree = window.rootVisualElement.Q<TreeView>();
+                googleRow = Row("Hello");
+                StringAssert.IsMatch(@"로컬 사본 · \d{2}:\d{2} 갱신", googleRow.Q<Label>(className: "holysheet-tree-row__note").text);
+                CollectionAssert.Contains(Actions(googleRow), "Google에서 다시 받기");
+
+                VisualElement Row(string name) => tree.Query<Label>(className: "holysheet-tree-row__name").ToList().Single(label => label.text == name).parent;
+                string[] Actions(VisualElement row)
+                {
+                    tree.SetSelection((int)row.userData);
+                    var menu = new DropdownMenu();
+                    using var evt = ContextualMenuPopulateEvent.GetPooled(null, menu, row, null);
+                    row.SendEvent(evt);
+                    return menu.MenuItems().OfType<DropdownMenuAction>().Select(action => action.name).ToArray();
+                }
+            }
+            finally
+            {
+                window.Close();
+                last.SetValue(null, original);
+            }
+        }
+
+        private sealed class SingleTabCsv : HttpMessageHandler
+        {
+            private readonly string csv;
+            public SingleTabCsv(string csv) => this.csv = csv;
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                Assert.AreEqual("format=csv&gid=7", request.RequestUri.Query.TrimStart('?'));
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    { Content = new StringContent(csv, Encoding.UTF8, "text/csv") });
+            }
+        }
+
+        [UnityTest]
         public IEnumerator Refresh_shortcuts_check_the_sheets_without_building()
         {
             HolySheetProject.RunBlocking(commit: false, offline: true);
@@ -776,7 +856,9 @@ namespace HolySheet.Dev.Tests
                 yield return null;
                 yield return null;
                 var root = window.rootVisualElement;
-                root.Query<UnityEditor.UIElements.ToolbarToggle>().ToList().Single(toggle => toggle.text == "Offline").value = true;
+                // Exercise the window's actual keyboard routing without contacting a developer's Google account.
+                typeof(HolySheetWindow).GetField("_refreshProject", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    .SetValue(window, (Action)(() => HolySheetProject.RunAsync(commit: false, offline: true)));
                 window.Focus();
                 foreach (var (key, modifiers) in new[]
                 {

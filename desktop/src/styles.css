@@ -569,6 +569,12 @@ select.field {
   font-variant-numeric: tabular-nums;
 }
 
+.tree-row .local-copy {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
 .tree-row mark,
 .cell mark {
   background: var(--mark);

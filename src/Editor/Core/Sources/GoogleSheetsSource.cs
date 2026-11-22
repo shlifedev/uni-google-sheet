@@ -9,6 +9,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using HolySheet.Core.Config;
@@ -72,6 +73,7 @@ namespace HolySheet.Core.Sources
     public sealed class GoogleSheetsSource : IWorkbookSource
     {
         private readonly SourceConfig source;
+        private readonly GoogleLocalCopies localCopies;
         private readonly string baseDirectory;
         private readonly ICsvParser parser;
         private readonly string? snapshotDirectory;
@@ -83,6 +85,7 @@ namespace HolySheet.Core.Sources
         public GoogleSheetsSource(SourceConfig source, string baseDirectory, ICsvParser parser, string? snapshotDirectory = null, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null, string? remoteCacheDirectory = null, IReadOnlyList<IGoogleCredentialProvider>? credentialProviders = null)
         {
             this.source = source;
+            localCopies = new GoogleLocalCopies(baseDirectory);
             this.baseDirectory = baseDirectory;
             this.parser = parser;
             this.snapshotDirectory = snapshotDirectory;
@@ -157,19 +160,21 @@ namespace HolySheet.Core.Sources
                     workbookName = title ?? id;
                     if (source.Sheets.Count == 0)
                     {
-                        // Without credentials the tabs cannot be listed; the xlsx export carries them all in one request.
-                        fetched = await FetchXlsxExportAsync(client, id, workbookName, bearer: null, cancellationToken).ConfigureAwait(false);
-                        complete = true;
+                        if (!RefreshGoogle && localCopies.HasCopies(id))
+                        {
+                            fetched = await ReadExportTabsAsync(client, id, workbookName, bearer, cancellationToken).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            fetched = await FetchXlsxExportAsync(client, id, workbookName, bearer: null, cancellationToken).ConfigureAwait(false);
+                            complete = true;
+                        }
                     }
                     else
                     {
-                        List<GoogleSheetRef> wanted = source.Sheets.Where(tab => only == null || only.Includes(workbookName, tab.Name)).ToList();
-                        if (wanted.Count == 0)
-                        {
-                            return Array.Empty<Workbook>();
-                        }
-
-                        fetched = await FetchCsvExportAsync(client, id, wanted, bearer, cancellationToken).ConfigureAwait(false);
+                        var wanted = source.Sheets.Where(tab => only == null || only.Includes(workbookName, tab.Name)).Select(tab => tab.Name).ToList();
+                        if (wanted.Count == 0) return Array.Empty<Workbook>();
+                        fetched = await ReadTabsAsync(client, id, wanted, apiKey, bearer, cancellationToken).ConfigureAwait(false);
                     }
                 }
                 else
@@ -197,15 +202,22 @@ namespace HolySheet.Core.Sources
                         }
 
                         // Every tab in one Sheets API request (values:batchGet), instead of one export request per tab.
-                        fetched = await FetchBatchAsync(client, id, wanted, apiKey, bearer, cancellationToken).ConfigureAwait(false);
+                        fetched = await ReadTabsAsync(client, id, wanted, apiKey, bearer, cancellationToken).ConfigureAwait(false);
                     }
                     catch (GoogleApiDisabledException disabled) when (disabled.Api.Contains("Sheets"))
                     {
-                        // The xlsx export does not go through the Sheets API and carries every tab.
-                        diagnostics.AddWarning(location, disabled.Message + " The spreadsheet was read as one xlsx export instead, so every tab is downloaded.", disabled.Hint);
                         workbookName = title ?? id;
-                        fetched = await FetchXlsxExportAsync(client, id, workbookName, bearer, cancellationToken).ConfigureAwait(false);
-                        complete = true;
+                        if (!RefreshGoogle && localCopies.HasCopies(id))
+                        {
+                            diagnostics.AddWarning(location, disabled.Message + " Live tabs were read as CSV exports.", disabled.Hint);
+                            fetched = await ReadExportTabsAsync(client, id, workbookName, bearer, cancellationToken).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            diagnostics.AddWarning(location, disabled.Message + " The spreadsheet was read as one xlsx export instead, so every tab is downloaded.", disabled.Hint);
+                            fetched = await FetchXlsxExportAsync(client, id, workbookName, bearer, cancellationToken).ConfigureAwait(false);
+                            complete = true;
+                        }
                     }
                 }
 
@@ -213,7 +225,7 @@ namespace HolySheet.Core.Sources
                 WriteSnapshot(workbookName, fetched.Select(tab => tab.Name).ToList(), fetched.Select(tab => tab.Text).ToList(), complete);
                 if (version != null)
                 {
-                    if (complete)
+                    if (complete && (RefreshGoogle || !fetched.Any(tab => File.Exists(localCopies.CsvPath(id, tab.Name)))))
                     {
                         RemoteCopy.Save(remoteCacheDirectory, id, version.Value, workbookName, fetched);
                     }
@@ -251,6 +263,11 @@ namespace HolySheet.Core.Sources
                 try
                 {
                     sheets.Add(Sheet.FromGrid(workbookName, name, parser.Parse(text)));
+                    if (RefreshGoogle)
+                    {
+                        string path = localCopies.CsvPath(source.SpreadsheetId!, name);
+                        if (File.Exists(path)) GoogleLocalCopies.Write(path, text, existingOnly: true);
+                    }
                 }
                 catch (CsvFormatException exception)
                 {
@@ -345,8 +362,79 @@ namespace HolySheet.Core.Sources
             return cell.AsString ?? (cell.AsNumber is { } number ? number.ToString("R", CultureInfo.InvariantCulture) : cell.AsBoolean is { } flag ? (flag ? "TRUE" : "FALSE") : "");
         }
 
-        private async Task<List<(string Name, string Text)>> FetchCsvExportAsync(HttpClient client, string id, List<GoogleSheetRef> tabs, string? bearer, CancellationToken cancellationToken)
+        private async Task<List<(string Name, string Text)>> ReadTabsAsync(HttpClient client, string id, List<string> names, string? apiKey, string? bearer, CancellationToken cancellationToken, IReadOnlyList<GoogleSheetRef>? exportTabs = null)
         {
+            var local = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (!RefreshGoogle)
+            {
+                foreach (string name in names)
+                {
+                    string path = localCopies.CsvPath(id, name);
+                    if (File.Exists(path)) local[name] = SourceFiles.ReadAllText(path);
+                }
+            }
+
+            List<string> live = names.Where(name => !local.ContainsKey(name)).ToList();
+            if (live.Count > 0)
+            {
+                var fetched = exportTabs == null && (apiKey != null || bearer != null)
+                    ? await FetchBatchAsync(client, id, live, apiKey, bearer, cancellationToken).ConfigureAwait(false)
+                    : await FetchCsvExportAsync(client, id, live, bearer, cancellationToken, exportTabs).ConfigureAwait(false);
+                foreach (var tab in fetched) local[tab.Name] = tab.Text;
+            }
+
+            return names.Select(name => (name, local[name])).ToList();
+        }
+
+        // A right-click download never enumerates a Drive folder, asks for a version or downloads an entire workbook.
+        internal async Task<string> DownloadTabAsync(string id, string name, CancellationToken cancellationToken)
+        {
+            using HttpClient client = httpHandler == null ? new HttpClient() : new HttpClient(httpHandler, disposeHandler: false);
+            (string? apiKey, string? bearer, string? account) = await ResolveAuthAsync(client, cancellationToken).ConfigureAwait(false);
+            _account = account;
+            var names = new List<string> { name };
+            if (apiKey != null || bearer != null)
+            {
+                try { return (await FetchBatchAsync(client, id, names, apiKey, bearer, cancellationToken).ConfigureAwait(false))[0].Text; }
+                catch (GoogleApiDisabledException disabled) when (disabled.Api.Contains("Sheets")) { }
+            }
+
+            return (await FetchCsvExportAsync(client, id, names, bearer, cancellationToken).ConfigureAwait(false))[0].Text;
+        }
+
+        // The HTML viewer lists tab titles and gids separately from its cell pages. Use only this index:
+        // the raw CSV export requires a gid, and a visualization query can change mixed-type columns.
+        private static readonly Regex ViewerTab = new Regex(
+            @"items\.push\(\{\s*name:\s*""(?<name>(?:\\.|[^""\\])*)""\s*,\s*pageUrl:\s*""(?:\\.|[^""\\])*""\s*,\s*gid:\s*""(?<gid>[0-9]+)""",
+            RegexOptions.CultureInvariant);
+
+        private async Task<IReadOnlyList<GoogleSheetRef>> ExportTabsAsync(HttpClient client, string id, string? bearer, CancellationToken cancellationToken)
+        {
+            if (source.Sheets.Count > 0) return source.Sheets;
+            string url = $"{_endpoints.Docs}/spreadsheets/d/{Uri.EscapeDataString(id)}/htmlview";
+            byte[] bytes = await GetAsync(client, url, bearer, expectHtml: true, cancellationToken).ConfigureAwait(false);
+            var tabs = new List<GoogleSheetRef>();
+            foreach (Match match in ViewerTab.Matches(Encoding.UTF8.GetString(bytes)))
+            {
+                if (long.TryParse(match.Groups["gid"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out long gid))
+                    tabs.Add(new GoogleSheetRef(Regex.Unescape(match.Groups["name"].Value), gid));
+            }
+
+            if (tabs.Count == 0)
+                throw new GoogleSourceException("Google did not list the tabs for this CSV export.", "List the tabs with their gid in the source settings, or enable the Sheets API.");
+            return tabs;
+        }
+
+        private async Task<List<(string Name, string Text)>> ReadExportTabsAsync(HttpClient client, string id, string workbook, string? bearer, CancellationToken cancellationToken)
+        {
+            var tabs = await ExportTabsAsync(client, id, bearer, cancellationToken).ConfigureAwait(false);
+            var wanted = tabs.Where(tab => only == null || only.Includes(workbook, tab.Name)).Select(tab => tab.Name).ToList();
+            return await ReadTabsAsync(client, id, wanted, null, bearer, cancellationToken, tabs).ConfigureAwait(false);
+        }
+
+        private async Task<List<(string Name, string Text)>> FetchCsvExportAsync(HttpClient client, string id, List<string> tabs, string? bearer, CancellationToken cancellationToken, IReadOnlyList<GoogleSheetRef>? exportTabs = null)
+        {
+            var references = exportTabs ?? await ExportTabsAsync(client, id, bearer, cancellationToken).ConfigureAwait(false);
             var texts = new string[tabs.Count];
             using (var gate = new SemaphoreSlim(MaxConcurrentDownloads))
             {
@@ -359,7 +447,9 @@ namespace HolySheet.Core.Sources
                         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
                         try
                         {
-                            string url = $"{_endpoints.Docs}/spreadsheets/d/{Uri.EscapeDataString(id)}/export?format=csv&gid={tabs[tabIndex].Gid.ToString(CultureInfo.InvariantCulture)}";
+                            GoogleSheetRef tab = references.FirstOrDefault(candidate => candidate.Name == tabs[tabIndex])
+                                ?? throw new GoogleSourceException($"Google did not list the tab '{tabs[tabIndex]}'.", "Refresh the project to read the current tab names.");
+                            string url = $"{_endpoints.Docs}/spreadsheets/d/{Uri.EscapeDataString(id)}/export?format=csv&gid={tab.Gid.ToString(CultureInfo.InvariantCulture)}";
                             byte[] bytes = await GetAsync(client, url, bearer, expectHtml: false, cancellationToken).ConfigureAwait(false);
                             texts[tabIndex] = new UTF8Encoding(false).GetString(bytes);
                         }
@@ -373,7 +463,7 @@ namespace HolySheet.Core.Sources
                 await Task.WhenAll(downloads).ConfigureAwait(false);
             }
 
-            return tabs.Select((tab, index) => (tab.Name, texts[index])).ToList();
+            return tabs.Select((tab, index) => (tab, texts[index])).ToList();
         }
 
         private async Task<List<(string Name, string Text)>> FetchXlsxExportAsync(HttpClient client, string id, string workbookName, string? bearer, CancellationToken cancellationToken)

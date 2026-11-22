@@ -47,7 +47,6 @@ namespace HolySheet.Editor
         private string _page = "Tables";
         private string? _selectedTable;
         private string? _verifyReport;
-        private bool _offline;
 
         // The problems panel under the table view: open or not, and its height, kept while the window is open.
         private bool _problemsOpen;
@@ -222,10 +221,6 @@ namespace HolySheet.Editor
             _statusIcon.RegisterCallback<ClickEvent>(_ => SelectPage("Problems"));
             toolbar.Add(_statusText);
 
-            var offline = new ToolbarToggle { text = T("Offline"), value = _offline, tooltip = T("Build Google sources from the saved snapshot instead of the network.") };
-            offline.RegisterValueChangedCallback(change => _offline = change.newValue);
-            toolbar.Add(offline);
-
             _checkButton = new ToolbarButton(() => Run(commit: false)) { text = T("Check"), tooltip = T("Read and validate the sheets. Writes nothing.") };
             toolbar.Add(_checkButton);
             _buildButton = new ToolbarButton(() => Run(commit: true)) { text = T("Build all"), tooltip = T("Write generated code and data (Ctrl+Shift+Alt+B).") };
@@ -323,6 +318,8 @@ namespace HolySheet.Editor
             }
         }
 
+        private Action _refreshProject = () => HolySheetProject.RefreshAsync();
+
         private void Reload()
         {
             if (HolySheetProject.IsRunning)
@@ -337,7 +334,7 @@ namespace HolySheet.Editor
                 return;
             }
 
-            HolySheetProject.RefreshAsync(_offline);
+            _refreshProject();
         }
 
         private void ReloadConfig()
@@ -382,7 +379,7 @@ namespace HolySheet.Editor
         {
             if (_config != null && !HolySheetProject.IsRunning)
             {
-                HolySheetProject.RunAsync(commit, _offline);
+                HolySheetProject.RunAsync(commit);
             }
         }
 
@@ -726,6 +723,7 @@ namespace HolySheet.Editor
             public string Icon = "";
             public string Note = "";
             public string Tooltip = "";
+            public GoogleTab? GoogleTab;
             public RawTable? Table;
 
             /// <summary>Set on the sheet nodes under a table built from several sheets.</summary>
@@ -955,13 +953,13 @@ namespace HolySheet.Editor
         private VisualElement BuildTableView()
         {
             BuildResult? build = HolySheetProject.LastResult?.Build;
-            if (build == null || build.RawTables.Count == 0)
+            if (build == null || (build.RawTables.Count == 0 && build.GoogleTabs.Count == 0))
             {
                 // No tables, but there may be problems that explain why.
                 return WithProblems(Empty(HolySheetProject.IsRunning ? T("Reading the sheets…") : T("Run Check to see the tables as the build reads them.")));
             }
 
-            var split = new TwoPaneSplitView(0, 170, TwoPaneSplitViewOrientation.Horizontal);
+            var split = new TwoPaneSplitView(0, build.GoogleTabs.Count > 0 ? 248 : 170, TwoPaneSplitViewOrientation.Horizontal);
             split.AddToClassList("holysheet-fill");
 
             var side = new VisualElement();
@@ -994,10 +992,21 @@ namespace HolySheet.Editor
                 name.enableRichText = marked.Length > 0;
                 name.text = marked.Length > 0 ? marked : node.Label;
                 Label note = element.Q<Label>(className: "holysheet-tree-row__note");
-                note.text = node.Note;
-                note.style.display = node.Note.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
-                element.tooltip = node.Tooltip;
+                string local = node.GoogleTab?.LocalCopyUtc is { } stamp ? F("Local copy · {0}", stamp.ToLocalTime().ToString("HH:mm")) : "";
+                note.EnableInClassList("holysheet-tree-row__copy", local.Length > 0);
+                note.text = local.Length > 0 ? local : node.Note;
+                note.style.display = note.text.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                element.tooltip = node.GoogleTab?.LocalCopyUtc is { } saved
+                    ? node.Tooltip + "\n" + F("Local copy · updated {0}", saved.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")) : node.Tooltip;
+                element.userData = index;
             };
+            tree.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 1 || evt.target is not VisualElement target) return;
+                VisualElement? row = target;
+                while (row != null && row != tree && !row.ClassListContains("holysheet-tree-row")) row = row.parent;
+                if (row?.userData is int index && !tree.selectedIndices.Contains(index)) tree.SetSelection(index);
+            }, TrickleDown.TrickleDown);
             side.Add(tree);
 
             // What is selected in the tree: the toolbar's "Build selection" builds only that. Checking it is in the context menu.
@@ -1042,6 +1051,17 @@ namespace HolySheet.Editor
                 DropdownMenuAction.Status status = _config != null && !HolySheetProject.IsRunning ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled;
                 menu.menu.AppendAction(F("Build {0}", DescribeSelection()), _ => RunSelection(commit: true), status);
                 menu.menu.AppendAction(F("Check {0}", DescribeSelection()), _ => RunSelection(commit: false), status);
+                if (_singleSelectedNode?.GoogleTab is { } tab)
+                {
+                    menu.menu.AppendSeparator();
+                    bool pinned = tab.LocalCopyUtc.HasValue;
+                    menu.menu.AppendAction(T(pinned ? "Download again from Google" : "Use local copy"), _ => HolySheetProject.ChangeLocalCopy(tab, true), status);
+                    if (tab.LocalPath is { } path)
+                    {
+                        menu.menu.AppendAction(T("Show local CSV in folder"), _ => EditorUtility.RevealInFinder(path));
+                        menu.menu.AppendAction(T("Use Google original"), _ => HolySheetProject.ChangeLocalCopy(tab, false), status);
+                    }
+                }
             }));
 
             var preview = new VisualElement();
@@ -1113,6 +1133,9 @@ namespace HolySheet.Editor
         // Selects what was selected before, else the first table.
         private void FillTree(TreeView tree, IReadOnlyList<RawTable> tables, VisualElement preview)
         {
+            GoogleTab? Tab(string workbook, string sheet) =>
+                HolySheetProject.LastResult?.Build.GoogleTabs.TryGetValue((workbook, sheet), out GoogleTab tab) == true ? tab : null;
+
             var roots = new List<TreeViewItemData<TableNode>>();
             var expand = new List<int>();
             int nextId = 0;
@@ -1157,7 +1180,12 @@ namespace HolySheet.Editor
 
             (int Id, TableNode Node)? enumPrevious = null;
             ILookup<string, RawTable> tablesByWorkbook = tables.ToLookup(WorkbookOf);
-            List<string> workbooks = tablesByWorkbook.Select(group => group.Key).Concat(sheetEnums.Keys).Distinct()
+            // Keep tabs that currently have no table accessible, including a pinned tab with an empty or invalid header.
+            var represented = new HashSet<(string, string)>(tables.SelectMany(table => SheetRefsOf(table)));
+            foreach (var pair in sheetEnums)
+                foreach (var group in pair.Value) represented.Add((pair.Key, group.Sheet));
+            var standalone = HolySheetProject.LastResult!.Build.GoogleTabs.Values.Where(tab => !represented.Contains((tab.Workbook, tab.Sheet))).ToLookup(tab => tab.Workbook);
+            List<string> workbooks = tablesByWorkbook.Select(group => group.Key).Concat(sheetEnums.Keys).Concat(standalone.Select(group => group.Key)).Distinct()
                 .OrderBy(name => (int)GroupOf(name)).ThenBy(name => ConnectionOf(name).Source, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
             // One node per connected source (each entry under "sources" in holysheet.json), once there is more than one.
@@ -1168,12 +1196,13 @@ namespace HolySheet.Editor
                 var children = new List<TreeViewItemData<TableNode>>();
                 foreach (RawTable table in tablesByWorkbook[workbookName].OrderBy(table => table.Name, StringComparer.Ordinal))
                 {
-                    string[] sheets = SheetsOf(table);
+                    var references = SheetRefsOf(table);
+                    string[] sheets = references.Select(entry => entry.Sheet).ToArray();
                     var sheetNodes = new List<TreeViewItemData<TableNode>>();
                     int tableId = nextId++;
                     if (sheets.Length > 1)
                     {
-                        foreach (string sheet in sheets)
+                        foreach (var (sheetWorkbook, sheet) in references)
                         {
                             int sheetId = nextId++;
                             sheetNodes.Add(new TreeViewItemData<TableNode>(sheetId, new TableNode
@@ -1181,7 +1210,8 @@ namespace HolySheet.Editor
                                 Label = sheet,
                                 Table = table,
                                 Sheet = sheet,
-                                Workbook = SheetRefsOf(table).First(entry => entry.Sheet == sheet).Workbook,
+                                Workbook = sheetWorkbook,
+                                GoogleTab = Tab(sheetWorkbook, sheet),
                                 Key = "sheet:" + table.Name + "/" + sheet,
                                 Icon = TableIconName,
                                 Tooltip = DescribeSheet(table, sheet)
@@ -1220,6 +1250,7 @@ namespace HolySheet.Editor
                         Label = table.Name,
                         Table = table,
                         Key = "table:" + table.Name,
+                        GoogleTab = references.Length == 1 ? Tab(references[0].Workbook, references[0].Sheet) : null,
                         Icon = table.Kind == TableKind.Config ? "Settings" : TableIconName,
                         // A table built from more than one sheet (Item + Item.Rare + Item.Col.Balance) says how many more.
                         Note = sheets.Length > 1 ? "+" + (sheets.Length - 1) : "",
@@ -1264,6 +1295,7 @@ namespace HolySheet.Editor
                             Workbook = workbookName,
                             Sheet = enumSheet,
                             Key = "enumsheet:" + workbookName + "/" + enumSheet,
+                            GoogleTab = Tab(workbookName, enumSheet),
                             Icon = EnumIconName,
                             Note = definitions.Count.ToString(),
                             EnumSheet = definitions.ToArray(),
@@ -1281,6 +1313,15 @@ namespace HolySheet.Editor
                             expand.Add(enumSheetId);
                         }
                     }
+                }
+
+                foreach (GoogleTab tab in standalone[workbookName].OrderBy(tab => tab.Sheet, StringComparer.Ordinal))
+                {
+                    int id = nextId++;
+                    var node = new TableNode { Key = "tab:" + workbookName + "/" + tab.Sheet, Label = tab.Sheet, Icon = TableIconName,
+                        Workbook = workbookName, Sheet = tab.Sheet, GoogleTab = tab, Tooltip = workbookName + " / " + tab.Sheet };
+                    children.Add(new TreeViewItemData<TableNode>(id, node));
+                    keyed.Add((node.Key, id));
                 }
 
                 if (children.Count > 0)
@@ -1618,7 +1659,7 @@ namespace HolySheet.Editor
         {
             if (_config != null && !HolySheetProject.IsRunning && !_treeSelection.IsEmpty)
             {
-                HolySheetProject.RunAsync(commit, _offline, _treeSelection);
+                HolySheetProject.RunAsync(commit, only: _treeSelection);
             }
         }
 

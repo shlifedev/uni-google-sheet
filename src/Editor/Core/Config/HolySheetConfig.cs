@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using HolySheet.Core.Sources;
 
 namespace HolySheet.Core.Config
 {
@@ -238,7 +239,8 @@ namespace HolySheet.Core.Config
 
         /// <summary>Whether an initial preview can be read entirely from local sources and configured snapshots.</summary>
         public bool CanPreviewOffline() => Sources.Where(source => source.IsRemote)
-            .All(source => !string.IsNullOrWhiteSpace(source.Snapshot) && Directory.Exists(Resolve(source.Snapshot!)));
+            .All(source => (!string.IsNullOrWhiteSpace(source.Snapshot) && Directory.Exists(Resolve(source.Snapshot!)))
+                || new GoogleLocalCopies(BaseDirectory).ReadLocal(source, null, null) != null);
 
         public string Resolve(string path) => Path.GetFullPath(Path.Combine(BaseDirectory, path));
 

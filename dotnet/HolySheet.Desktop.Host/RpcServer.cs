@@ -118,6 +118,8 @@ public sealed class RpcServer
             "project.close" => Sync(Project.Close()),
             "config.save" => Sync(Project.SaveConfig(parameters["config"] as JsonObject ?? throw new RpcException(RpcException.InvalidParams, "'config' must be an object."))),
             "run" => Wrap(Project.RunAsync(Bool(parameters, "commit"), Bool(parameters, "offline"), Strings(parameters, "only"), "user", Bool(parameters, "refreshGoogle"))),
+            "source.localCopy" => Wrap(Project.RunAsync(false, false, [], "user", copy: (Required(parameters, "workbook"),
+                Required(parameters, "sheet"), parameters["useLocal"]?.GetValue<bool>() ?? throw new RpcException(RpcException.InvalidParams, "Specify useLocal.")))),
             "tables.model" => Sync(Project.TableModel()),
             "tables.preview" => Sync(Project.Preview(Required(parameters, "table"), Optional(parameters, "sheet"))),
             "source.locate" => Sync(Project.LocateSource(Required(parameters, "workbook"), Optional(parameters, "sheet"))),

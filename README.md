@@ -317,7 +317,9 @@ Requests are kept few, because the Sheets API allows 60 reads a minute per accou
 
 Keys come from files, environment variables, a credential command or a provider class, never from the command line. With `snapshot` set, what was fetched is
 also saved as CSV (one folder per workbook for a Drive folder): commit it for reviewable diffs, and build from it with
-`--offline` or the window's Offline toggle. Partial builds download only the selected files and tabs.
+`--offline`. In the Unity or desktop tree, right-click a Google tab and choose **Use local copy** to download its CSV.
+Checks and builds read that copy. **Download again from Google** refreshes that tab and its preview. **Use Google original**
+returns the tab to normal reads. Ctrl+R, Cmd+R or F5 refreshes all sources and their local copies.
 
 #### Your own credentials
 

@@ -56,7 +56,7 @@ Engine messages (problems, hints, the run summary) stay in English, as in Unity.
 ## Differences from the Unity window
 
 - **Custom credential providers.** These are C# classes in a Unity project, so they run only in the Unity editor.
-  In the desktop app, use the `command` auth type, or build offline from a snapshot.
+  In the desktop app, use the `command` auth type, or use `holysheet build --offline` with a snapshot.
 - **No serializer warning.** The Unity window warns when MemoryPack or MessagePack is missing from the project.
   The desktop app has no project assemblies to check.
 - **Other config files.** The app can open a config file with another name, such as `holysheet.memorypack.json`.

@@ -47,6 +47,7 @@ export const rpc = {
   saveConfig: (config: HolySheetConfig) => call<ProjectState>("config.save", { config }),
   run: (commit: boolean, offline: boolean, only: string[] = [], refreshGoogle = false) =>
     call<RunResult>("run", { commit, offline, only, refreshGoogle }),
+  localCopy: (params: { workbook: string; sheet: string; useLocal: boolean }) => call<RunResult>("source.localCopy", params),
   model: () => call<TableModel>("tables.model"),
   preview: (table: string, sheet?: string | null) => call<Preview>("tables.preview", { table, sheet: sheet ?? null }),
   locateSource: (workbook: string, sheet?: string | null) => call<Located>("source.locate", { workbook, sheet: sheet ?? null }),

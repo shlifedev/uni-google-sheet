@@ -1,4 +1,4 @@
-// The app's state: the open project, the last run and the table model, plus what the toolbar toggles.
+// The app's state: the open project, the last run and the table model.
 // The engine is the source of truth; this store only mirrors what it last said.
 import { create } from "zustand";
 import { rpc, RpcError, type HostEvent } from "./rpc";
@@ -41,9 +41,7 @@ interface AppState {
   reload: () => Promise<void>;
   saveConfig: (config: HolySheetConfig) => Promise<ProjectState | null>;
   applyState: (state: ProjectState) => void;
-  /** Offline follows the toolbar toggle unless given. */
-  startRun: (commit: boolean, only?: string[], options?: { offline?: boolean; refreshGoogle?: boolean }) => Promise<void>;
-  setOffline: (offline: boolean) => void;
+  startRun: (commit: boolean, only?: string[], options?: { offline?: boolean; refreshGoogle?: boolean; copy?: { workbook: string; sheet: string; useLocal: boolean } }) => Promise<void>;
   handleEvent: (event: HostEvent) => void;
   hostRestarted: () => Promise<void>;
 }
@@ -51,17 +49,11 @@ interface AppState {
 const emptyModel: TableModel = { workbooks: [], tables: [], enums: [] };
 let nextNotice = 1;
 
-export function projectKey(state: ProjectState | null): string {
-  return state?.configPath ?? "";
-}
-
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
 export const useApp = create<AppState>((set, get) => {
-  const projectPreferences = () => get().preferences.projects[projectKey(get().project)] ?? {};
-
   const refreshModel = async () => {
     try {
       set({ model: await rpc.model() });
@@ -171,10 +163,12 @@ export const useApp = create<AppState>((set, get) => {
     applyState: (state) => set({ project: state }),
 
     startRun: async (commit, only = [], options = {}) => {
-      const offline = options.offline ?? projectPreferences().offline ?? false;
       try {
         // The result arrives through the run.finished notification as well; both lead to the same state.
-        get().handleEvent({ method: "run.finished", params: await rpc.run(commit, offline, only, options.refreshGoogle) });
+        const result = options.copy
+          ? await rpc.localCopy(options.copy)
+          : await rpc.run(commit, options.offline ?? false, only, options.refreshGoogle);
+        get().handleEvent({ method: "run.finished", params: result });
       } catch (error) {
         if (error instanceof RpcError && error.code === RpcError.Busy) {
           get().notify(error.message, "info");
@@ -183,11 +177,6 @@ export const useApp = create<AppState>((set, get) => {
         set({ running: false });
         get().notify(message(error));
       }
-    },
-
-    setOffline: (offline) => {
-      const key = projectKey(get().project);
-      if (key) get().setPreferences({ projects: { ...get().preferences.projects, [key]: { offline } } });
     },
 
     handleEvent: (event) => {

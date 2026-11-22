@@ -1,4 +1,4 @@
-import { useApp, projectKey } from "../store";
+import { useApp } from "../store";
 import { useSelectionBuild } from "../selection";
 import { Count, F, T } from "../i18n";
 import { shortcut } from "../lib/actions";
@@ -23,10 +23,9 @@ export function statusText(run: RunResult | null, running: boolean): { text: str
 }
 
 export function Toolbar() {
-  const { project, running, run, page, preferences, setPage, startRun, setOffline, setProblemsOpen, closeProject, openProject, reload } =
+  const { project, running, run, page, preferences, setPage, startRun, setProblemsOpen, closeProject, openProject, reload } =
     useApp();
   const selection = useSelectionBuild();
-  const saved = preferences.projects[projectKey(project)] ?? {};
   const hasConfig = !!project?.config;
   const status = statusText(run, running);
   const dir = project?.dir ?? "";
@@ -92,15 +91,6 @@ export function Toolbar() {
         <span className="ellipsis">{status.text}</span>
       </button>
       <div className="fill" />
-      <button
-        className={`toggle ${saved.offline ? "on" : ""}`}
-        title={T("Build Google sources from the saved snapshot instead of the network.")}
-        disabled={!hasConfig}
-        onClick={() => setOffline(!saved.offline)}
-      >
-        {T("Offline")}
-      </button>
-      <div className="divider" />
       <button
         className="button"
         title={T("Read and validate the sheets. Writes nothing.") + ` (${shortcut("B", true)})`}

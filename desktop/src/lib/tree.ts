@@ -2,7 +2,7 @@
 // there is more than one, then workbooks, their tables (with the sheets a table was built from), and enums: those an
 // Enums sheet defines under their workbook, those a Mapping column makes under its table.
 import { Count, T, F } from "../i18n";
-import type { EnumInfo, SheetRole, SourceType, TableInfo, TableModel, WorkbookInfo } from "../types";
+import type { EnumInfo, GoogleTab, SheetRole, SourceType, TableInfo, TableModel, WorkbookInfo } from "../types";
 
 export type NodeKind = "group" | "workbook" | "table" | "config" | "sheet" | "enum" | "enumsheet";
 export type IconName = "excel" | "sheets" | "drive" | "folder" | "table" | "config" | "enum";
@@ -17,6 +17,7 @@ export interface TreeNode {
   tooltip: string;
   children: TreeNode[];
   table?: TableInfo;
+  googleTab?: GoogleTab;
   /** On sheet, enum and enum sheet nodes. */
   sheet?: string;
   /** On workbook, sheet, enum and enum sheet nodes. */
@@ -173,7 +174,13 @@ export function buildTree(model: TableModel): TreeNode[] {
     tablesByWorkbook.set(table.workbook, [...(tablesByWorkbook.get(table.workbook) ?? []), table]);
   }
 
-  const workbooks = [...new Set([...tablesByWorkbook.keys(), ...sheetEnums.keys()])].sort((a, b) => {
+  const tabKey = (workbook: string, sheet: string) => JSON.stringify([workbook, sheet]);
+  const represented = new Set(model.tables.flatMap((table) => table.sheets.map((entry) => tabKey(entry.workbook, entry.sheet))));
+  for (const [workbook, groups] of sheetEnums) {
+    for (const group of groups) represented.add(tabKey(workbook, group.sheet));
+  }
+  const standalone = (model.googleTabs ?? []).filter((tab) => !represented.has(tabKey(tab.workbook, tab.sheet)));
+  const workbooks = [...new Set([...tablesByWorkbook.keys(), ...sheetEnums.keys(), ...standalone.map((tab) => tab.workbook)])].sort((a, b) => {
     const ca = connection(a);
     const cb = connection(b);
     return (
@@ -183,6 +190,8 @@ export function buildTree(model: TableModel): TreeNode[] {
     );
   });
 
+  const googleTabs = new Map((model.googleTabs ?? []).map((tab) => [tabKey(tab.workbook, tab.sheet), tab]));
+  const googleTab = (workbook: string, sheet: string) => googleTabs.get(tabKey(workbook, sheet));
   const workbookNodes: { group: Group; source: string; workbook: string; node: TreeNode }[] = [];
   for (const workbook of workbooks) {
     const children: TreeNode[] = [];
@@ -200,6 +209,7 @@ export function buildTree(model: TableModel): TreeNode[] {
             tooltip: describeSheet(table.name, entry.role),
             children: [],
             table,
+            googleTab: googleTab(entry.workbook, entry.sheet),
             sheet: entry.sheet,
             workbook: entry.workbook,
           });
@@ -228,6 +238,7 @@ export function buildTree(model: TableModel): TreeNode[] {
           Count(table.columns, "column") +
           "\n" +
           table.sheets.map((entry) => entry.sheet).join("\n"),
+        googleTab: table.sheets.length === 1 ? googleTab(table.sheets[0].workbook, table.sheets[0].sheet) : undefined,
         children: sheetNodes,
         table,
       });
@@ -242,11 +253,17 @@ export function buildTree(model: TableModel): TreeNode[] {
         icon: "enum",
         note: String(enums.length),
         tooltip: Count(enums.length, "enum") + "\n" + enums.map((definition) => definition.name).join("\n"),
+        googleTab: googleTab(workbook, sheet),
         children: enums.map(enumNode),
         workbook,
         sheet,
         enums,
       });
+    }
+
+    for (const tab of standalone.filter((tab) => tab.workbook === workbook).sort((a, b) => byName(a.sheet, b.sheet))) {
+      children.push({ key: `tab:${workbook}/${tab.sheet}`, kind: "sheet", label: tab.sheet, icon: "table",
+        note: "", tooltip: workbook + " / " + tab.sheet, children: [], workbook, sheet: tab.sheet, googleTab: tab });
     }
 
     if (children.length > 0) {

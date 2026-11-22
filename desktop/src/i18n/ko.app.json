@@ -12,7 +12,7 @@
     "Columns": "열",
     "Copied.": "복사했습니다.",
     "Copy name": "이름 복사",
-    "Custom providers are classes in a Unity project and run only in the Unity editor. Here, use \"command\" or build offline from the snapshot.": "사용자 정의 제공자는 Unity 프로젝트 안의 클래스라서 Unity 에디터에서만 실행됩니다. 여기서는 \"command\"를 쓰거나 스냅샷으로 오프라인 빌드하세요.",
+    "Custom providers are classes in a Unity project and run only in the Unity editor. Here, use \"command\" or build the snapshot with the CLI --offline option.": "사용자 정의 제공자는 Unity 프로젝트 안의 클래스라서 Unity 에디터에서만 실행됩니다. 여기서는 \"command\"를 쓰거나 CLI의 --offline 옵션으로 스냅샷을 빌드하세요.",
     "Engine": "엔진",
     "Game tables from xlsx, CSV and Google Sheets: typed C# and binary data, the same as the Unity window and the holysheet command line.": "xlsx, CSV, 구글 시트로 게임 테이블을 만듭니다. 타입이 있는 C# 코드와 바이너리 데이터를 Unity 창, holysheet 명령줄과 똑같이 생성합니다.",
     "Loading…": "불러오는 중…",

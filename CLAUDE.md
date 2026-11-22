@@ -25,8 +25,9 @@ Do not finish a UI task with only one shell changed and the other left for later
 **Structure and order**
 
 - Pages: `Tables`, then `Settings`.
-- The toolbar shows page tabs, status, `Offline`, `Check`, `Build all`, then `Build selection (n)`.
+- The toolbar shows page tabs, status, `Check`, `Build all`, then `Build selection (n)`.
   The desktop app adds the project name and its menu at the far left, and nothing else.
+- A single Google tab has local copy controls in its tree context menu and shows its last download time while pinned.
 - Tables page: the tree with its search on the left and the selection line under it; on the right the caption with
   the `View` menu, the find bar, the grid; the problems bar and panel under the grid.
 - Settings sections, in this order and open or closed by default as here: `Sources` (open), `Output` (open),

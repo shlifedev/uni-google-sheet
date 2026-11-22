@@ -13,7 +13,7 @@ import {
   selectionOf,
   type TreeNode,
 } from "../lib/tree";
-import { copy, openSource } from "../lib/actions";
+import { copy, openSource, reveal } from "../lib/actions";
 import { showMenu } from "./Menu";
 import { Chevron, NodeIcon, SearchIcon } from "./Icons";
 import { Highlight } from "./Highlight";
@@ -175,10 +175,20 @@ export function TableTree({ tree }: { tree: TreeNode[] }) {
     const label = describeSelection(nodes, target);
     const source = sourceOf(node);
     const runnable = !!project?.config && !running && !isSelectionEmpty(target);
+    const tab = nodes.length === 1 ? node.googleTab : undefined;
+    const changeCopy = (useLocal: boolean) => tab && void startRun(false, [], { copy: { workbook: tab.workbook, sheet: tab.sheet, useLocal } });
     showMenu(event, [
       { label: F("Build {0}", label), disabled: !runnable, action: () => void startRun(true, onlyArguments(target)) },
       { label: F("Check {0}", label), disabled: !runnable, action: () => void startRun(false, onlyArguments(target)) },
       { separator: true },
+      ...(tab ? [
+        { label: T(tab.localCopyUtc ? "Download again from Google" : "Use local copy"), disabled: !runnable, action: () => changeCopy(true) },
+        ...(tab.localPath ? [
+          { label: T("Show local CSV in folder"), action: () => void reveal(tab.localPath!) },
+          { label: T("Use Google original"), disabled: !runnable, action: () => changeCopy(false) },
+        ] : []),
+        { separator: true as const },
+      ] : []),
       { label: T("Open"), disabled: !source, action: () => source && void openSource(source.workbook, source.sheet) },
       { label: T("Copy name"), action: () => void copy(node.label) },
     ]);
@@ -212,13 +222,15 @@ export function TableTree({ tree }: { tree: TreeNode[] }) {
         {visible.map(({ node, depth }) => {
           const open = shownExpanded.has(node.key);
           const isSelected = view.selected.includes(node.key);
+          const saved = node.googleTab?.localCopyUtc ? new Date(node.googleTab.localCopyUtc) : null;
+          const localNote = saved ? F("Local copy · {0}", saved.toTimeString().slice(0, 5)) : "";
           return (
             <div
               key={node.key}
               data-key={node.key}
               className={`tree-row ${isSelected ? "selected" : ""}`}
               style={{ paddingLeft: 6 + depth * 12 }}
-              title={node.tooltip}
+              title={saved ? node.tooltip + "\n" + F("Local copy · updated {0}", saved.toLocaleString()) : node.tooltip}
               role="treeitem"
               aria-selected={isSelected}
               aria-expanded={node.children.length > 0 ? open : undefined}
@@ -246,7 +258,7 @@ export function TableTree({ tree }: { tree: TreeNode[] }) {
               <span className="label">
                 <Highlight text={node.label} query={query} />
               </span>
-              {node.note && <span className="note">{node.note}</span>}
+              {(localNote || node.note) && <span className={localNote ? "note local-copy" : "note"}>{localNote || node.note}</span>}
             </div>
           );
         })}

@@ -554,7 +554,7 @@ function SourceCard({
               <div className="form-row">
                 <span />
                 <span className="warning-text">
-                  {T("Custom providers are classes in a Unity project and run only in the Unity editor. Here, use \"command\" or build offline from the snapshot.")}
+                  {T("Custom providers are classes in a Unity project and run only in the Unity editor. Here, use \"command\" or build the snapshot with the CLI --offline option.")}
                 </span>
               </div>
             </>

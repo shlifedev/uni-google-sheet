@@ -214,6 +214,7 @@ namespace HolySheet.Core.Sources
             var sources = new List<IWorkbookSource>(config.Sources.Count);
             // Copies of Google files by Drive version, so unchanged files are not downloaded again.
             string remoteCache = Path.Combine(config.Resolve(config.CacheDirectory), "google");
+            var copies = new GoogleLocalCopies(config.BaseDirectory);
             foreach (SourceConfig source in config.Sources)
             {
                 switch (source.Type)
@@ -252,6 +253,12 @@ namespace HolySheet.Core.Sources
                         }
 
                         break;
+                }
+
+                if (source.IsRemote)
+                {
+                    int index = sources.Count - 1;
+                    sources[index] = new GoogleCopySource(source, sources[index], copies, parser, only, refreshGoogle);
                 }
             }
 

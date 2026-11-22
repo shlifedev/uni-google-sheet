@@ -1,5 +1,5 @@
 // Per-user preferences, kept in the app's own settings file (not in the project): language, view options,
-// recent projects, and per-project toggles. Read once at start; every change is saved at once.
+// and recent projects. Read once at start; every change is saved at once.
 import { load, type Store } from "@tauri-apps/plugin-store";
 import type { Language } from "../i18n";
 
@@ -15,8 +15,6 @@ export interface Preferences {
   stripes: boolean;
   findInAllColumns: boolean;
   recent: string[];
-  /** Offline preference per project path. */
-  projects: Record<string, { offline?: boolean }>;
 }
 
 export const defaults: Preferences = {
@@ -28,7 +26,6 @@ export const defaults: Preferences = {
   stripes: true,
   findInAllColumns: false,
   recent: [],
-  projects: {},
 };
 
 let store: Store | null = null;

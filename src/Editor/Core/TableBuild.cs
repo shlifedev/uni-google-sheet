@@ -34,6 +34,21 @@ namespace HolySheet.Core
         /// <summary>Fetch online Google sources even when Drive reports the last downloaded version.</summary>
         public bool RefreshGoogle { get; set; }
 
+        /// <summary>Keep remote input grids for single-tab downloads and immediate validation in an interactive window.</summary>
+        public bool KeepGooglePreview { get; set; }
+
+        internal IReadOnlyDictionary<string, GoogleSourcePreview>? ReplayGoogle { get; private set; }
+
+        internal TableBuildOptions ForGooglePreview(IReadOnlyDictionary<string, GoogleSourcePreview> inputs)
+        {
+            var options = (TableBuildOptions)MemberwiseClone();
+            options.KeepGooglePreview = true;
+            options.ReplayGoogle = inputs;
+            options.Only = null;
+            options.Sources = null;
+            return options;
+        }
+
         /// <summary>The transform rules to apply. Null uses <see cref="TransformPipeline.CreateDefault"/>.</summary>
         public TransformPipeline? Pipeline { get; set; }
 
@@ -71,6 +86,11 @@ namespace HolySheet.Core
 
         /// <summary>The sheets exactly as read, before any rule was applied. In a partial build, the cached sheets with the selected ones replaced.</summary>
         public IReadOnlyList<Workbook> Workbooks { get; internal set; } = Array.Empty<Workbook>();
+
+        public IReadOnlyDictionary<(string Workbook, string Sheet), GoogleTab> GoogleTabs => _googleTabs;
+
+        internal readonly Dictionary<(string Workbook, string Sheet), GoogleTab> _googleTabs = new();
+        internal readonly Dictionary<string, GoogleSourcePreview> GoogleInputs = new();
 
         /// <summary>The source each workbook was read from, by workbook name. Kept by <see cref="ReleaseBuildData"/>, for the window's tree.</summary>
         public IReadOnlyDictionary<string, WorkbookOrigin> WorkbookOrigins { get; internal set; } = new Dictionary<string, WorkbookOrigin>();
@@ -130,7 +150,8 @@ namespace HolySheet.Core
         /// Lets go of everything that is only needed to write files: the sheets as read, the typed values and the generated output.
         /// What is left is what a person looks at afterwards: <see cref="RawTables"/>, <see cref="Diagnostics"/>, <see cref="Enums"/>
         /// and the counts. Call it after <see cref="TableBuild.Commit"/> when the result is kept around, as the editor window does;
-        /// on 300,000 rows it brings a kept result from about 820 MB down to about 270 MB. A released result cannot be committed.
+        /// on 300,000 rows it brings a kept result from about 820 MB down to about 270 MB. With KeepGooglePreview, the remote
+        /// grids stay available for checking a single-tab download. A released result cannot be committed.
         /// </summary>
         public void ReleaseBuildData()
         {
@@ -200,12 +221,20 @@ namespace HolySheet.Core
             }
 
             IReadOnlyList<IWorkbookSource> sources = options.Sources ?? WorkbookSources.Create(config, parser, options, only);
+            var copies = new GoogleLocalCopies(config.BaseDirectory);
             var sourceBags = new DiagnosticBag[sources.Count];
             var loads = new Task<IReadOnlyList<Workbook>>[sources.Count];
             for (int index = 0; index < sources.Count; index++)
             {
                 sourceBags[index] = new DiagnosticBag();
                 IWorkbookSource source = sources[index];
+                if (options.ReplayGoogle != null && config.Sources[index].IsRemote)
+                {
+                    if (!options.ReplayGoogle.TryGetValue(copies.CatalogPath(config.Sources[index]), out var preview))
+                        throw new InvalidOperationException("The Google sources changed. Refresh the project before downloading a tab.");
+                    source = preview;
+                }
+
                 DiagnosticBag bag = sourceBags[index];
                 loads[index] = Task.Run(() => source.LoadAsync(bag, cancellationToken), cancellationToken);
             }
@@ -232,6 +261,32 @@ namespace HolySheet.Core
             result.WorkbookOrigins = workbooks.Where(workbook => workbook.Origin != null)
                 .GroupBy(workbook => workbook.Name, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.First().Origin!, StringComparer.Ordinal);
+            if (options.KeepGooglePreview && options.Sources == null)
+            {
+                for (int i = 0; i < config.Sources.Count; i++)
+                {
+                    SourceConfig source = config.Sources[i];
+                    if (!source.IsRemote) continue;
+                    // A full read retains the exact source entry, even when a document is registered twice under different names.
+                    var books = only == null ? loads[i].Result.ToList()
+                        : workbooks.Where(book => book.Origin?.Type == source.Type && book.Origin.Source == DescribeSource(source)
+                            && (source.Type != SourceType.Google || source.Name == null || book.Name == source.Name)).ToList();
+                    result.GoogleInputs[copies.CatalogPath(source)] = new GoogleSourcePreview(books, sourceBags[i]);
+                    foreach (Workbook book in books)
+                    {
+                        string? id = GoogleLocalCopies.SpreadsheetId(source, book);
+                        if (id == null) continue;
+                        foreach (Sheet sheet in book.Sheets)
+                        {
+                            string path = copies.CsvPath(id, sheet.Name);
+                            DateTime? stamp = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : null;
+                            if (stamp.HasValue || SheetRole.FromName(sheet.Name).Kind != SheetKind.Ignored)
+                                result._googleTabs[(book.Name, sheet.Name)] = new GoogleTab(book.Name, sheet.Name, id, stamp, stamp.HasValue ? path : null);
+                        }
+                    }
+                }
+            }
+
             result.ReadTime = readWatch.Elapsed;
             result.AddPhase("read", readWatch.Elapsed);
 

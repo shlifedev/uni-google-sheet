@@ -82,8 +82,13 @@ public static class TableView
             });
         }
 
+        foreach (var tab in build.GoogleTabs.Values) AddWorkbook(tab.Workbook);
         return new JsonObject
         {
+            ["googleTabs"] = Json.Array(build.GoogleTabs.Values.Select(tab => (JsonNode?)new JsonObject
+            {
+                ["workbook"] = tab.Workbook, ["sheet"] = tab.Sheet, ["localCopyUtc"] = tab.LocalCopyUtc?.ToString("O"), ["localPath"] = tab.LocalPath
+            })),
             ["workbooks"] = Json.Array(workbookNames.Select(name =>
             {
                 build.WorkbookOrigins.TryGetValue(name, out WorkbookOrigin? origin);

@@ -33,6 +33,21 @@ const model: TableModel = {
 beforeAll(() => setLanguage("en"));
 
 describe("buildTree", () => {
+  it("attaches copy controls to individual Google tabs, including tabs with no table", () => {
+    const tab = (sheet: string) => ({ workbook: "Remote", sheet, localCopyUtc: null, localPath: null });
+    const one = { ...model.tables[2], workbook: "Remote", sheets: [{ ...model.tables[2].sheets[0], workbook: "Remote" }] };
+    const many = { ...model.tables[0], workbook: "Remote", sheets: model.tables[0].sheets.map((entry) => ({ ...entry, workbook: "Remote" })) };
+    const tree = buildTree({ ...model, googleTabs: ["Item", "Item.Rare", "Limits", "Empty"].map(tab),
+      workbooks: [...model.workbooks, { name: "Remote", type: "google", source: "test", link: null }], tables: [one, many, model.tables[1]] });
+    const nodes = new Map(flattenTree(tree).map(({ node }) => [node.key, node.googleTab?.sheet]));
+    expect(nodes.get("table:Limits")).toBe("Limits");
+    expect(nodes.get("sheet:Item/Item.Rare")).toBe("Item.Rare");
+    expect(nodes.get("tab:Remote/Empty")).toBe("Empty");
+    expect(nodes.get("table:Item")).toBeUndefined();
+    expect(nodes.get("table:Monster")).toBeUndefined();
+    expect(nodes.get("workbook:Remote")).toBeUndefined();
+  });
+
   it("groups by connection when there is more than one, with sheets and enums where they belong", () => {
     const tree = buildTree(model);
     expect(tree.map((node) => node.label)).toEqual(["Excel", "CSV"]);
