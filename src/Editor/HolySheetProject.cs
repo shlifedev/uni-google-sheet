@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Threading;
 using System.Threading.Tasks;
 using HolySheet.Core;
 using HolySheet.Core.Config;
@@ -45,10 +44,6 @@ namespace HolySheet.Editor
     /// </summary>
     public static class HolySheetProject
     {
-        private const string AutoBuildKey = "HolySheet.AutoBuild";
-
-        private static SourceWatcher? _watcher;
-        private static int _sourcesChanged;
         private static Task<HolySheetRunResult>? _running;
 
         /// <summary>The project folder: the one that contains Assets.</summary>
@@ -100,17 +95,6 @@ namespace HolySheet.Editor
         private static IEnumerable<Type> ProviderTypes() =>
             TypeCache.GetTypesDerivedFrom<IGoogleCredentialProvider>().Concat(TypeCache.GetTypesWithAttribute<HolySheetCredentialProviderAttribute>());
 
-        /// <summary>Rebuild automatically when a local source file changes. Stored per machine, not in the config.</summary>
-        public static bool AutoBuild
-        {
-            get => EditorPrefs.GetBool(AutoBuildKey + Application.dataPath, false);
-            set
-            {
-                EditorPrefs.SetBool(AutoBuildKey + Application.dataPath, value);
-                RestartWatcher();
-            }
-        }
-
         /// <summary>The CSV parser this project's builds use on this editor.</summary>
         public static string DescribeCsvBackend(HolySheetConfig? config = null)
         {
@@ -143,11 +127,7 @@ namespace HolySheet.Editor
             return config;
         }
 
-        public static void SaveConfig(HolySheetConfig config)
-        {
-            config.Save(ConfigPath);
-            RestartWatcher();
-        }
+        public static void SaveConfig(HolySheetConfig config) => config.Save(ConfigPath);
 
         /// <summary>
         /// Reads the sources and, when <paramref name="commit"/> is true and there are no errors, writes code and data.
@@ -156,20 +136,27 @@ namespace HolySheet.Editor
         /// The work runs on a background thread; the returned task completes on it, while the events are raised on the main thread.
         /// </summary>
         public static Task<HolySheetRunResult> RunAsync(bool commit, bool offline = false, SheetSelection? only = null)
+            => StartRun(commit, offline, only, refreshGoogle: false);
+
+        internal static Task<HolySheetRunResult> RefreshAsync(bool offline)
+            => StartRun(commit: false, offline: offline, only: null, refreshGoogle: true);
+
+        private static Task<HolySheetRunResult> StartRun(bool commit, bool offline, SheetSelection? only, bool refreshGoogle)
         {
             if (_running != null && !_running.IsCompleted)
             {
                 return _running;
             }
 
-            RunStarted?.Invoke();
             TransformPipeline? pipeline = CreatePipeline?.Invoke();
             // Unity's own properties may only be read on the main thread, so the path is resolved before the work moves off it.
             string configPath = ConfigPath;
             IReadOnlyList<IGoogleCredentialProvider> providers = CreateCredentialProviders();
-            Task<HolySheetRunResult> task = Task.Run(() => Run(configPath, commit, offline, pipeline, only, providers));
+            Type[] validators = DiscoverValidators();
+            Task<HolySheetRunResult> task = Task.Run(() => Run(configPath, commit, offline, pipeline, only, providers, validators, refreshGoogle));
             _running = task;
             EditorApplication.update += Poll;
+            RunStarted?.Invoke();
             return task;
 
             void Poll()
@@ -190,17 +177,20 @@ namespace HolySheet.Editor
         /// <summary>Runs on the calling thread and returns when done. For batch mode and tests.</summary>
         public static HolySheetRunResult RunBlocking(bool commit, bool offline = false, SheetSelection? only = null)
         {
-            HolySheetRunResult result = Run(ConfigPath, commit, offline, CreatePipeline?.Invoke(), only, CreateCredentialProviders());
+            HolySheetRunResult result = Run(ConfigPath, commit, offline, CreatePipeline?.Invoke(), only, CreateCredentialProviders(), DiscoverValidators(), refreshGoogle: false);
             Finish(result);
             return result;
         }
 
-        private static HolySheetRunResult Run(string configPath, bool commit, bool offline, TransformPipeline? pipeline, SheetSelection? only, IReadOnlyList<IGoogleCredentialProvider> providers)
+        private static Type[] DiscoverValidators() => TypeCache.GetTypesDerivedFrom<ITableValidator>()
+            .Where(type => type.IsVisible && type.IsClass && !type.IsAbstract && !type.ContainsGenericParameters).ToArray();
+
+        private static HolySheetRunResult Run(string configPath, bool commit, bool offline, TransformPipeline? pipeline, SheetSelection? only, IReadOnlyList<IGoogleCredentialProvider> providers, Type[] validators, bool refreshGoogle)
         {
             try
             {
                 HolySheetConfig config = HolySheetConfig.Load(configPath);
-                BuildResult build = TableBuild.Run(config, new TableBuildOptions { Offline = offline, Pipeline = pipeline, Only = only, CredentialProviders = providers });
+                BuildResult build = TableBuild.Run(config, new TableBuildOptions { ValidatorTypes = validators, Offline = offline, RefreshGoogle = refreshGoogle, Pipeline = pipeline, Only = only, CredentialProviders = providers });
                 CommitReport? report = commit && build.Success ? TableBuild.Commit(config, build) : null;
                 // The result is kept for the window, which only shows the tables as read and the problems.
                 // The typed values and generated bytes are several times larger and are not needed once written.
@@ -254,53 +244,6 @@ namespace HolySheet.Editor
             return result.Commit.HasChanges
                 ? "Built " + summary + timing + ": " + result.Commit.Written.Count + " written, " + result.Commit.Deleted.Count + " deleted."
                 : "Up to date: " + summary + timing + ".";
-        }
-
-        [InitializeOnLoadMethod]
-        private static void Initialize()
-        {
-            EditorApplication.update += OnUpdate;
-            AssemblyReloadEvents.beforeAssemblyReload += StopWatcher;
-            EditorApplication.quitting += StopWatcher;
-            RestartWatcher();
-        }
-
-        private static void OnUpdate()
-        {
-            // The watcher fires on a timer thread; the build is started from here, on the main thread.
-            if (Interlocked.Exchange(ref _sourcesChanged, 0) == 1 && !IsRunning && !EditorApplication.isCompiling)
-            {
-                RunAsync(commit: true);
-            }
-        }
-
-        private static void RestartWatcher()
-        {
-            StopWatcher();
-            if (!HasConfig || !EditorPrefs.GetBool(AutoBuildKey + Application.dataPath, false))
-            {
-                return;
-            }
-
-            try
-            {
-                HolySheetConfig config = LoadConfig();
-                List<string> paths = config.Sources.Where(source => source.Path != null).Select(source => config.Resolve(source.Path!)).ToList();
-                if (paths.Count > 0)
-                {
-                    _watcher = new SourceWatcher(paths, TimeSpan.FromMilliseconds(400), () => Interlocked.Exchange(ref _sourcesChanged, 1));
-                }
-            }
-            catch (Exception exception) when (exception is IOException || exception is JsonFormatException || exception is ArgumentException)
-            {
-                Debug.LogWarning("[HolySheet] Auto build is off because the config could not be read: " + exception.Message);
-            }
-        }
-
-        private static void StopWatcher()
-        {
-            _watcher?.Dispose();
-            _watcher = null;
         }
 
         [MenuItem("Tools/HolySheet/Build Tables %#&b", priority = 11)]

@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "com.shlifedev.holysheet": {
+    "com.lumera.holysheet": {
       "version": "file:../../../src",
       "depth": 0,
       "source": "local",

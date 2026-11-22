@@ -1,7 +1,7 @@
 {
   "format": 1,
   "serializer": "memorypack",
-  "schema": "3fb3d079ddf1eba69701bbcd2c950697d3f8e02082374c92290ba3d2127d4e8b",
+  "schema": "55dec0bdca5004a010306c3b0b1c968eef5b19adbce78023c9a5ca0e8dbee649",
   "tables": [
     {
       "name": "Drop",
@@ -1399,6 +1399,10 @@
         {
           "name": "Rogue",
           "value": 400
+        },
+        {
+          "name": "QQQ",
+          "value": 555
         },
         {
           "name": "Knight",

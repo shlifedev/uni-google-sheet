@@ -45,15 +45,14 @@ export const rpc = {
   init: (dir: string, sample: boolean, unity?: boolean) => call<ProjectState>("project.init", { dir, sample, unity }),
   close: () => call<ProjectState>("project.close"),
   saveConfig: (config: HolySheetConfig) => call<ProjectState>("config.save", { config }),
-  run: (commit: boolean, offline: boolean, only: string[] = []) => call<RunResult>("run", { commit, offline, only }),
+  run: (commit: boolean, offline: boolean, only: string[] = [], refreshGoogle = false) =>
+    call<RunResult>("run", { commit, offline, only, refreshGoogle }),
   model: () => call<TableModel>("tables.model"),
   preview: (table: string, sheet?: string | null) => call<Preview>("tables.preview", { table, sheet: sheet ?? null }),
   locateSource: (workbook: string, sheet?: string | null) => call<Located>("source.locate", { workbook, sheet: sheet ?? null }),
   locateProblem: (location: string, workbook?: string, sheet?: string) =>
     call<Located>("problem.locate", { location, workbook: workbook ?? null, sheet: sheet ?? null }),
   toProjectPath: (path: string) => call<{ path: string; inside: boolean }>("path.toProject", { path }),
-  setWatch: (enabled: boolean, offline: boolean, intervalSec: number) =>
-    call<ProjectState>("watch.set", { enabled, offline, intervalSec }),
   createKeyPair: () => call<ProjectState>("signing.createKeyPair"),
   ignoreKey: () => call<ProjectState>("signing.ignoreKey"),
   stopSigning: () => call<ProjectState>("signing.stop"),

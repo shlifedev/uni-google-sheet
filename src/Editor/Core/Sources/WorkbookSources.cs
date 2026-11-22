@@ -205,7 +205,12 @@ namespace HolySheet.Core.Sources
     public static class WorkbookSources
     {
         public static IReadOnlyList<IWorkbookSource> Create(HolySheetConfig config, ICsvParser parser, bool offline = false, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null, IReadOnlyList<IGoogleCredentialProvider>? credentialProviders = null)
+            => Create(config, parser, new TableBuildOptions { Offline = offline, HttpHandler = httpHandler, GoogleEndpoints = endpoints, CredentialProviders = credentialProviders }, only);
+
+        internal static IReadOnlyList<IWorkbookSource> Create(HolySheetConfig config, ICsvParser parser, TableBuildOptions options, SheetSelection? only)
         {
+            bool offline = options.Offline;
+            bool refreshGoogle = options.RefreshGoogle && !offline;
             var sources = new List<IWorkbookSource>(config.Sources.Count);
             // Copies of Google files by Drive version, so unchanged files are not downloaded again.
             string remoteCache = Path.Combine(config.Resolve(config.CacheDirectory), "google");
@@ -222,7 +227,10 @@ namespace HolySheet.Core.Sources
                     case SourceType.GoogleFolder:
                     {
                         string? folderSnapshot = source.Snapshot == null ? null : config.Resolve(source.Snapshot);
-                        sources.Add(new GoogleFolderSource(source, config.BaseDirectory, parser, folderSnapshot, httpHandler, endpoints, only, offline && folderSnapshot != null, remoteCache, credentialProviders));
+                        sources.Add(new GoogleFolderSource(source, config.BaseDirectory, parser, folderSnapshot, options.HttpHandler, options.GoogleEndpoints, only, offline && folderSnapshot != null, remoteCache, options.CredentialProviders)
+                        {
+                            RefreshGoogle = refreshGoogle
+                        });
                         break;
                     }
                     default:
@@ -237,7 +245,10 @@ namespace HolySheet.Core.Sources
                         }
                         else
                         {
-                            sources.Add(new GoogleSheetsSource(source, config.BaseDirectory, parser, snapshot, httpHandler, endpoints, only, remoteCache, credentialProviders));
+                            sources.Add(new GoogleSheetsSource(source, config.BaseDirectory, parser, snapshot, options.HttpHandler, options.GoogleEndpoints, only, remoteCache, options.CredentialProviders)
+                            {
+                                RefreshGoogle = refreshGoogle
+                            });
                         }
 
                         break;

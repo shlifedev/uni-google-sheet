@@ -22,8 +22,17 @@ namespace HolySheet.Core
     /// <summary>Per-run settings that do not belong in the config file.</summary>
     public sealed class TableBuildOptions
     {
+        /// <summary>Additional project rules discovered by the host, such as Unity editor scripts.</summary>
+        public IReadOnlyList<Type>? ValidatorTypes { get; set; }
+
+        /// <summary>Loads the configured validator DLLs. Hosts can supply their own assembly load context.</summary>
+        public Func<string, System.Reflection.Assembly>? LoadValidatorAssembly { get; set; }
+
         /// <summary>Do not contact Google; read the CSV snapshot saved by the last online build instead.</summary>
         public bool Offline { get; set; }
+
+        /// <summary>Fetch online Google sources even when Drive reports the last downloaded version.</summary>
+        public bool RefreshGoogle { get; set; }
 
         /// <summary>The transform rules to apply. Null uses <see cref="TransformPipeline.CreateDefault"/>.</summary>
         public TransformPipeline? Pipeline { get; set; }
@@ -190,7 +199,7 @@ namespace HolySheet.Core
                 return result;
             }
 
-            IReadOnlyList<IWorkbookSource> sources = options.Sources ?? WorkbookSources.Create(config, parser, options.Offline, options.HttpHandler, options.GoogleEndpoints, only, options.CredentialProviders);
+            IReadOnlyList<IWorkbookSource> sources = options.Sources ?? WorkbookSources.Create(config, parser, options, only);
             var sourceBags = new DiagnosticBag[sources.Count];
             var loads = new Task<IReadOnlyList<Workbook>>[sources.Count];
             for (int index = 0; index < sources.Count; index++)
@@ -277,6 +286,10 @@ namespace HolySheet.Core
                 diagnostics.AddError("input", "No table was found.", $"A table is a sheet whose header rows are, top to bottom: {string.Join(", ", config.Sheet.Header)}.");
             }
 
+            if (!diagnostics.HasErrors)
+            {
+                TableValidation.Run(config, options, tables, diagnostics, cancellationToken);
+            }
             result.AddPhase("validate", phase.Elapsed);
             phase.Restart();
 

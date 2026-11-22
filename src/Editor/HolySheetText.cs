@@ -183,8 +183,6 @@ namespace HolySheet.Editor
             ["Settings"] = "설정",
             ["Offline"] = "오프라인",
             ["Build Google sources from the saved snapshot instead of the network."] = "구글 소스를 네트워크 대신 저장된 스냅샷에서 읽습니다.",
-            ["Auto build"] = "자동 빌드",
-            ["Build whenever a local sheet file is saved."] = "로컬 시트 파일이 저장될 때마다 빌드합니다.",
             ["Check"] = "검사",
             ["Read and validate the sheets. Writes nothing."] = "시트를 읽고 검사만 합니다. 파일은 쓰지 않습니다.",
             ["Build all"] = "전체 빌드",
@@ -201,7 +199,7 @@ namespace HolySheet.Editor
             ["Create holysheet.json"] = "holysheet.json 만들기",
             ["holysheet.json could not be read: "] = "holysheet.json을 읽을 수 없습니다: ",
             ["Open"] = "열기",
-            ["Reload"] = "다시 읽기",
+            ["Reload"] = "새로고침",
 
             // Problems
             ["Reading the sheets…"] = "시트를 읽는 중…",

@@ -1,8 +1,8 @@
 {
   "holysheet": 1,
   "serializer": "memorypack",
-  "schema": "3fb3d079ddf1eba69701bbcd2c950697d3f8e02082374c92290ba3d2127d4e8b",
-  "content": "09b1c1978c69582c306441196e35aff099bc0a414fe205831f75a60f55849113",
+  "schema": "55dec0bdca5004a010306c3b0b1c968eef5b19adbce78023c9a5ca0e8dbee649",
+  "content": "35c188e555e2fb8625c7af6b7d9661aaf744ffd40c7526767736df4e56ad32a5",
   "tool": "holysheet/2.0.0",
   "tables": [
     { "name": "Drop", "file": "Drop.bytes", "rows": 9, "bytes": 625, "hash": "f693cdcd9c3cbfef109da4ef10c8d463b1960a77eab5bcc32ead502c9282ccab", "schema": "f36c929284bff98dc32dff73caf597cf50b4397fe72c4022f164e68039849f11" },
@@ -12,7 +12,7 @@
     { "name": "Game", "file": "Game.bytes", "rows": 1, "bytes": 67, "hash": "7fde2e01e20ef152cb70825ee47087adff8480d17941598c35d7399ac0ef96d4", "schema": "aec838ff1c90e3fa2fb1fed5096f449a14511e7bc627819b8c9ba5d2645cd2ab" },
     { "name": "Hello", "file": "Hello.bytes", "rows": 3, "bytes": 31, "hash": "4e95baa4fd048359ca1564d6c63374d90182a2e17f8376f47702e28545995dd2", "schema": "0fdbf12a947e73f58a6b8793cb61b74f051d6ad7e69b129900b4f32ef921881c" },
     { "name": "Item", "file": "Item.bytes", "rows": 44, "bytes": 3537, "hash": "e9b79a58ba278548a7f1cb331ded4ff4511a8d92de81ee20d88381fbe0869ee5", "schema": "ec6d05e5c824b45421fcad949bc801eb4ed3786e47a6ce0d763cde7ebc4ff5ec" },
-    { "name": "Job", "file": "Job.bytes", "rows": 12, "bytes": 533, "hash": "09ebbed005183e8161c9b298594faa869b5bf76319233eec11b7889dd28dbf15", "schema": "96a42c2ff348f17896351df1486104de6cce5e232032044d88ce339617f9640e" },
+    { "name": "Job", "file": "Job.bytes", "rows": 13, "bytes": 576, "hash": "78e3abc1705e4c8c2f9f1bbb486084134d24b4525068a919d73769fd7af2c4f4", "schema": "96a42c2ff348f17896351df1486104de6cce5e232032044d88ce339617f9640e" },
     { "name": "Level", "file": "Level.bytes", "rows": 100, "bytes": 2504, "hash": "69b3f0371f72a9fa606bd976715976672df738cbb20cc6c677767c1773edf18e", "schema": "e9d8dc653e92e13b047dbbae84dbb50085b5348e795775a2dd47c366a0545efe" },
     { "name": "Map", "file": "Map.bytes", "rows": 14, "bytes": 1091, "hash": "db77650c7f9719c4caffe7b5cbdc96974d5dc4de65c3310ec1a724fb9a84dda1", "schema": "3268a68e7cade24a645fc8ae27f098854faac731bd73973a304f5cca3ad5f603" },
     { "name": "Monster", "file": "Monster.bytes", "rows": 16, "bytes": 988, "hash": "71ef9590c32fbd1b005edbb26223780d1404148e1ae29ba318334e06313d714c", "schema": "ad72ff7988f83edbf07ebd00c5bbd21294cd26ba87ef748bfcdbb736aa90c24d" },

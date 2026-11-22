@@ -15,9 +15,9 @@ public sealed record RunRecord(BuildResult Build, CommitReport? Commit, string? 
 
 /// <summary>
 /// The project the desktop app has open: a folder with a holysheet.json. Mirrors what the Unity window does through
-/// HolySheetProject, without Unity: one build at a time, the last result kept for the table view, auto build on file changes.
+/// HolySheetProject: one build at a time, with the last result kept for the table view.
 /// </summary>
-public sealed class DesktopProject : IDisposable
+public sealed class DesktopProject
 {
     private readonly Action<string, JsonNode?> _notify;
     private readonly object _gate = new();
@@ -25,14 +25,6 @@ public sealed class DesktopProject : IDisposable
     private string _configName = HolySheetConfig.DefaultFileName;
     private RunRecord? _last;
     private Task<JsonObject>? _running;
-
-    // Auto build: a watcher on the local sources and, when asked, a timer that re-reads the Google sources.
-    private SourceWatcher? _watcher;
-    private CancellationTokenSource? _polling;
-    private bool _watchEnabled;
-    private bool _watchOffline;
-    private int _watchInterval;
-    private int _changedWhileRunning;
 
     public DesktopProject(Action<string, JsonNode?> notify)
     {
@@ -94,7 +86,6 @@ public sealed class DesktopProject : IDisposable
             _last = null;
         }
 
-        RestartWatcher();
         return State();
     }
 
@@ -107,7 +98,6 @@ public sealed class DesktopProject : IDisposable
             _last = null;
         }
 
-        StopWatcher();
         return State();
     }
 
@@ -136,7 +126,6 @@ public sealed class DesktopProject : IDisposable
             ["sources"] = new JsonArray(),
             ["keyFileExists"] = false,
             ["keyIgnored"] = false,
-            ["watch"] = new JsonObject { ["enabled"] = _watchEnabled, ["offline"] = _watchOffline, ["intervalSec"] = _watchInterval, ["watching"] = _watcher?.WatchedCount ?? 0 },
             ["running"] = IsRunning,
             ["lastRun"] = _last == null ? null : RunJson.Describe(_last)
         };
@@ -157,6 +146,7 @@ public sealed class DesktopProject : IDisposable
             return state;
         }
 
+        state["canPreviewOffline"] = config.CanPreviewOffline();
         state["config"] = JsonNode.Parse(config.ToJson());
         state["sources"] = Json.Array(config.Sources.Select(source => (JsonNode?)SourceState(config, source)));
         string keyFile = config.Resolve(config.Signing.PrivateKeyFile ?? KeyPairWriter.DefaultFileName);
@@ -195,7 +185,6 @@ public sealed class DesktopProject : IDisposable
         var diagnostics = new DiagnosticBag();
         config.Validate(diagnostics, requireSources: false);
         config.Save(ConfigPath);
-        RestartWatcher();
         JsonObject state = State();
         state["diagnostics"] = Json.Array(diagnostics.Items.Select(RunJson.Diagnostic));
         return state;
@@ -229,7 +218,7 @@ public sealed class DesktopProject : IDisposable
     /// <paramref name="only"/> ("Item.xlsx" or "Item.xlsx/Item.Rare"), reads just those again and takes the rest
     /// from the last build. Refuses while another run is going: two builds must never write the same folder.
     /// </summary>
-    public Task<JsonObject> RunAsync(bool commit, bool offline, IReadOnlyList<string> only, string trigger)
+    public Task<JsonObject> RunAsync(bool commit, bool offline, IReadOnlyList<string> only, string trigger, bool refreshGoogle = false)
     {
         string configPath = ConfigPath;
         SheetSelection? selection = only.Count > 0 ? SheetSelection.Parse(only) : null;
@@ -242,19 +231,20 @@ public sealed class DesktopProject : IDisposable
             }
 
             _notify("run.started", new JsonObject { ["commit"] = commit, ["offline"] = offline, ["only"] = Json.Strings(only), ["trigger"] = trigger });
-            task = Task.Run(() => Finish(Run(configPath, commit, offline, selection), trigger));
+            task = Task.Run(() => Finish(Run(configPath, commit, offline, selection, refreshGoogle), trigger));
             _running = task;
         }
 
         return task;
     }
 
-    private static RunRecord Run(string configPath, bool commit, bool offline, SheetSelection? only)
+    private static RunRecord Run(string configPath, bool commit, bool offline, SheetSelection? only, bool refreshGoogle)
     {
         try
         {
             HolySheetConfig config = HolySheetConfig.Load(configPath);
-            BuildResult build = TableBuild.Run(config, new TableBuildOptions { Offline = offline, Only = only });
+            using var validators = new ValidatorAssemblies();
+            BuildResult build = TableBuild.Run(config, new TableBuildOptions { LoadValidatorAssembly = validators.Load, Offline = offline, Only = only, RefreshGoogle = refreshGoogle });
             CommitReport? report = commit && build.Success ? TableBuild.Commit(config, build) : null;
             // The table view only needs the tables as read and the problems; the typed values and generated bytes go.
             build.ReleaseBuildData();
@@ -280,27 +270,6 @@ public sealed class DesktopProject : IDisposable
         JsonObject result = RunJson.Describe(record);
         result["trigger"] = trigger;
         _notify("run.finished", result.DeepClone());
-        // A save during the build is built as soon as it ends, once, however many saves there were.
-        if (Interlocked.Exchange(ref _changedWhileRunning, 0) == 1 && _watchEnabled)
-        {
-            _ = Task.Run(async () =>
-            {
-                // This method runs inside the run's task; wait until that task has completed so the new run is not refused.
-                Task? current;
-                lock (_gate)
-                {
-                    current = _running;
-                }
-
-                if (current != null)
-                {
-                    await current.ContinueWith(_ => { }, TaskScheduler.Default).ConfigureAwait(false);
-                }
-
-                AutoBuild();
-            });
-        }
-
         return result;
     }
 
@@ -328,91 +297,6 @@ public sealed class DesktopProject : IDisposable
         return LocateSource(book, page);
     }
 
-    // ---- Auto build ----
-
-    public JsonObject SetWatch(bool enabled, bool offline, int intervalSeconds)
-    {
-        _watchEnabled = enabled;
-        _watchOffline = offline;
-        _watchInterval = Math.Max(0, intervalSeconds);
-        RestartWatcher();
-        return State();
-    }
-
-    private void RestartWatcher()
-    {
-        StopWatcher();
-        if (!_watchEnabled || _directory == null)
-        {
-            return;
-        }
-
-        HolySheetConfig? config = LoadConfigOrNull();
-        if (config == null)
-        {
-            return;
-        }
-
-        // Local files wake the build up; offline, the saved snapshots of the Google sources do too.
-        List<string> paths = config.Sources.Where(source => source.Path != null).Select(source => config.Resolve(source.Path!))
-            .Concat(_watchOffline ? config.Sources.Where(source => source.Snapshot != null).Select(source => config.Resolve(source.Snapshot!)) : [])
-            .ToList();
-        if (paths.Count > 0)
-        {
-            _watcher = new SourceWatcher(paths, TimeSpan.FromMilliseconds(400), AutoBuild);
-        }
-
-        // Google has no change notification, so its sources are read again on a timer, when the user set one.
-        if (_watchInterval > 0 && !_watchOffline && config.Sources.Any(source => source.IsRemote))
-        {
-            var polling = new CancellationTokenSource();
-            _polling = polling;
-            TimeSpan interval = TimeSpan.FromSeconds(_watchInterval);
-            _ = Task.Run(async () =>
-            {
-                while (!polling.IsCancellationRequested)
-                {
-                    try
-                    {
-                        await Task.Delay(interval, polling.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        return;
-                    }
-
-                    AutoBuild();
-                }
-            });
-        }
-    }
-
-    private void AutoBuild()
-    {
-        if (!_watchEnabled || _directory == null)
-        {
-            return;
-        }
-
-        try
-        {
-            _ = RunAsync(commit: true, _watchOffline, [], "watch");
-        }
-        catch (RpcException exception) when (exception.Code == RpcException.Busy)
-        {
-            Interlocked.Exchange(ref _changedWhileRunning, 1);
-        }
-    }
-
-    private void StopWatcher()
-    {
-        _watcher?.Dispose();
-        _watcher = null;
-        _polling?.Cancel();
-        _polling?.Dispose();
-        _polling = null;
-    }
-
     // ---- Signing ----
 
     /// <summary>Creates holysheet.private.key next to the config and turns signing on. Refuses to replace an existing key.</summary>
@@ -421,7 +305,6 @@ public sealed class DesktopProject : IDisposable
         HolySheetConfig config = HolySheetConfig.Load(ConfigPath);
         string path = KeyPairWriter.CreateForConfig(config);
         config.Save(ConfigPath);
-        RestartWatcher();
         JsonObject state = State();
         state["privateKeyFile"] = path;
         return state;
@@ -477,6 +360,4 @@ public sealed class DesktopProject : IDisposable
             return null;
         }
     }
-
-    public void Dispose() => StopWatcher();
 }

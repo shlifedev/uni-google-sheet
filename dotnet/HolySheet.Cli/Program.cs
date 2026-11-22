@@ -363,7 +363,8 @@ internal static class Commands
     private static async Task<int> BuildOnceAsync(HolySheetConfig config, Arguments arguments, Output console, bool commit, CancellationToken cancellationToken)
     {
         SheetSelection? only = arguments.Only.Count > 0 ? SheetSelection.Parse(arguments.Only) : null;
-        BuildResult result = await TableBuild.RunAsync(config, new TableBuildOptions { Offline = arguments.Has("--offline"), Only = only }, cancellationToken).ConfigureAwait(false);
+        using var validators = new ValidatorAssemblies();
+        BuildResult result = await TableBuild.RunAsync(config, new TableBuildOptions { LoadValidatorAssembly = validators.Load, Offline = arguments.Has("--offline"), Only = only }, cancellationToken).ConfigureAwait(false);
         IReadOnlyList<Diagnostic> diagnostics = result.Diagnostics.Items;
         console.Diagnostics(diagnostics);
 

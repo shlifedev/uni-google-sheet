@@ -60,6 +60,8 @@ namespace HolySheet.Core.Sources
 
         private readonly GoogleEndpoints _endpoints;
 
+        internal bool RefreshGoogle { get; init; }
+
         public string Description => "google-folder:" + source.FolderId;
 
         public IReadOnlyList<string> WatchPaths => offline && snapshotDirectory != null ? new string[] { snapshotDirectory } : Array.Empty<string>();
@@ -250,6 +252,7 @@ namespace HolySheet.Core.Sources
                 var reader = new GoogleSheetsSource(spreadsheet, baseDirectory, parser, workbookSnapshot, httpHandler, _endpoints, only, remoteCacheDirectory, credentialProviders)
                 {
                     PresetAuth = auth,
+                    RefreshGoogle = RefreshGoogle,
                     // The listing already said which version this is; no need to ask Drive again.
                     KnownVersion = file.Version
                 };
@@ -257,7 +260,7 @@ namespace HolySheet.Core.Sources
             }
 
             var origin = new WorkbookOrigin(SourceType.GoogleFolder, source.FolderId ?? "", Link(file));
-            if (file.Version is { } known && RemoteCopy.TryLoad(remoteCacheDirectory, file.Id, known) is { } copy)
+            if (!RefreshGoogle && file.Version is { } known && RemoteCopy.TryLoad(remoteCacheDirectory, file.Id, known) is { } copy)
             {
                 // Unchanged since the last download: read the copy instead of downloading the file again.
                 if (workbookSnapshot != null)

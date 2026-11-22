@@ -27,6 +27,8 @@ namespace HolySheet.Core
         private const string IndexFileName = "sheets.index";
         // Version 2 added each workbook's origin. An older cache is not read: the next partial build asks for a full one.
         private const string Header = "holysheet-sheet-cache 2";
+        // Accept version 3's extra index entries when reading a partial build from that version.
+        private const string HeaderWithPreviews = "holysheet-sheet-cache 3";
         private static readonly UTF8Encoding Utf8 = new(false);
 
         private SheetCache(IReadOnlyList<Workbook> workbooks, string manifestHash)
@@ -56,8 +58,8 @@ namespace HolySheet.Core
 
             try
             {
-                string[] lines = File.ReadAllText(indexPath, Utf8).Split('\n');
-                if (lines.Length < 2 || lines[0] != Header || !lines[1].StartsWith("manifest ", StringComparison.Ordinal))
+                string[] lines = ReadIndex(indexPath);
+                if (lines.Length < 2 || (lines[0] != Header && lines[0] != HeaderWithPreviews) || !lines[1].StartsWith("manifest ", StringComparison.Ordinal))
                 {
                     return null;
                 }
@@ -90,10 +92,11 @@ namespace HolySheet.Core
                     }
                     else if (fields[0] == "sheet" && fields.Length == 3 && workbookName != null)
                     {
-                        string text = File.ReadAllText(Path.Combine(directory, fields[1]), Utf8);
-                        sheets.Add(Sheet.FromGrid(workbookName, Unescape(fields[2]), ReadGrid(text)));
+                        Sheet? sheet = ReadSheet(directory, fields[1], workbookName, Unescape(fields[2]));
+                        if (sheet == null) return null;
+                        sheets.Add(sheet);
                     }
-                    else
+                    else if (lines[0] != HeaderWithPreviews || !(fields[0] == "preview" && fields.Length == 3 || fields[0] == "previews" && fields.Length == 2))
                     {
                         return null;
                     }
@@ -111,6 +114,26 @@ namespace HolySheet.Core
                 return null;
             }
         }
+
+        private static string[] ReadIndex(string path)
+        {
+            using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+            using var reader = new StreamReader(file, Utf8);
+            return reader.ReadToEnd().Split('\n');
+        }
+
+        private static Sheet? ReadSheet(string directory, string file, string workbook, string name)
+        {
+            if (file.Length != 38 || !file.EndsWith(".sheet", StringComparison.Ordinal) || !file.Take(32).All(Uri.IsHexDigit))
+            {
+                return null;
+            }
+
+            byte[] bytes = File.ReadAllBytes(Path.Combine(directory, file));
+            return GridFileName(bytes) == file ? Sheet.FromGrid(workbook, name, ReadGrid(Utf8.GetString(bytes))) : null;
+        }
+
+        private static string GridFileName(byte[] bytes) => SchemaHasher.Sha256Hex(bytes).Substring(0, 32) + ".sheet";
 
         /// <summary>Removes the cache, so that the next partial build asks for a full one.</summary>
         public static void Delete(string directory)
@@ -153,10 +176,14 @@ namespace HolySheet.Core
                 foreach (Sheet sheet in workbook.Sheets)
                 {
                     byte[] bytes = Utf8.GetBytes(WriteGrid(sheet));
-                    string file = SchemaHasher.Sha256Hex(bytes).Substring(0, 32) + ".sheet";
-                    if (kept.Add(file) && !File.Exists(Path.Combine(directory, file)))
+                    string file = GridFileName(bytes);
+                    if (kept.Add(file))
                     {
-                        File.WriteAllBytes(Path.Combine(directory, file), bytes);
+                        string path = Path.Combine(directory, file);
+                        if (!File.Exists(path) || !File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes))
+                        {
+                            File.WriteAllBytes(path, bytes);
+                        }
                     }
 
                     index.Append("sheet\t").Append(file).Append('\t').Append(Escape(sheet.Name)).Append('\n');
@@ -166,8 +193,15 @@ namespace HolySheet.Core
             // The index is written last and in one piece, so an interrupted save leaves the previous cache readable.
             string temporary = Path.Combine(directory, IndexFileName + ".tmp");
             File.WriteAllText(temporary, index.ToString(), Utf8);
-            File.Copy(temporary, Path.Combine(directory, IndexFileName), overwrite: true);
-            File.Delete(temporary);
+            string indexPath = Path.Combine(directory, IndexFileName);
+            if (File.Exists(indexPath))
+            {
+                File.Replace(temporary, indexPath, null);
+            }
+            else
+            {
+                File.Move(temporary, indexPath);
+            }
 
             foreach (string path in Directory.GetFiles(directory, "*.sheet", SearchOption.TopDirectoryOnly))
             {

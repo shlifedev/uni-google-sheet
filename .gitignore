@@ -28,5 +28,7 @@ holysheet.private.key
 .vscode/
 *.holysheet-tmp
 
-# LibreOffice lock files
+# Spreadsheet editor lock files and their Unity metadata
 .~lock.*#
+~$*.xlsx
+~$*.xlsx.meta

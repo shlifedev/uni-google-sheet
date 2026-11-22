@@ -19,7 +19,6 @@ public sealed class DesktopHostTests : IDisposable
 
     public void Dispose()
     {
-        _server.Dispose();
         _temp.Dispose();
     }
 
@@ -63,9 +62,25 @@ public sealed class DesktopHostTests : IDisposable
         JsonObject again = await Run(commit: true);
         Assert.Equal("upToDate", again["status"]!.GetValue<string>());
 
-        // Every run is announced, whoever started it, so the app's status follows builds from the watcher too.
+        // The toolbar follows each run from start to finish.
         string[] methods = _notifications.Select(message => message["method"]!.GetValue<string>()).ToArray();
         Assert.Equal(["run.started", "run.finished", "run.started", "run.finished", "run.started", "run.finished"], methods);
+    }
+
+    [Fact]
+    public async Task Opening_a_project_can_preview_offline_only_when_every_google_source_has_a_local_snapshot()
+    {
+        JsonObject state = await InitSample();
+        Assert.True(state["canPreviewOffline"]!.GetValue<bool>());
+        var config = state["config"]!.AsObject();
+        config["sources"]!.AsArray().Add(new JsonObject { ["type"] = "google", ["spreadsheetId"] = "example", ["snapshot"] = "local-copy" });
+        await Call("config.save", new JsonObject { ["config"] = config.DeepClone() });
+        Assert.False((await Call("project.state"))["canPreviewOffline"]!.GetValue<bool>());
+        Directory.CreateDirectory(_temp.Combine("local-copy"));
+        Assert.True((await Call("project.state"))["canPreviewOffline"]!.GetValue<bool>());
+        config["sources"]!.AsArray().Add(new JsonObject { ["type"] = "googleFolder", ["folderId"] = "example" });
+        await Call("config.save", new JsonObject { ["config"] = config.DeepClone() });
+        Assert.False((await Call("project.state"))["canPreviewOffline"]!.GetValue<bool>());
     }
 
     [Fact]
@@ -231,23 +246,17 @@ public sealed class DesktopHostTests : IDisposable
     }
 
     [Fact]
-    public async Task Auto_build_builds_when_a_sheet_is_saved()
+    public async Task Refresh_reads_a_saved_sheet_without_writing_build_output()
     {
         await InitSample();
-        await Call("watch.set", new JsonObject { ["enabled"] = true });
+        JsonObject previous = await Run(commit: false);
 
         File.AppendAllText(_temp.Combine("Sheets", "Item.csv"), "3001,Shield,Armor,,70,,\n");
 
-        JsonObject? finished = null;
-        for (int wait = 0; wait < 100 && finished == null; wait++)
-        {
-            await Task.Delay(100);
-            finished = _notifications.FirstOrDefault(message => message["method"]!.GetValue<string>() == "run.finished"
-                && message["params"]!["trigger"]!.GetValue<string>() == "watch");
-        }
-
-        Assert.NotNull(finished);
-        Assert.Equal("built", finished["params"]!["status"]!.GetValue<string>());
+        JsonObject refreshed = await Run(commit: false);
+        Assert.Equal("checked", refreshed["status"]!.GetValue<string>());
+        Assert.Equal(previous["rows"]!.GetValue<int>() + 1, refreshed["rows"]!.GetValue<int>());
+        Assert.False(Directory.Exists(_temp.Combine("Generated")));
     }
 
     [Fact]
@@ -257,7 +266,7 @@ public sealed class DesktopHostTests : IDisposable
         string requests = "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"app.info\"}\n"
             + "{\"jsonrpc\":\"2.0\",\"id\":\"x\",\"method\":\"no.such\"}\n"
             + "not json\n";
-        using var server = new RpcServer(new StringReader(requests), output);
+        var server = new RpcServer(new StringReader(requests), output);
 
         await server.RunAsync();
 

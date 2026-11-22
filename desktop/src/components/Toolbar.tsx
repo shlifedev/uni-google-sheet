@@ -23,7 +23,7 @@ export function statusText(run: RunResult | null, running: boolean): { text: str
 }
 
 export function Toolbar() {
-  const { project, running, run, page, preferences, setPage, startRun, setOffline, setAutoBuild, setProblemsOpen, closeProject, openProject, reload } =
+  const { project, running, run, page, preferences, setPage, startRun, setOffline, setProblemsOpen, closeProject, openProject, reload } =
     useApp();
   const selection = useSelectionBuild();
   const saved = preferences.projects[projectKey(project)] ?? {};
@@ -49,7 +49,7 @@ export function Toolbar() {
           if (typeof picked === "string") await openProject(picked);
         },
       },
-      { label: T("Reload"), action: () => void reload() },
+      { label: T("Reload"), hint: `${shortcut("R")} / F5`, disabled: running, action: () => void reload() },
       ...(preferences.recent.filter((path) => path !== project?.configPath).length > 0
         ? [{ separator: true as const }, { heading: T("Recent") }]
         : []),
@@ -96,20 +96,9 @@ export function Toolbar() {
         className={`toggle ${saved.offline ? "on" : ""}`}
         title={T("Build Google sources from the saved snapshot instead of the network.")}
         disabled={!hasConfig}
-        onClick={() => void setOffline(!saved.offline)}
+        onClick={() => setOffline(!saved.offline)}
       >
         {T("Offline")}
-      </button>
-      <button
-        className={`toggle ${project?.watch.enabled ? "on" : ""}`}
-        title={
-          T("Build whenever a local sheet file is saved.") +
-          (project?.watch.enabled ? "\n" + F("Watching {0} folder(s).", project.watch.watching) : "")
-        }
-        disabled={!hasConfig}
-        onClick={() => void setAutoBuild(!project?.watch.enabled)}
-      >
-        {T("Auto build")}
       </button>
       <div className="divider" />
       <button
@@ -119,6 +108,14 @@ export function Toolbar() {
         onClick={() => void startRun(false)}
       >
         {T("Check")}
+      </button>
+      <button
+        className="button primary"
+        title={T("Write generated code and data.") + ` (${shortcut("B")})`}
+        disabled={!hasConfig || running}
+        onClick={() => void startRun(true)}
+      >
+        {T("Build all")}
       </button>
       {page === "tables" && !selection.empty && (
         <button
@@ -130,14 +127,6 @@ export function Toolbar() {
           {F("Build selection ({0})", selection.count)}
         </button>
       )}
-      <button
-        className="button primary"
-        title={T("Write generated code and data.") + ` (${shortcut("B")})`}
-        disabled={!hasConfig || running}
-        onClick={() => void startRun(true)}
-      >
-        {T("Build all")}
-      </button>
     </div>
   );
 }

@@ -111,6 +111,8 @@ namespace HolySheet.Core.Sources
         /// <summary>The Drive version of the file when the caller already knows it (a folder listing reports it), to skip asking.</summary>
         internal long? KnownVersion { get; set; }
 
+        internal bool RefreshGoogle { get; init; }
+
         public async Task<IReadOnlyList<Workbook>> LoadAsync(DiagnosticBag diagnostics, CancellationToken cancellationToken)
         {
             string id = source.SpreadsheetId ?? "";
@@ -132,7 +134,8 @@ namespace HolySheet.Core.Sources
                 // 1. Unchanged since the last download? Drive reports the file's version for one cheap request (Drive quota,
                 //    not Sheets quota); the same version means the tabs can come from the local copy.
                 long? version = KnownVersion ?? (hasCredentials && remoteCacheDirectory != null ? await TryGetVersionAsync(client, id, apiKey, bearer, cancellationToken).ConfigureAwait(false) : null);
-                if (version != null && RemoteCopy.TryLoad(remoteCacheDirectory, id, version.Value) is { } copy)
+                // A manual refresh reads the cells themselves: Drive can still report the previous version after an edit.
+                if (!RefreshGoogle && version != null && RemoteCopy.TryLoad(remoteCacheDirectory, id, version.Value) is { } copy)
                 {
                     string name = title ?? copy.Title;
                     if (only != null && !only.Touches(name))

@@ -19,7 +19,7 @@ namespace HolySheet.Dev
         /// </summary>
         public static void ConfigurePlugins()
         {
-            const string package = "Packages/com.shlifedev.holysheet/Editor/Plugins/";
+            const string package = "Packages/com.lumera.holysheet/Editor/Plugins/";
             // The Sep backend needs .NET 8+, which only the Unity 7 (CoreCLR) editor has. Nothing compiles against it; the engine finds it by name.
             foreach (string name in new[] { "HolySheet.Csv.Sep.dll", "Sep.dll", "csFastFloat.dll" })
             {

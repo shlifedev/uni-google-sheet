@@ -117,6 +117,7 @@ Unity에서 **holysheet.json 만들기**로 만들면 `code`는 `Assets/Game/Gen
 | `build.parallel` | 병렬 처리 | `true` | 여러 스레드로 빌드합니다. 결과는 같습니다. |
 | `build.label` | 빌드 라벨 | 없음 | 매니페스트에 남길 버전 표시 |
 | `build.cache` | (없음) | `.holysheet/cache` | [선택 빌드](../../tools/partial-build/)가 쓰는 캐시 폴더 |
+| `build.validators` | (없음) | `[]` | [프로젝트 검증기](../../tools/problems/#데스크톱과-cli에서도-같은-규칙-쓰기)가 들어 있는 DLL 경로 목록. 설정 파일 기준입니다. |
 
 ## signing
 
@@ -130,4 +131,4 @@ Unity에서 **holysheet.json 만들기**로 만들면 `code`는 `Assets/Game/Gen
 
 ## 파일에 저장되지 않는 설정
 
-창의 언어, **보기** 메뉴의 표 모양, 데스크톱 앱의 테마와 자동 빌드 주기는 `holysheet.json`에 들어가지 않습니다. 사람마다 다른 설정이라서 각자의 컴퓨터에만 저장됩니다. Unity에서는 프로젝트의 `UserSettings` 폴더에 저장됩니다.
+창의 언어, **보기** 메뉴의 표 모양, 데스크톱 앱의 테마는 각자의 컴퓨터에 저장됩니다. Unity에서는 프로젝트의 `UserSettings` 폴더에 저장됩니다.

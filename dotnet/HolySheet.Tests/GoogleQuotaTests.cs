@@ -113,6 +113,64 @@ public class GoogleQuotaTests
         Assert.Single(result.Tables);
     }
 
+    [Theory]
+    [InlineData(SourceType.Google)]
+    [InlineData(SourceType.GoogleFolder)]
+    public void Manual_refresh_replaces_a_stale_header_even_if_drive_still_reports_the_same_version(SourceType type)
+    {
+        using var temp = new TempDir();
+        bool corrected = false;
+        var handler = new StubHandler(request =>
+        {
+            string url = request.RequestUri!.GetLeftPart(UriPartial.Path);
+            if (url == "https://drive.test/drive/v3/files/folder")
+                return Json("""{ "id": "folder", "name": "Data", "mimeType": "application/vnd.google-apps.folder" }""");
+            if (url == "https://drive.test/drive/v3/files")
+                return Json("""{ "files": [{ "id": "sheet-id", "name": "QQQQ", "mimeType": "application/vnd.google-apps.spreadsheet", "version": "31" }] }""");
+            if (url == "https://drive.test/drive/v3/files/sheet-id")
+                return Json("""{ "version": "31" }""");
+            if (url == "https://sheets.test/v4/spreadsheets/sheet-id")
+                return Json("""{ "properties": { "title": "QQQQ" }, "sheets": [{ "properties": { "sheetId": 0, "title": "Hello" } }] }""");
+            if (url.EndsWith("/values:batchGet", StringComparison.Ordinal))
+            {
+                string names = corrected ? """["Id","Value"]""" : """["Id","Value","ㅁ"]""";
+                return Json($$"""{ "valueRanges": [{ "range": "Hello!A1:C4", "values": [["Key<int>","float"],{{names}},[],["1","2"]] }] }""");
+            }
+            return Status(HttpStatusCode.NotFound);
+        });
+        var config = new HolySheetConfig
+        {
+            BaseDirectory = temp.Path,
+            Sources = { new SourceConfig { Type = type, FolderId = "folder", SpreadsheetId = "sheet-id", Snapshot = "snapshot", Auth = { Type = GoogleAuthType.ApiKey, ApiKey = "KEY" } } }
+        };
+        var options = new TableBuildOptions
+        {
+            HttpHandler = handler,
+            GoogleEndpoints = new GoogleEndpoints { SheetsApi = "https://sheets.test", DriveApi = "https://drive.test" }
+        };
+
+        Assert.Contains(TableBuild.Run(config, options).Diagnostics.Items, d => d.Location == "QQQQ / Hello!C1" && d.Message.Contains("'ㅁ' has no type"));
+        corrected = true;
+        options.RefreshGoogle = true;
+        options.Offline = true;
+        handler.Requests.Clear();
+        Assert.False(TableBuild.Run(config, options).Success);
+        Assert.Empty(handler.Requests);
+
+        options.Offline = false;
+        var refreshed = TableBuild.Run(config, options);
+        Assert.True(refreshed.Success, Sheets.Errors(refreshed));
+        Assert.Single(handler.Requests, request => request.Contains("values:batchGet"));
+        options.RefreshGoogle = false;
+        handler.Requests.Clear();
+        Assert.True(TableBuild.Run(config, options).Success);
+        Assert.DoesNotContain(handler.Requests, request => request.Contains("sheets.test"));
+        options.Offline = true;
+        handler.Requests.Clear();
+        Assert.True(TableBuild.Run(config, options).Success);
+        Assert.Empty(handler.Requests);
+    }
+
     [Fact]
     public void An_unchanged_file_costs_one_drive_request_and_no_sheets_requests()
     {
@@ -238,5 +296,10 @@ public class GoogleQuotaTests
         TableBuild.Run(config, new TableBuildOptions { HttpHandler = handler, GoogleEndpoints = endpoints });
         Assert.Contains(handler.Requests, request => request.Contains("values:batchGet"));
         Assert.DoesNotContain(handler.Requests, request => request.Contains("alt=media"));
+
+        handler.Requests.Clear();
+        TableBuild.Run(config, new TableBuildOptions { HttpHandler = handler, GoogleEndpoints = endpoints, RefreshGoogle = true });
+        Assert.Single(handler.Requests, request => request.Contains("values:batchGet"));
+        Assert.Single(handler.Requests, request => request.Contains("alt=media"));
     }
 }

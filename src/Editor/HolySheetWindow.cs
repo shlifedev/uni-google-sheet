@@ -23,7 +23,7 @@ namespace HolySheet.Editor
     /// </summary>
     public sealed class HolySheetWindow : EditorWindow
     {
-        private const string StyleSheetPath = "Packages/com.shlifedev.holysheet/Editor/HolySheetWindow.uss";
+        private const string StyleSheetPath = "Packages/com.lumera.holysheet/Editor/HolySheetWindow.uss";
 
         // Problems are not a page: they open in a panel under the table view, so the data stays in sight.
         private static readonly string[] Pages = { "Tables", "Settings" };
@@ -67,7 +67,6 @@ namespace HolySheet.Editor
         public static void Open()
         {
             HolySheetWindow window = GetWindow<HolySheetWindow>();
-            window.titleContent = new GUIContent("HolySheet");
             window.minSize = new Vector2(560, 320);
             window.Show();
         }
@@ -95,6 +94,9 @@ namespace HolySheet.Editor
 
         private void OnEnable()
         {
+            // Set here, not in Open: a window that Unity restores from a saved layout never goes through Open, and would
+            // keep whatever title the layout was saved with.
+            titleContent = new GUIContent("HolySheet");
             HolySheetProject.RunStarted += OnRunStarted;
             HolySheetProject.RunFinished += OnRunFinished;
         }
@@ -117,6 +119,12 @@ namespace HolySheet.Editor
 
             root.AddToClassList("holysheet");
             root.AddToClassList(EditorGUIUtility.isProSkin ? "holysheet--dark" : "holysheet--light");
+            // Unity targets the panel root when no control has focus. Follow the window when it is docked or moved.
+            root.RegisterCallback<AttachToPanelEvent>(evt =>
+                evt.destinationPanel.visualTree.RegisterCallback<KeyDownEvent>(OnRefreshKey, TrickleDown.TrickleDown));
+            root.RegisterCallback<DetachFromPanelEvent>(evt =>
+                evt.originPanel.visualTree.UnregisterCallback<KeyDownEvent>(OnRefreshKey, TrickleDown.TrickleDown));
+            root.panel?.visualTree.RegisterCallback<KeyDownEvent>(OnRefreshKey, TrickleDown.TrickleDown);
             root.Add(BuildToolbar());
             // Ctrl+F (Cmd+F on macOS) opens the find bar of the table preview. Unity routes that shortcut through its
             // Edit > Find menu as a "Find" command, so both the command and the raw key are handled.
@@ -161,9 +169,8 @@ namespace HolySheet.Editor
             Refresh();
         }
 
-        // The last result lives in memory, so it is gone after an editor restart or a script reload (which every build that
-        // writes code causes). The sheets are then read again right away, so the tree and the problems are there without
-        // pressing Check. Google sources are read from their saved snapshot when every one of them has a snapshot on disk.
+        // After a restart or script reload, restore the preview from local files and snapshots when possible.
+        // Reading from Google waits for an explicit refresh or build.
         private void CheckIfNothingWasRead()
         {
             if (_config == null || HolySheetProject.LastResult != null || HolySheetProject.IsRunning)
@@ -171,9 +178,10 @@ namespace HolySheet.Editor
                 return;
             }
 
-            bool snapshotsReady = _config.Sources.Where(source => source.IsRemote)
-                .All(source => source.Snapshot != null && Directory.Exists(_config.Resolve(source.Snapshot)));
-            HolySheetProject.RunAsync(commit: false, offline: snapshotsReady);
+            if (_config.CanPreviewOffline())
+            {
+                HolySheetProject.RunAsync(commit: false, offline: true);
+            }
         }
 
         // ------------------------------------------------------------ toolbar
@@ -218,19 +226,14 @@ namespace HolySheet.Editor
             offline.RegisterValueChangedCallback(change => _offline = change.newValue);
             toolbar.Add(offline);
 
-            var auto = new ToolbarToggle { text = T("Auto build"), value = HolySheetProject.AutoBuild, tooltip = T("Build whenever a local sheet file is saved.") };
-            auto.RegisterValueChangedCallback(change => HolySheetProject.AutoBuild = change.newValue);
-            toolbar.Add(auto);
-
             _checkButton = new ToolbarButton(() => Run(commit: false)) { text = T("Check"), tooltip = T("Read and validate the sheets. Writes nothing.") };
             toolbar.Add(_checkButton);
-            // Both builds are here: only what is selected in the tree (everything else comes from the last build), and all of it.
-            _selectionBuild = new ToolbarButton(() => RunSelection(commit: true));
-            _selectionBuild.AddToClassList("holysheet-selection__build");
-            toolbar.Add(_selectionBuild);
             _buildButton = new ToolbarButton(() => Run(commit: true)) { text = T("Build all"), tooltip = T("Write generated code and data (Ctrl+Shift+Alt+B).") };
             _buildButton.AddToClassList("holysheet-build");
             toolbar.Add(_buildButton);
+            _selectionBuild = new ToolbarButton(() => RunSelection(commit: true));
+            _selectionBuild.AddToClassList("holysheet-selection__build");
+            toolbar.Add(_selectionBuild);
             return toolbar;
         }
 
@@ -252,7 +255,7 @@ namespace HolySheet.Editor
             _buildButton.SetEnabled(canRun);
             RefreshSelectionBuild();
 
-            HolySheetRunResult? result = HolySheetProject.LastResult;
+            HolySheetRunResult? result = _config == null ? null : HolySheetProject.LastResult;
             string icon = "";
             string text = "";
             if (HolySheetProject.IsRunning)
@@ -303,6 +306,39 @@ namespace HolySheet.Editor
         }
 
         // ------------------------------------------------------------ actions
+
+        private void OnRefreshKey(KeyDownEvent evt)
+        {
+            if (focusedWindow != this || evt.altKey || evt.shiftKey)
+            {
+                return;
+            }
+
+            bool refreshKey = (evt.keyCode == KeyCode.F5 && !evt.ctrlKey && !evt.commandKey)
+                || (evt.keyCode == KeyCode.R && evt.ctrlKey != evt.commandKey);
+            if (refreshKey)
+            {
+                evt.StopPropagation();
+                Reload();
+            }
+        }
+
+        private void Reload()
+        {
+            if (HolySheetProject.IsRunning)
+            {
+                return;
+            }
+
+            ReloadConfig();
+            if (_config == null)
+            {
+                Refresh();
+                return;
+            }
+
+            HolySheetProject.RefreshAsync(_offline);
+        }
 
         private void ReloadConfig()
         {
@@ -418,11 +454,7 @@ namespace HolySheet.Editor
                 page.Add(new HelpBox(T("holysheet.json could not be read: ") + _configError, HelpBoxMessageType.Error));
                 page.Add(Buttons(
                     new Button(() => EditorUtility.OpenWithDefaultApp(HolySheetProject.ConfigPath)) { text = T("Open") },
-                    new Button(() =>
-                    {
-                        ReloadConfig();
-                        Refresh();
-                    }) { text = T("Reload") }));
+                    new Button(Reload) { text = T("Reload") }));
             }
 
             return page;

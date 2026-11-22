@@ -368,11 +368,6 @@ export function SettingsPage() {
                 onChange={(value) => setPreferences({ theme: value as Theme })}
               />
             </Row>
-            <Row label={T("Auto build interval")} help={T("Auto build reads Google sources again this often (seconds). 0: only local files trigger a build.")}>
-              <div style={{ width: 90 }}>
-                <IntervalField />
-              </div>
-            </Row>
             {info && (
               <Row label={T("Engine")}>
                 <span className="muted selectable">
@@ -393,22 +388,6 @@ export function SettingsPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function IntervalField() {
-  const { project, preferences, setPreferences, setAutoBuild } = useApp();
-  const key = project?.configPath ?? "";
-  const current = preferences.projects[key]?.intervalSec ?? 0;
-  return (
-    <TextField
-      value={String(current)}
-      onCommit={(value) => {
-        const seconds = Math.max(0, Math.floor(Number(value) || 0));
-        setPreferences({ projects: { ...preferences.projects, [key]: { ...preferences.projects[key], intervalSec: seconds } } });
-        if (project?.watch.enabled) void setAutoBuild(true);
-      }}
-    />
   );
 }
 

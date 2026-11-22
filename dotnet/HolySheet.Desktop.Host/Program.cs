@@ -18,7 +18,7 @@ public static class Program
         var protocolOut = new StreamWriter(Console.OpenStandardOutput(), utf8) { AutoFlush = false };
         Console.SetOut(Console.Error);
         using var protocolIn = new StreamReader(Console.OpenStandardInput(), utf8);
-        using var server = new RpcServer(protocolIn, protocolOut);
+        var server = new RpcServer(protocolIn, protocolOut);
         await server.RunAsync().ConfigureAwait(false);
         return 0;
     }

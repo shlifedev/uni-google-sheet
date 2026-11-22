@@ -35,7 +35,7 @@ Version 2 is a rewrite. Nothing from 1.x carries over.
 **Unity** — Package Manager → *Add package from git URL*:
 
 ```
-https://github.com/shlifedev/uni-google-sheets.git?path=src
+https://github.com/shlifedev/uni-google-sheet.git?path=src
 ```
 
 Then add the serializer you want the tables to use ([MemoryPack](https://github.com/Cysharp/MemoryPack) or
@@ -188,7 +188,7 @@ data did not change are the same objects in both snapshots, so a reload after ed
 The watcher uses file system notifications with a debounce, falls back to polling where those are unavailable, and
 has a manual mode (`CheckNow()`) for platforms without threads. In Unity its events arrive on the main thread.
 
-Together with `holysheet watch` (or *Auto build* in the editor window) this gives edit-sheet → see-it-in-the-running-game.
+Run `holysheet watch` alongside the game to rebuild the data whenever you save a sheet.
 
 ## Tamper detection
 
@@ -282,7 +282,7 @@ about 0.5 s.
   "sheet":   { "header": ["type", "name", "comment"], "arraySeparator": "," },
   "csv":     { "backend": "auto" },
   "signing": { "publicKey": "rsa:…", "privateKeyFile": "holysheet.private.key", "privateKeyEnv": "HOLYSHEET_PRIVATE_KEY" },
-  "build":   { "label": null, "parallel": true, "cache": ".holysheet/cache" }
+  "build":   { "label": null, "parallel": true, "cache": ".holysheet/cache", "validators": [] }
 }
 ```
 
@@ -310,7 +310,8 @@ Requests are kept few, because the Sheets API allows 60 reads a minute per accou
   `values:batchGet` for all tabs.
 - Before downloading, one Drive request asks for the file's version (a Drive folder's listing already includes it). If
   it is the version downloaded last time, the tabs are read from the local copy in `.holysheet/cache/google` and nothing else
-  is requested. Frequent `holysheet watch` polling therefore costs Drive requests only, until someone edits a file.
+  is requested. A manual online refresh in the Unity window or desktop app (Ctrl+R, Cmd+R or F5) fetches the current
+  data even when Drive still reports the previous version. Ordinary checks, builds and CLI watch keep using the version cache.
 - A "too many requests" answer or a server error is retried up to five times, waiting 1, 2, 4, 8 seconds plus up to a
   second at random, or as long as Google's `Retry-After` header says.
 
@@ -367,6 +368,10 @@ the sheets it read there. The folder ignores itself in git. A partial build refu
 folder is not the one this machine's last build wrote, for example after a pull: the cached sheets may be older than
 that data, and building from them would put old values back. Run a full build then.
 
+## Project validation rules
+
+Implement `HolySheet.Core.ITableValidator` in an editor assembly to check project-specific data before output is written. Unity discovers public validator classes automatically. To share a rule with the desktop app and CLI, build it as a .NET Standard 2.1 DLL and list its path in `build.validators`. The [sample validator](dotnet/samples/Sample.Validators/ItemPriceValidator.cs) reports an error at the original price cell for a negative price and a warning for a free item.
+
 ## Command line
 
 ```
@@ -402,7 +407,7 @@ Editor scripts in the default assembly see the engine as is. An editor script in
 ## Repository layout
 
 ```
-src/                    the Unity package (com.shlifedev.holysheet)
+src/                    the Unity package (com.lumera.holysheet)
   Runtime/              what generated code depends on; no dependencies; C# 9; compiled by Unity and by .NET unchanged
   Editor/               the window and the build runner
     Core/               the engine: sources, sheet rules, validation, code and data generation; C# 9; compiled by Unity and by .NET unchanged

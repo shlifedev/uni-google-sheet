@@ -81,6 +81,7 @@ namespace HolySheet.Demo.Data
         Mage = 200,
         Archer = 300,
         Rogue = 400,
+        QQQ = 555,
         Knight = 110,
         Berserker = 120,
         Sorcerer = 210,

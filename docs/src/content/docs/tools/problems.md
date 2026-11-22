@@ -37,10 +37,48 @@ Game.xlsx / Item!F10    The column 'Price' is int. Example: 10
 | 위치 | `Game.xlsx / Item!F10` | `Game.xlsx` 워크북, `Item` 시트의 F열 10행 |
 | 고치는 방법 | `The column 'Price' is int. Example: 10` | 어떻게 적어야 하는지 |
 
-문제 메시지는 어느 도구에서나 영어로 표시됩니다.
+기본 검사 메시지는 어느 도구에서나 영어로 표시됩니다. 사용자 정의 검증기의 메시지는 작성한 언어로 표시됩니다.
 
 - 문제를 **더블클릭**하면 그 파일이 열립니다.
 - **우클릭**하면 메시지나 위치를 복사할 수 있습니다. **모두 복사**는 목록 전체를 복사합니다. 담당자에게 그대로 전달할 때 편합니다.
+
+## C#으로 프로젝트 검증 규칙 추가하기
+
+예를 들어 `Monster` 시트의 `MinLevel`과 `MaxLevel`이 모두 `int`여도, 최소 레벨이 최대 레벨보다 크면 잘못된 데이터입니다. Unity에서는 다음 클래스를 `Assets/Editor/MonsterLevelValidator.cs`에 넣으면 검사와 빌드에서 자동으로 실행합니다. 별도 에디터 asmdef를 쓰는 프로젝트는 그 asmdef에서 `HolySheet.Core`를 참조하세요.
+
+```csharp
+using HolySheet.Core;
+
+public sealed class MonsterLevelValidator : ITableValidator
+{
+    public void Validate(ValidationContext context)
+    {
+        foreach (var row in context.Table("Monster").Rows)
+        {
+            if (row.Get<int>("MinLevel") > row.Get<int>("MaxLevel"))
+            {
+                context.Error(row, "MaxLevel", "최대 레벨은 최소 레벨 이상이어야 합니다.");
+            }
+        }
+    }
+}
+```
+
+검증기는 기본 타입, 키, 참조 검사를 통과한 뒤 파일을 쓰기 전에 실행됩니다. `Table`을 여러 번 호출해 다른 테이블과 대조할 수 있고, 배열 필드는 `row.GetArray<int>("Levels")`처럼 읽습니다. `Error`는 빌드를 중지하고 `Warning`은 경고를 남깁니다. 두 메서드 모두 지정한 필드의 원본 셀을 가리키므로 여러 시트를 합친 테이블에서도 수정할 위치를 찾을 수 있습니다. 검증기는 백그라운드에서 실행되므로 Unity 메인 스레드 API를 호출하지 마세요.
+
+### 데스크톱과 CLI에서도 같은 규칙 쓰기
+
+1. `HolySheet.Core`를 참조하는 .NET Standard 2.1 클래스 라이브러리에 검증기를 작성합니다. 클래스는 `public`이어야 하고 인자 없는 공개 생성자가 필요합니다. 저장소의 예제는 `dotnet build dotnet/samples/Sample.Validators -c Release`로 빌드할 수 있습니다.
+2. 생성된 `Sample.Validators.dll`을 프로젝트에 복사합니다. 예를 들어 Unity와 공유할 위치는 `Assets/Editor/Validators/`입니다. 검증기 전용 의존성이 있다면 같은 폴더에 둡니다. `HolySheet.Core.dll`은 각 도구가 이미 제공합니다.
+3. `holysheet.json`의 `build` 객체에 아래 항목을 추가합니다. 경로는 설정 파일 기준입니다. 등록한 DLL은 프로젝트 코드로 실행되므로 팀에서 신뢰하는 검증기를 지정하세요.
+
+```json
+{
+  "build": {
+    "validators": ["Assets/Editor/Validators/Sample.Validators.dll"]
+  }
+}
+```
 
 ## 자주 만나는 오류
 

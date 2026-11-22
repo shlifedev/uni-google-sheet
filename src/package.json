@@ -1,12 +1,12 @@
 {
-  "name": "com.shlifedev.holysheet",
+  "name": "com.lumera.holysheet",
   "version": "2.0.0",
-  "displayName": "HolySheet - Game Tables from Sheets",
+  "displayName": "Lumera HolySheet",
   "description": "Turns xlsx workbooks, CSV folders and Google Sheets into typed, read-only C# tables with binary data files.\n\nThe generated code and data run on any .NET: Unity clients and plain .NET servers load the same files. Includes integrity checks, optional signing, hot reload and a command line tool that builds the same output in CI.",
   "unity": "6000.0",
-  "documentationUrl": "https://github.com/shlifedev/uni-google-sheets#readme",
-  "changelogUrl": "https://github.com/shlifedev/uni-google-sheets/blob/main/src/CHANGELOG.md",
-  "licensesUrl": "https://github.com/shlifedev/uni-google-sheets/blob/main/LICENSE.md",
+  "documentationUrl": "https://github.com/shlifedev/uni-google-sheet#readme",
+  "changelogUrl": "https://github.com/shlifedev/uni-google-sheet/blob/main/src/CHANGELOG.md",
+  "licensesUrl": "https://github.com/shlifedev/uni-google-sheet/blob/main/LICENSE.md",
   "license": "MIT",
   "dependencies": {
     "com.unity.modules.uielements": "1.0.0",

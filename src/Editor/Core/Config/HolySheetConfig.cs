@@ -227,11 +227,18 @@ namespace HolySheet.Core.Config
         /// <summary>Free text written to the manifest as the build line, such as a version number or commit id.</summary>
         public string? BuildLabel { get; set; }
 
+        /// <summary>Trusted project assemblies containing table validators, relative to the config file.</summary>
+        public List<string> ValidatorAssemblies { get; } = new();
+
         /// <summary>Convert and encode tables on several threads.</summary>
         public bool Parallel { get; set; } = true;
 
         /// <summary>Where the sheets of the last build are kept for partial builds, relative to the config file.</summary>
         public string CacheDirectory { get; set; } = SheetCache.DefaultDirectory;
+
+        /// <summary>Whether an initial preview can be read entirely from local sources and configured snapshots.</summary>
+        public bool CanPreviewOffline() => Sources.Where(source => source.IsRemote)
+            .All(source => !string.IsNullOrWhiteSpace(source.Snapshot) && Directory.Exists(Resolve(source.Snapshot!)));
 
         public string Resolve(string path) => Path.GetFullPath(Path.Combine(BaseDirectory, path));
 
@@ -308,6 +315,12 @@ namespace HolySheet.Core.Config
             if (root.GetObject("build") is { } build)
             {
                 config.BuildLabel = build.GetString("label");
+                if (build["validators"] is { } validators)
+                {
+                    if (validators.AsArray == null || validators.AsArray.Any(value => string.IsNullOrWhiteSpace(value.AsString)))
+                        throw new JsonFormatException("build.validators must be an array of DLL paths.");
+                    config.ValidatorAssemblies.AddRange(validators.AsArray.Select(value => value.AsString!));
+                }
                 config.Parallel = build.GetBoolean("parallel") ?? config.Parallel;
                 config.CacheDirectory = build.GetString("cache") ?? config.CacheDirectory;
             }
@@ -450,6 +463,8 @@ namespace HolySheet.Core.Config
             {
                 build.Set("cache", CacheDirectory);
             }
+            if (ValidatorAssemblies.Count > 0)
+                build.Set("validators", JsonValue.Array(ValidatorAssemblies));
             root.Set("build", build);
             return root.ToValue().ToJson();
         }

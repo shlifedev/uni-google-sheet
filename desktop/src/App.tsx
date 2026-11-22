@@ -33,7 +33,7 @@ function Notices() {
 let started = false;
 
 export default function App() {
-  const { project, page, preferences, handleEvent, hostRestarted, startRun, running } = useApp();
+  const { project, page, preferences, handleEvent, hostRestarted, startRun, reload, running } = useApp();
 
   // Start: preferences (language first, so the first paint is in the right one), the engine's info, the last project.
   // The event listeners stay for the app's lifetime.
@@ -57,16 +57,23 @@ export default function App() {
   // A different project starts the tree from scratch.
   useEffect(() => useTablesView.getState().reset(), [project?.configPath]);
 
-  // ⌘B / Ctrl+B builds, ⇧⌘B / Ctrl+Shift+B checks.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const refreshKey = (event.key === "F5" && !event.ctrlKey && !event.metaKey)
+        || ((event.code === "KeyR" || event.key.toLowerCase() === "r") && event.ctrlKey !== event.metaKey);
+      if (refreshKey && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        if (!event.repeat) void reload();
+        return;
+      }
+
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "b") return;
       event.preventDefault();
       if (project?.config && !running) void startRun(!event.shiftKey);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [project?.config, running, startRun]);
+  }, [project?.config, running, startRun, reload]);
 
   let body: React.ReactNode;
   if (!project?.dir) body = <StartPage />;

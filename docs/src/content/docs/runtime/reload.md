@@ -9,7 +9,7 @@ sidebar:
 
 <div class="hs-flow not-content">
   <div><strong>시트 저장</strong><span>Excel에서 값을 고치고 저장합니다.</span></div>
-  <div class="hs-accent"><strong>자동 빌드</strong><span>창의 <b>자동 빌드</b>나 <code>holysheet watch</code>가 데이터 파일을 새로 씁니다.</span></div>
+  <div class="hs-accent"><strong>빌드</strong><span>창에서 <b>전체 빌드</b>를 누르거나 <code>holysheet watch</code>를 실행해 데이터 파일을 갱신합니다.</span></div>
   <div><strong>다시 불러오기</strong><span>실행 중인 게임의 <code>Watch</code>가 바뀐 테이블을 읽습니다.</span></div>
 </div>
 

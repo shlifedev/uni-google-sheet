@@ -20,7 +20,7 @@ namespace HolySheet.Demo.Data
     public sealed partial class DemoTables : global::HolySheet.ITableSet
     {
         /// <summary>Hash of every table layout and enum this code was generated from. Data built for anything else is refused.</summary>
-        public const string SchemaHash = "3fb3d079ddf1eba69701bbcd2c950697d3f8e02082374c92290ba3d2127d4e8b";
+        public const string SchemaHash = "55dec0bdca5004a010306c3b0b1c968eef5b19adbce78023c9a5ca0e8dbee649";
 
         public const string Serializer = "memorypack";
 

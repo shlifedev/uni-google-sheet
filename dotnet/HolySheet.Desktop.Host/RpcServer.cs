@@ -30,7 +30,7 @@ public sealed class RpcException(int code, string message) : Exception(message)
 /// preview can be answered while a build runs; responses carry the request id. The host also sends notifications
 /// (no id) when a build starts or ends, whoever started it.
 /// </summary>
-public sealed class RpcServer : IDisposable
+public sealed class RpcServer
 {
     // Relaxed escaping: the reader is the app, not an HTML page, and messages full of \u0027 are hard to debug.
     private static readonly JsonSerializerOptions Compact = new() { WriteIndented = false, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
@@ -117,13 +117,12 @@ public sealed class RpcServer : IDisposable
             "project.init" => Sync(Project.Init(Required(parameters, "dir"), Bool(parameters, "sample"), parameters["unity"]?.GetValue<bool?>())),
             "project.close" => Sync(Project.Close()),
             "config.save" => Sync(Project.SaveConfig(parameters["config"] as JsonObject ?? throw new RpcException(RpcException.InvalidParams, "'config' must be an object."))),
-            "run" => Wrap(Project.RunAsync(Bool(parameters, "commit"), Bool(parameters, "offline"), Strings(parameters, "only"), "user")),
+            "run" => Wrap(Project.RunAsync(Bool(parameters, "commit"), Bool(parameters, "offline"), Strings(parameters, "only"), "user", Bool(parameters, "refreshGoogle"))),
             "tables.model" => Sync(Project.TableModel()),
             "tables.preview" => Sync(Project.Preview(Required(parameters, "table"), Optional(parameters, "sheet"))),
             "source.locate" => Sync(Project.LocateSource(Required(parameters, "workbook"), Optional(parameters, "sheet"))),
             "problem.locate" => Sync(Project.LocateProblem(Required(parameters, "location"), Optional(parameters, "workbook"), Optional(parameters, "sheet"))),
             "path.toProject" => Sync(Project.ToProjectPath(Required(parameters, "path"))),
-            "watch.set" => Sync(Project.SetWatch(Bool(parameters, "enabled"), Bool(parameters, "offline"), parameters["intervalSec"]?.GetValue<int>() ?? 0)),
             "signing.createKeyPair" => Sync(Project.CreateKeyPair()),
             "signing.ignoreKey" => Sync(Project.IgnoreKey()),
             "signing.stop" => Sync(Project.StopSigning()),
@@ -173,6 +172,4 @@ public sealed class RpcServer : IDisposable
 
     private static IReadOnlyList<string> Strings(JsonObject parameters, string name) =>
         parameters[name] is JsonArray array ? array.Select(item => item?.GetValue<string>() ?? "").Where(text => text.Length > 0).ToList() : [];
-
-    public void Dispose() => Project.Dispose();
 }

@@ -24,8 +24,7 @@ React ── invoke("rpc", {method, params}) ──▶ Rust (sidecar.rs) ── 
 - The engine is published self-contained, so the app needs no .NET installed. It is started on first use, started
   again if it dies (the UI re-opens the project), and stopped when the app quits.
 - The methods are in `dotnet/HolySheet.Desktop.Host/RpcServer.cs` (`DispatchAsync`) and typed in `src/rpc.ts`.
-  The engine also sends `run.started` / `run.finished` notifications for every build, including those that auto build
-  starts.
+  The engine also sends `run.started` and `run.finished` notifications for each check and build.
 
 ## Develop
 
@@ -63,8 +62,6 @@ Engine messages (problems, hints, the run summary) stay in English, as in Unity.
 - **Other config files.** The app can open a config file with another name, such as `holysheet.memorypack.json`.
 - **Theme.** Dark by default, in the range of Unity's dark editor; Settings → App → Theme switches to light or to
   the system's. What a field is for is its tooltip, as in the Unity window.
-- **Auto build can poll Google.** Settings → App → Auto build interval re-reads Google sources on a timer, as
-  `holysheet watch --interval` does. 0 means only local files trigger a build.
 
 ## Not done yet
 

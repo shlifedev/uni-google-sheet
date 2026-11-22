@@ -22,6 +22,7 @@
     <ProjectReference Include="../HolySheet.Runtime/HolySheet.Runtime.csproj" />
     <ProjectReference Include="../HolySheet.Cli/HolySheet.Cli.csproj" />
     <ProjectReference Include="../HolySheet.Desktop.Host/HolySheet.Desktop.Host.csproj" />
+    <ProjectReference Include="../samples/Sample.Validators/Sample.Validators.csproj" />
     <ProjectReference Include="../samples/Sample.Tables.MemoryPack/Sample.Tables.MemoryPack.csproj" />
     <ProjectReference Include="../samples/Sample.Tables.MessagePack/Sample.Tables.MessagePack.csproj" />
   </ItemGroup>

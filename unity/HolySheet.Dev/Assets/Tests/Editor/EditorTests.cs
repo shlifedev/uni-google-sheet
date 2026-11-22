@@ -58,7 +58,7 @@ namespace HolySheet.Dev.Tests
         // The demo workbook written out as CSV, one file per sheet: the same tables through the CSV path.
         private HolySheetConfig WriteDemoAsCsv(string name, Func<string, string, string> edit = null)
         {
-            BuildResult source = TableBuild.Run(HolySheetDemoSetup.CreateConfig());
+            BuildResult source = TableBuild.Run(HolySheetProject.LoadConfig(), new TableBuildOptions { Offline = true });
             Assert.IsTrue(source.Success, Errors(source));
             string sheets = Path.Combine(_temp, name, "Sheets");
             Directory.CreateDirectory(sheets);
@@ -112,9 +112,9 @@ namespace HolySheet.Dev.Tests
         public void Building_in_this_editor_gives_the_checked_in_files_byte_for_byte()
         {
             // The checked-in demo output was written by the .NET CLI. The engine inside this editor must produce exactly the same.
-            BuildResult result = TableBuild.Run(HolySheetDemoSetup.CreateConfig());
+            BuildResult result = TableBuild.Run(HolySheetProject.LoadConfig(), new TableBuildOptions { Offline = true });
             Assert.IsTrue(result.Success, Errors(result));
-            Assert.AreEqual(21, result.Tables.Count);
+            Assert.AreEqual(DemoTables.Definition.Tables.Length, result.Tables.Count);
             foreach (KeyValuePair<string, string> file in result.Output.CodeFiles)
             {
                 Assert.AreEqual(File.ReadAllText(Path.Combine(CodeDirectory, file.Key)), file.Value, file.Key);
@@ -161,7 +161,7 @@ namespace HolySheet.Dev.Tests
             foreach (TableLoadOptions options in new[] { new TableLoadOptions(), new TableLoadOptions { Parallel = true } })
             {
                 DemoTables tables = DemoTables.Load(DataDirectory, options);
-                Assert.AreEqual(21, tables.Tables.Count);
+                Assert.AreEqual(DemoTables.Definition.Tables.Length, tables.Tables.Count);
 
                 // Items: three sheets make one table, Item first and then the child sheets in name order (Item.Equipment, Item.Material).
                 // The row starting with ~ is left out.
@@ -250,7 +250,7 @@ namespace HolySheet.Dev.Tests
 
             // Resources is main-thread only; preloading makes a parallel decode possible.
             MemoryTableSource preloaded = TableSource.Preload(new ResourcesTableSource("HolySheetDemo"), DemoTables.ManifestFileName);
-            Assert.AreEqual(22, preloaded.FileNames.Count());
+            Assert.AreEqual(tables.Manifest.Tables.Count + 1, preloaded.FileNames.Count());
             Assert.AreEqual(tables.Manifest.Content, DemoTables.Load(preloaded, new TableLoadOptions { Parallel = true }).Manifest.Content);
         }
 
@@ -338,16 +338,17 @@ namespace HolySheet.Dev.Tests
         public void The_editor_runner_builds_and_reports()
         {
             // The dev project's holysheet.json builds the demo, which is already up to date: nothing should be rewritten.
-            HolySheetRunResult result = HolySheetProject.RunBlocking(commit: true);
+            var baseline = TableManifest.Parse(File.ReadAllText(Path.Combine(DataDirectory, DemoTables.ManifestFileName)));
+            HolySheetRunResult result = HolySheetProject.RunBlocking(commit: true, offline: true);
             Assert.IsNull(result.Failure, result.Failure);
             Assert.IsTrue(result.Build.Success, Errors(result.Build));
             Assert.IsNotNull(result.Commit);
             Assert.IsFalse(result.Commit.HasChanges, "Written: " + string.Join(", ", result.Commit.Written));
-            StringAssert.StartsWith("Up to date: 21 tables, 382 rows, 16 enums", HolySheetProject.Summarize(result));
+            StringAssert.StartsWith($"Up to date: {baseline.Tables.Count} tables, {baseline.Tables.Sum(t => t.Rows)} rows, 16 enums", HolySheetProject.Summarize(result));
 
             Assert.AreSame(result, HolySheetProject.LastResult);
             // A partial build reads only the selection again and takes the rest from the build above: still nothing to write.
-            HolySheetRunResult partial = HolySheetProject.RunBlocking(commit: true, only: SheetSelection.Parse(new[] { "Item.xlsx", "Monster.xlsx/Monster.Boss" }));
+            HolySheetRunResult partial = HolySheetProject.RunBlocking(commit: true, offline: true, only: SheetSelection.Parse(new[] { "Item.xlsx", "Monster.xlsx/Monster.Boss" }));
             Assert.IsNull(partial.Failure, partial.Failure);
             Assert.IsTrue(partial.Build.Success, Errors(partial.Build));
             Assert.IsFalse(partial.Commit.HasChanges, "Written: " + string.Join(", ", partial.Commit.Written));
@@ -358,7 +359,7 @@ namespace HolySheet.Dev.Tests
         [UnityTest]
         public IEnumerator The_window_opens_and_shows_every_page()
         {
-            HolySheetProject.RunBlocking(commit: false);
+            HolySheetProject.RunBlocking(commit: false, offline: true);
             HolySheetWindow.Open();
             HolySheetWindow window = UnityEditor.EditorWindow.GetWindow<HolySheetWindow>();
             try
@@ -374,7 +375,7 @@ namespace HolySheet.Dev.Tests
                 CollectionAssert.AreEqual(new[] { "Tables", "Settings" }, HolySheetWindow.PageNames.ToArray());
                 List<UnityEditor.UIElements.ToolbarToggle> tabs = root.Query<UnityEditor.UIElements.ToolbarToggle>(className: "holysheet-tab").ToList();
                 CollectionAssert.AreEqual(HolySheetWindow.PageNames.ToArray(), tabs.Select(tab => tab.text).ToArray());
-                StringAssert.StartsWith("Checked · 21 tables", root.Q<Label>(className: "holysheet-status").text);
+                StringAssert.StartsWith($"Checked · {DemoTables.Definition.Tables.Length} tables", root.Q<Label>(className: "holysheet-status").text);
 
                 // Every page puts something on screen and marks its own tab, and only that one.
                 foreach (string page in HolySheetWindow.PageNames)
@@ -622,6 +623,11 @@ namespace HolySheet.Dev.Tests
                 yield return null;
                 Assert.AreEqual("2 sheets", selectionLabel.text);
                 Assert.AreEqual("Build selection (2)", selectionBuild.text);
+                var toolbar = root.Q<UnityEditor.UIElements.Toolbar>();
+                CollectionAssert.AreEqual(new[] { "Check", "Build all", "Build selection (2)" },
+                    toolbar.Query<UnityEditor.UIElements.ToolbarButton>().ToList().Select(button => button.text).ToArray());
+                CollectionAssert.AreEqual(new[] { "Tables", "Settings", "Offline" },
+                    toolbar.Query<UnityEditor.UIElements.ToolbarToggle>().ToList().Select(toggle => toggle.text).ToArray());
                 StringAssert.Contains("Drop, Spawn", selectionBuild.tooltip);
                 StringAssert.Contains("Monster.xlsx / Drop", root.Q(className: "holysheet-selection").tooltip);
                 tree.SetSelection(new[] { at, at + 2 });
@@ -668,7 +674,7 @@ namespace HolySheet.Dev.Tests
                 yield return null;
                 CollectionAssert.Contains(TreeNames(root), "EJobId");
                 StringAssert.Contains("Mapping", root.Q(className: "holysheet-caption").Q<Label>().text);
-                Assert.AreEqual(12, root.Q<MultiColumnListView>().itemsSource.Count);
+                Assert.AreEqual(Enum.GetValues(typeof(EJobId)).Length, root.Q<MultiColumnListView>().itemsSource.Count);
 
                 // An Enums sheet lists every enum it defines.
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-search").value = "battle";
@@ -693,14 +699,14 @@ namespace HolySheet.Dev.Tests
                 window.SelectPage("Settings");
                 // Sources, Output, Sheet and build options, Signing, Editor (the language of this window).
                 Assert.AreEqual(5, root.Query<Foldout>(className: "holysheet-section").ToList().Count);
-                Assert.AreEqual(2, root.Query(className: "holysheet-card").ToList().Count);
+                Assert.AreEqual(HolySheetProject.LoadConfig().Sources.Count, root.Query(className: "holysheet-card").ToList().Count);
                 Assert.IsNotNull(root.Query<DropdownField>().ToList().FirstOrDefault(field => field.label == "Language"));
 
                 // In Korean: page content, the status, counts. Page names stay the same for code that selects pages.
                 HolySheetText.Override = HolySheetLanguage.Korean;
                 window.SelectPage("Settings");
                 Assert.AreEqual("소스", root.Query<Foldout>(className: "holysheet-section").First().text);
-                StringAssert.StartsWith("검사 완료 · 테이블 21개", root.Q<Label>(className: "holysheet-status").text);
+                StringAssert.StartsWith($"검사 완료 · 테이블 {DemoTables.Definition.Tables.Length}개", root.Q<Label>(className: "holysheet-status").text);
                 window.SelectPage("Tables");
                 Assert.AreEqual("문제가 없습니다.", root.Q<Label>(className: "holysheet-problems-bar__text").text);
                 Assert.AreEqual("시트 3개", HolySheetText.Count(3, "sheet"));
@@ -715,7 +721,7 @@ namespace HolySheet.Dev.Tests
         [Test]
         public void Tree_nodes_and_problems_open_the_file_they_came_from()
         {
-            HolySheetProject.RunBlocking(commit: false);
+            HolySheetProject.RunBlocking(commit: false, offline: true);
             string item = HolySheetWindow.FindSourceFile("Item.xlsx");
             Assert.IsTrue(File.Exists(item), item);
             StringAssert.EndsWith("Demo/Sheets/Item.xlsx", item.Replace('\\', '/'));
@@ -752,6 +758,50 @@ namespace HolySheet.Dev.Tests
                 yield return null;
                 yield return null;
                 CollectionAssert.AreEqual(new[] { "Excel", "Character.xlsx", "Job", "Level", "Skill" }, TreeNames(window.rootVisualElement).Take(5).ToArray());
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Refresh_shortcuts_check_the_sheets_without_building()
+        {
+            HolySheetProject.RunBlocking(commit: false, offline: true);
+            HolySheetWindow.Open();
+            var window = UnityEditor.EditorWindow.GetWindow<HolySheetWindow>();
+            try
+            {
+                yield return null;
+                yield return null;
+                var root = window.rootVisualElement;
+                root.Query<UnityEditor.UIElements.ToolbarToggle>().ToList().Single(toggle => toggle.text == "Offline").value = true;
+                window.Focus();
+                foreach (var (key, modifiers) in new[]
+                {
+                    (KeyCode.R, EventModifiers.Control),
+                    (KeyCode.R, EventModifiers.Command),
+                    (KeyCode.F5, EventModifiers.None)
+                })
+                {
+                    if (key == KeyCode.F5)
+                    {
+                        root.Q<TreeView>().Focus();
+                    }
+
+                    var before = HolySheetProject.LastResult;
+                    window.SendEvent(new Event { type = EventType.KeyDown, keyCode = key, modifiers = modifiers });
+                    DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+                    while (HolySheetProject.LastResult == before && DateTime.UtcNow < deadline)
+                    {
+                        yield return null;
+                    }
+
+                    Assert.AreNotSame(before, HolySheetProject.LastResult, $"{modifiers} + {key}");
+                    Assert.IsNull(HolySheetProject.LastResult.Commit);
+                    Assert.IsNull(HolySheetProject.LastResult.Build.Only);
+                }
             }
             finally
             {

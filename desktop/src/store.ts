@@ -42,9 +42,8 @@ interface AppState {
   saveConfig: (config: HolySheetConfig) => Promise<ProjectState | null>;
   applyState: (state: ProjectState) => void;
   /** Offline follows the toolbar toggle unless given. */
-  startRun: (commit: boolean, only?: string[], offline?: boolean) => Promise<void>;
-  setOffline: (offline: boolean) => Promise<void>;
-  setAutoBuild: (enabled: boolean) => Promise<void>;
+  startRun: (commit: boolean, only?: string[], options?: { offline?: boolean; refreshGoogle?: boolean }) => Promise<void>;
+  setOffline: (offline: boolean) => void;
   handleEvent: (event: HostEvent) => void;
   hostRestarted: () => Promise<void>;
 }
@@ -63,13 +62,6 @@ function message(error: unknown): string {
 export const useApp = create<AppState>((set, get) => {
   const projectPreferences = () => get().preferences.projects[projectKey(get().project)] ?? {};
 
-  const updateProjectPreferences = (change: Preferences["projects"][string]) => {
-    const key = projectKey(get().project);
-    if (!key) return;
-    const projects = { ...get().preferences.projects, [key]: { ...projectPreferences(), ...change } };
-    get().setPreferences({ projects });
-  };
-
   const refreshModel = async () => {
     try {
       set({ model: await rpc.model() });
@@ -78,21 +70,14 @@ export const useApp = create<AppState>((set, get) => {
     }
   };
 
-  // After opening: restore the toolbar toggles and, as the Unity window does, read the sheets once by itself.
+  // The initial preview uses local files and snapshots. An online read needs an explicit refresh or build.
   const afterOpen = async (state: ProjectState) => {
     set({ project: state, run: state.lastRun, running: state.running, model: emptyModel, problemsOpen: false });
     if (state.configPath) {
       get().setPreferences({ recent: withRecent(get().preferences.recent, state.configPath) });
     }
-    const saved = projectPreferences();
-    if (state.config && saved.autoBuild) {
-      set({ project: await rpc.setWatch(true, saved.offline ?? false, saved.intervalSec ?? 0) });
-    }
-    if (state.config && !state.lastRun) {
-      // Offline when every Google source has a snapshot on disk, so opening does not wait on the network.
-      const remote = state.config.sources.filter((source) => source.type === "google" || source.type === "googleFolder");
-      const offline = saved.offline ?? (remote.length > 0 && remote.every((source) => !!source.snapshot));
-      await get().startRun(false, [], offline);
+    if (state.config && !state.lastRun && state.canPreviewOffline) {
+      await get().startRun(false, [], { offline: true });
     } else {
       await refreshModel();
     }
@@ -150,12 +135,26 @@ export const useApp = create<AppState>((set, get) => {
 
     closeProject: async () => {
       await rpc.close().catch(() => undefined);
-      set({ project: null, run: null, model: emptyModel, page: "tables", problemsOpen: false });
+      set({ project: null, running: false, run: null, model: emptyModel, page: "tables", problemsOpen: false });
     },
 
     reload: async () => {
-      const path = get().project?.configPath;
-      if (path) await get().openProject(path);
+      const { project, running } = get();
+      if (!project?.dir || running) return;
+      set({ running: true });
+      try {
+        const state = await rpc.state();
+        if (get().project?.configPath !== project.configPath) return;
+        if (!state.config) {
+          set({ project: state, running: state.running, run: null, model: emptyModel });
+          return;
+        }
+        set({ project: state });
+        if (!state.running) await get().startRun(false, [], { refreshGoogle: true });
+      } catch (error) {
+        set({ running: false });
+        get().notify(message(error));
+      }
     },
 
     saveConfig: async (config) => {
@@ -171,10 +170,11 @@ export const useApp = create<AppState>((set, get) => {
 
     applyState: (state) => set({ project: state }),
 
-    startRun: async (commit, only = [], offline = projectPreferences().offline ?? false) => {
+    startRun: async (commit, only = [], options = {}) => {
+      const offline = options.offline ?? projectPreferences().offline ?? false;
       try {
         // The result arrives through the run.finished notification as well; both lead to the same state.
-        get().handleEvent({ method: "run.finished", params: await rpc.run(commit, offline, only) });
+        get().handleEvent({ method: "run.finished", params: await rpc.run(commit, offline, only, options.refreshGoogle) });
       } catch (error) {
         if (error instanceof RpcError && error.code === RpcError.Busy) {
           get().notify(error.message, "info");
@@ -185,21 +185,9 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
 
-    setOffline: async (offline) => {
-      updateProjectPreferences({ offline });
-      const { project } = get();
-      if (project?.watch.enabled) {
-        set({ project: await rpc.setWatch(true, offline, projectPreferences().intervalSec ?? 0) });
-      }
-    },
-
-    setAutoBuild: async (enabled) => {
-      updateProjectPreferences({ autoBuild: enabled });
-      try {
-        set({ project: await rpc.setWatch(enabled, projectPreferences().offline ?? false, projectPreferences().intervalSec ?? 0) });
-      } catch (error) {
-        get().notify(message(error));
-      }
+    setOffline: (offline) => {
+      const key = projectKey(get().project);
+      if (key) get().setPreferences({ projects: { ...get().preferences.projects, [key]: { offline } } });
     },
 
     handleEvent: (event) => {

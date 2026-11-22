@@ -112,6 +112,24 @@ public sealed class PartialBuildTests
     }
 
     [Fact]
+    public void A_partial_build_can_reuse_a_version_three_cache_and_write_only_the_source_sheets()
+    {
+        using var project = new Project();
+        project.Build();
+        string index = Path.Combine(project.Config.Resolve(project.Config.CacheDirectory), "sheets.index");
+        string original = File.ReadAllText(index);
+        File.WriteAllText(index, original.Replace("holysheet-sheet-cache 2", "holysheet-sheet-cache 3")
+            + "previews\t1\npreview\t00000000000000000000000000000000.sheet\tItem\n");
+
+        project.Write("Item", "Key<int>,int\nId,Price\n,\n1,20\n");
+        BuildResult result = project.Build("Sheets/Item").Result;
+        Assert.True(result.Success, Sheets.Errors(result));
+        string saved = File.ReadAllText(index);
+        Assert.StartsWith("holysheet-sheet-cache 2\n", saved);
+        Assert.DoesNotContain("preview", saved);
+    }
+
+    [Fact]
     public void Unknown_names_are_errors()
     {
         using var project = new Project();

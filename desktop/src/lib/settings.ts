@@ -15,8 +15,8 @@ export interface Preferences {
   stripes: boolean;
   findInAllColumns: boolean;
   recent: string[];
-  /** Per project path: the toolbar toggles and the auto-build poll interval. */
-  projects: Record<string, { offline?: boolean; autoBuild?: boolean; intervalSec?: number }>;
+  /** Offline preference per project path. */
+  projects: Record<string, { offline?: boolean }>;
 }
 
 export const defaults: Preferences = {

@@ -18,7 +18,7 @@ Unity 프로젝트에 패키지를 추가하고, 직렬화 라이브러리를 �
 2. **+ → Install package from git URL**을 선택하고 아래 주소를 입력합니다.
 
    ```text
-   https://github.com/shlifedev/uni-google-sheets.git?path=src#dev/feat-2026-remaster
+   https://github.com/shlifedev/uni-google-sheet.git?path=src#dev/feat-2026-remaster
    ```
 
    주소 끝의 `#dev/feat-2026-remaster`는 버전 2를 개발하는 브랜치를 가리킵니다.

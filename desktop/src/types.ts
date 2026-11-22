@@ -40,7 +40,7 @@ export interface RunResult {
   unchanged: number;
   finishedAt: string;
   diagnostics: Diagnostic[];
-  trigger?: "user" | "watch";
+  trigger?: "user";
 }
 
 export interface AppInfo {
@@ -91,7 +91,7 @@ export interface HolySheetConfig {
   sheet: { header: string[]; arraySeparator: string };
   csv?: { backend: string };
   signing?: { publicKey?: string; privateKeyFile?: string; privateKeyEnv?: string };
-  build?: { label?: string; parallel?: boolean; cache?: string };
+  build?: { label?: string; parallel?: boolean; cache?: string; validators?: string[] };
   [key: string]: unknown;
 }
 
@@ -106,13 +106,13 @@ export interface ProjectState {
   dir: string | null;
   configPath: string | null;
   hasConfig: boolean;
+  canPreviewOffline?: boolean;
   config: HolySheetConfig | null;
   configError: string | null;
   unityProject: boolean;
   sources: SourceState[];
   keyFileExists: boolean;
   keyIgnored: boolean;
-  watch: { enabled: boolean; offline: boolean; intervalSec: number; watching: number };
   running: boolean;
   lastRun: RunResult | null;
   /** Only on config.save: what the engine thinks of the saved config. */
