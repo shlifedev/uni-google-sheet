@@ -351,7 +351,7 @@ namespace HolySheet
                 }
 
                 ITable candidate = previous.Tables[index];
-                bool same = candidate.Name == entry.Name && candidate.Entry.Hash == entry.Hash && candidate.Entry.Schema == entry.Schema;
+                bool same = candidate.Name == entry.Name && candidate.Entry.HasSameFile(entry) && candidate.Entry.HasSameExtras(entry);
                 return same ? candidate : null;
             }
         }

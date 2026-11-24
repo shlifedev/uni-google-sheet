@@ -591,6 +591,74 @@ public class WatcherTests
     }
 
     [Fact]
+    public void A_same_size_release_with_the_same_timestamp_updates_the_build_label()
+    {
+        using var build = new SampleBuild("memorypack", c => c.BuildLabel = "A01");
+        using var watcher = Mem.GameTables.Watch(build.DataDirectory, new TableWatchOptions { Mode = TableWatchMode.Manual });
+        var before = watcher.Current;
+        string manifest = Path.Combine(build.DataDirectory, TableManifest.DefaultFileName);
+        var stamp = File.GetLastWriteTimeUtc(manifest);
+        long size = new FileInfo(manifest).Length;
+        build.Rebuild(c => c.BuildLabel = "B02");
+        File.SetLastWriteTimeUtc(manifest, stamp);
+        Assert.Equal(size, new FileInfo(manifest).Length);
+        Assert.True(watcher.CheckNow());
+        Assert.Equal("B02", watcher.Current.Manifest.Properties["build"]);
+        Assert.Empty(watcher.Current.LoadedTables);
+        Assert.Same(before.Item, watcher.Current.Item);
+        Assert.False(watcher.CheckNow());
+    }
+
+    [Fact]
+    public void A_relocated_table_is_in_the_patch_plan_and_uses_the_new_manifest_entry()
+    {
+        using var build = new SampleBuild("memorypack");
+        using var watcher = Mem.GameTables.Watch(build.DataDirectory, new TableWatchOptions { Mode = TableWatchMode.Manual });
+        var before = watcher.Current;
+        string manifest = Path.Combine(build.DataDirectory, TableManifest.DefaultFileName);
+        string replacement = File.ReadAllText(manifest).Replace("\"Item.bytes\"", "\"Item-release.bytes\"");
+        File.Move(Path.Combine(build.DataDirectory, "Item.bytes"), Path.Combine(build.DataDirectory, "Item-release.bytes"));
+        File.WriteAllText(manifest, replacement);
+        var diff = TableManifest.Diff(before.Manifest, TableManifest.Parse(replacement));
+        Assert.Equal(["Item"], diff.Changed);
+        Assert.False(diff.RequiresNewCode);
+        Assert.True(watcher.CheckNow());
+        Assert.Equal("Item-release.bytes", watcher.Current.Item.Entry.File);
+        Assert.Same(before.Limits, watcher.Current.Limits);
+    }
+
+    [Fact]
+    public void Reload_exposes_new_entry_metadata_without_replacing_unaffected_tables()
+    {
+        using var build = new SampleBuild("memorypack");
+        var before = Mem.GameTables.Load(build.DataDirectory);
+        string path = Path.Combine(build.DataDirectory, TableManifest.DefaultFileName);
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+        var item = json["tables"]!.AsArray().Single(entry => (string?)entry!["name"] == "Item")!;
+        item["region"] = "eu";
+        File.WriteAllText(path, json.ToJsonString());
+        var after = before.Reload(TableSource.FromDirectory(build.DataDirectory));
+        Assert.Equal("eu", after.Item.Entry.Extra["region"]);
+        Assert.Same(before.Monster, after.Monster);
+        Assert.Equal(["Item"], after.LoadedTables);
+    }
+
+    [Theory]
+    [InlineData("rows", TableLoadError.DecodeFailed)]
+    [InlineData("bytes", TableLoadError.HashMismatch)]
+    public void Reload_validates_changed_entry_counts_even_if_the_hash_is_unchanged(string member, TableLoadError error)
+    {
+        using var build = new SampleBuild("memorypack");
+        var before = Mem.GameTables.Load(build.DataDirectory);
+        string path = Path.Combine(build.DataDirectory, TableManifest.DefaultFileName);
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+        var item = json["tables"]!.AsArray().Single(entry => (string?)entry!["name"] == "Item")!;
+        item[member] = 999;
+        File.WriteAllText(path, json.ToJsonString());
+        Assert.Equal(error, Assert.Throws<TableLoadException>(() => before.Reload(TableSource.FromDirectory(build.DataDirectory))).Error);
+    }
+
+    [Fact]
     public void Rewriting_the_same_data_raises_no_event()
     {
         using var build = new SampleBuild("memorypack");

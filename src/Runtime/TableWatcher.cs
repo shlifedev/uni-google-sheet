@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
 using System.Threading;
 
 namespace HolySheet
@@ -15,7 +16,7 @@ namespace HolySheet
         /// <summary>Check the manifest on a timer. Works everywhere that has timers.</summary>
         Polling,
 
-        /// <summary>Never check on its own. Call <see cref="TableWatcher{T}.CheckNow"/>, for example once per frame on platforms without threads.</summary>
+        /// <summary>Never check on its own. Call <see cref="TableWatcher{T}.CheckNow"/>, when polling the manifest on platforms without threads.</summary>
         Manual
     }
 
@@ -294,8 +295,11 @@ namespace HolySheet
                     _attempt = 0;
                     if (next.Manifest.Content == previous.Manifest.Content && next.Manifest.Schema == previous.Manifest.Schema)
                     {
-                        // The manifest was rewritten with identical data. Nothing to announce.
-                        return false;
+                        // Identical payloads can still have a new release label, entry metadata or signature.
+                        if (next.Manifest.SignedText == previous.Manifest.SignedText && next.Manifest.Signature == previous.Manifest.Signature)
+                        {
+                            return false;
+                        }
                     }
 
                     TableManifestDiff diff = TableManifest.Diff(previous.Manifest, next.Manifest);
@@ -343,20 +347,18 @@ namespace HolySheet
             _context.Post(_ => action(), null);
         }
 
-        // Cheap fingerprint of the manifest file. The manifest is written last, so a new stamp means a complete build is on disk.
+        // Packagers can preserve both timestamp and size across different releases. Only the manifest is read per check.
         private string ReadStamp()
         {
             try
             {
-                FileInfo info = new FileInfo(_manifestPath);
-                if (!info.Exists)
+                using (var stream = new FileStream(_manifestPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var hash = SHA256.Create())
                 {
-                    return "";
+                    return TableHash.ToHex(hash.ComputeHash(stream));
                 }
-
-                return info.LastWriteTimeUtc.Ticks.ToString() + ":" + info.Length.ToString();
             }
-            catch (IOException)
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
             {
                 return "";
             }
