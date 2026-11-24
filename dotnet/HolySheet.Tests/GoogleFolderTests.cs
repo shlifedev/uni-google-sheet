@@ -194,10 +194,13 @@ public class GoogleFolderTests
                           "activationUrl": "https://console.developers.google.com/apis/api/sheets.googleapis.com/overview?project=42" } } ] } }
         """;
 
-    [Fact]
-    public void Without_the_sheets_api_a_spreadsheet_is_read_as_one_xlsx_export_and_the_fix_is_named()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Without_the_sheets_api_a_spreadsheet_is_read_as_one_xlsx_export_and_the_fix_is_named(bool selectTabs)
     {
         var source = new SourceConfig { Type = SourceType.Google, SpreadsheetId = "sheet-1", Auth = { Type = GoogleAuthType.ApiKey, ApiKey = "KEY" } };
+        if (selectTabs) source.Sheets.Add(new GoogleSheetRef("Text", 5));
         (BuildResult result, StubHandler handler) = Build(source, request =>
         {
             string url = request.RequestUri!.ToString();
@@ -212,7 +215,8 @@ public class GoogleFolderTests
         });
 
         Assert.True(result.Success, Sheets.Errors(result));
-        Assert.Contains(result.Tables, table => table.Schema.Name == "Item");
+        if (selectTabs) Assert.Equal(["Text"], Assert.Single(result.Workbooks).Sheets.Select(sheet => sheet.Name));
+        else Assert.Contains(result.Tables, table => table.Schema.Name == "Item");
         Diagnostic warning = Assert.Single(result.Diagnostics.Items, item => item.Severity == Severity.Warning);
         Assert.Contains("The Google Sheets API is not enabled in Google Cloud project 42", warning.Message);
         Assert.Contains("https://console.developers.google.com/apis/api/sheets.googleapis.com/overview?project=42", warning.Hint);

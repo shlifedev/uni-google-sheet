@@ -39,12 +39,14 @@ namespace HolySheet.Core.Sources
             return Path.Combine(root, Hash(id), Hash(tab).Substring(0, 16) + "-" + name + ".csv");
         }
 
-        public string CatalogPath(SourceConfig source)
+        internal static string SourceKey(SourceConfig source)
         {
             string key = JsonValue.Array(new[] { source.Type.ToString(), source.SpreadsheetId ?? source.FolderId ?? "", source.Name ?? "" }
                 .Concat(source.Sheets.SelectMany(tab => new[] { tab.Name, tab.Gid.ToString(CultureInfo.InvariantCulture) }))).ToJson(false);
-            return Path.Combine(root, Hash(key) + ".json");
+            return Hash(key);
         }
+
+        public string CatalogPath(SourceConfig source) => Path.Combine(root, SourceKey(source) + ".json");
 
         public static string? SpreadsheetId(SourceConfig source, Workbook workbook)
         {
@@ -218,7 +220,7 @@ namespace HolySheet.Core.Sources
                 File.Delete(path);
             }
 
-            RemoteCopy.Invalidate(Path.Combine(config.Resolve(config.CacheDirectory), "google"), tab.SpreadsheetId);
+            RemoteCopy.InvalidateFile(Path.Combine(config.Resolve(config.CacheDirectory), "google"), tab.SpreadsheetId);
             return await TableBuild.RunAsync(config, options.ForGooglePreview(sources), cancellationToken).ConfigureAwait(false);
         }
     }

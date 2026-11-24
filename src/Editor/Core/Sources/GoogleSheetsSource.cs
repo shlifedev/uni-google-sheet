@@ -137,8 +137,10 @@ namespace HolySheet.Core.Sources
                 // 1. Unchanged since the last download? Drive reports the file's version for one cheap request (Drive quota,
                 //    not Sheets quota); the same version means the tabs can come from the local copy.
                 long? version = KnownVersion ?? (hasCredentials && remoteCacheDirectory != null ? await TryGetVersionAsync(client, id, apiKey, bearer, cancellationToken).ConfigureAwait(false) : null);
+                // A Drive version identifies the remote file, but the configured name and tabs determine its local view.
+                string sourceKey = GoogleLocalCopies.SourceKey(source);
                 // A manual refresh reads the cells themselves: Drive can still report the previous version after an edit.
-                if (!RefreshGoogle && version != null && RemoteCopy.TryLoad(remoteCacheDirectory, id, version.Value) is { } copy)
+                if (!RefreshGoogle && version != null && RemoteCopy.TryLoad(remoteCacheDirectory, id, version.Value, sourceKey) is { } copy)
                 {
                     string name = title ?? copy.Title;
                     if (only != null && !only.Touches(name))
@@ -223,16 +225,17 @@ namespace HolySheet.Core.Sources
 
                 // A partial fetch saves the tabs it fetched and leaves the others as they were.
                 WriteSnapshot(workbookName, fetched.Select(tab => tab.Name).ToList(), fetched.Select(tab => tab.Text).ToList(), complete);
+                if (RefreshGoogle) RemoteCopy.InvalidateFile(remoteCacheDirectory, id);
                 if (version != null)
                 {
                     if (complete && (RefreshGoogle || !fetched.Any(tab => File.Exists(localCopies.CsvPath(id, tab.Name)))))
                     {
-                        RemoteCopy.Save(remoteCacheDirectory, id, version.Value, workbookName, fetched);
+                        RemoteCopy.Save(remoteCacheDirectory, id, version.Value, workbookName, fetched, sourceKey);
                     }
                     else
                     {
                         // Some tabs are now newer than the copy: it no longer matches any single version.
-                        RemoteCopy.Invalidate(remoteCacheDirectory, id);
+                        RemoteCopy.Invalidate(remoteCacheDirectory, id, sourceKey);
                     }
                 }
 
@@ -469,7 +472,15 @@ namespace HolySheet.Core.Sources
         private async Task<List<(string Name, string Text)>> FetchXlsxExportAsync(HttpClient client, string id, string workbookName, string? bearer, CancellationToken cancellationToken)
         {
             Workbook workbook = await LoadViaXlsxExportAsync(client, id, workbookName, cancellationToken, bearer).ConfigureAwait(false);
-            return workbook.Sheets.Select(sheet => (sheet.Name, CsvWriter.Write(sheet.ToGrid()))).ToList();
+            IEnumerable<Sheet> sheets = workbook.Sheets;
+            if (source.Sheets.Count > 0)
+            {
+                var byName = workbook.Sheets.ToDictionary(sheet => sheet.Name, StringComparer.Ordinal);
+                sheets = source.Sheets.Select(tab => byName.TryGetValue(tab.Name, out Sheet sheet) ? sheet
+                    : throw new GoogleSourceException($"The exported workbook has no tab named '{tab.Name}'.", "Check the tab names in the source settings."));
+            }
+
+            return sheets.Select(sheet => (sheet.Name, CsvWriter.Write(sheet.ToGrid()))).ToList();
         }
 
         /// <summary>The address that opens a spreadsheet in a browser.</summary>
