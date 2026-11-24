@@ -359,6 +359,11 @@ namespace HolySheet.Core.Output
         private const string CsvListHeader = "holysheet-csv 1";
 
         public static CommitReport Commit(GeneratedOutput output, string codeDirectory, string dataDirectory, string? csvDirectory = null)
+            => Commit(output, codeDirectory, dataDirectory, csvDirectory, null);
+
+        internal const string RevisionFileName = ".holysheet-output-revision";
+
+        internal static CommitReport Commit(GeneratedOutput output, string codeDirectory, string dataDirectory, string? csvDirectory, string? revisionPath)
         {
             var files = new FileChangeSet("HolySheet cannot identify it as its own output. Move the file or choose another output path.");
 
@@ -438,6 +443,14 @@ namespace HolySheet.Core.Output
                 }
 
                 files.PlanWrite(listPath, Utf8.GetBytes(WriteCsvList(keptCsv)), CsvListFileName, canReplace: previousCsv != null);
+            }
+
+            // These outputs can change independently of the data manifest. Keep the local revision in the same rollback set.
+            if (files.HasChanges && revisionPath != null)
+            {
+                const string prefix = "holysheet-output ";
+                bool owned = File.Exists(revisionPath) && File.ReadAllText(revisionPath).StartsWith(prefix, StringComparison.Ordinal);
+                files.PlanWrite(revisionPath, Utf8.GetBytes(prefix + Guid.NewGuid().ToString("N")), null, owned);
             }
 
             // The manifest goes last: it is the signal that a complete build is in place.

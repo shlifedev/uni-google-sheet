@@ -140,11 +140,8 @@ namespace HolySheet.Core
         /// <summary>True after <see cref="ReleaseBuildData"/>.</summary>
         public bool IsReleased => _released;
 
-        /// <summary>
-        /// Hash of the manifest that was on disk when the build started; null when there was none. A commit checks it again,
-        /// so a build never writes over output that another build wrote in the meantime.
-        /// </summary>
-        internal string? BaseManifestHash { get; set; }
+        /// <summary>The published data, source grids and generated output revision observed before reading the sources.</summary>
+        internal (string? Manifest, string? Sheets, string? Output) StartingState { get; set; }
 
         /// <summary>
         /// Lets go of everything that is only needed to write files: the sheets as read, the typed values and the generated output.
@@ -209,7 +206,7 @@ namespace HolySheet.Core
 
             result.CsvBackend = parser.Name;
             ITableCodec codec = TableCodecs.Find(config.Codegen.Serializer)!;
-            result.BaseManifestHash = HashManifestOnDisk(config);
+            result.StartingState = ReadBuildState(config);
 
             // 1. Read every source. Sources are independent, so they are read at the same time.
             var readWatch = Stopwatch.StartNew();
@@ -385,13 +382,14 @@ namespace HolySheet.Core
             // writing it would put back what that build changed (a partial build carries every unselected sheet as it was).
             using (OutputLock.Acquire(config.Resolve(config.CacheDirectory), CommitLockTimeout))
             {
-                if (HashManifestOnDisk(config) != result.BaseManifestHash)
+                if (ReadBuildState(config) != result.StartingState)
                 {
                     throw new IOException("Another build wrote the output while this one was running. Nothing was written, so its changes are kept; run this build again.");
                 }
 
                 CommitReport report = OutputCommitter.Commit(result.Output, config.Resolve(config.Output.Code), config.Resolve(config.Output.Data),
-                    config.Output.Csv == null ? null : config.Resolve(config.Output.Csv));
+                    config.Output.Csv == null ? null : config.Resolve(config.Output.Csv),
+                    Path.Combine(config.Resolve(config.CacheDirectory), OutputCommitter.RevisionFileName));
                 SaveCache(config, result);
                 return report;
             }
@@ -400,16 +398,22 @@ namespace HolySheet.Core
         /// <summary>How long a commit waits for another build's commit to finish.</summary>
         internal static TimeSpan CommitLockTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
-        private static string? HashManifestOnDisk(HolySheetConfig config)
+        private static (string?, string?, string?) ReadBuildState(HolySheetConfig config)
         {
-            string manifestPath = Path.Combine(config.Resolve(config.Output.Data), config.Output.ManifestFile);
+            string cache = config.Resolve(config.CacheDirectory);
+            return (HashFile(Path.Combine(config.Resolve(config.Output.Data), config.Output.ManifestFile)),
+                HashFile(Path.Combine(cache, SheetCache.IndexFileName)), HashFile(Path.Combine(cache, OutputCommitter.RevisionFileName)));
+        }
+
+        private static string? HashFile(string path)
+        {
             try
             {
-                return File.Exists(manifestPath) ? SheetCache.HashManifest(File.ReadAllBytes(manifestPath)) : null;
+                return File.Exists(path) ? SheetCache.HashManifest(File.ReadAllBytes(path)) : null;
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                // Unreadable now; a commit will find out properly. Use a value no real hash equals, so it is not mistaken for "no manifest".
+                // Keep an unreadable baseline distinct from an absent file.
                 return "unreadable";
             }
         }

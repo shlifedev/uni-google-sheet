@@ -24,7 +24,7 @@ namespace HolySheet.Core
     public sealed class SheetCache
     {
         public const string DefaultDirectory = ".holysheet/cache";
-        private const string IndexFileName = "sheets.index";
+        internal const string IndexFileName = "sheets.index";
         // Version 2 added each workbook's origin. An older cache is not read: the next partial build asks for a full one.
         private const string Header = "holysheet-sheet-cache 2";
         // Accept version 3's extra index entries when reading a partial build from that version.
