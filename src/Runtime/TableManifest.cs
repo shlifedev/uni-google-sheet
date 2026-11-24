@@ -69,6 +69,19 @@ namespace HolySheet
             Extra = decoded;
         }
 
+        internal bool HasSameFile(TableManifestEntry other) =>
+            File == other.File && Hash == other.Hash && Schema == other.Schema && Bytes == other.Bytes && Rows == other.Rows;
+
+        internal bool HasSameExtras(TableManifestEntry other)
+        {
+            if (RawExtra.Count != other.RawExtra.Count) return false;
+            foreach (var pair in RawExtra)
+            {
+                if (!other.RawExtra.TryGetValue(pair.Key, out string? value) || value != pair.Value) return false;
+            }
+            return true;
+        }
+
         private static Dictionary<string, string>? Quote(IReadOnlyDictionary<string, string>? extra)
         {
             if (extra == null || extra.Count == 0)
@@ -296,7 +309,7 @@ namespace HolySheet
                 {
                     added.Add(entry.Name);
                 }
-                else if (previous.Hash != entry.Hash || previous.Schema != entry.Schema)
+                else if (!previous.HasSameFile(entry))
                 {
                     changed.Add(entry.Name);
                     if (previous.Schema != entry.Schema)
