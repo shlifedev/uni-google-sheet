@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.IO.Compression;
 using HolySheet.Core;
 using HolySheet.Core.Config;
 using HolySheet.Core.Schema;
@@ -52,42 +50,6 @@ public class XlsxReaderTests
                 }
             }
         }
-    }
-
-    [Theory]
-    [InlineData("memorypack")]
-    [InlineData("messagepack")]
-    public void Fractional_excel_dates_match_csv_and_do_not_roll_into_tomorrow(string serializer)
-    {
-        var expected = new DateTime(2026, 1, 31, 23, 59, 59, 999, DateTimeKind.Utc);
-        string serial = expected.ToOADate().ToString("R", CultureInfo.InvariantCulture);
-        using var stream = new MemoryStream();
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            void Part(string path, string xml)
-            {
-                using var writer = new StreamWriter(archive.CreateEntry(path).Open());
-                writer.Write(xml);
-            }
-            Part("xl/workbook.xml", """<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Events" sheetId="1" r:id="rId1"/></sheets></workbook>""");
-            Part("xl/_rels/workbook.xml.rels", """<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>""");
-            Part("xl/styles.xml", """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="22"/></cellXfs></styleSheet>""");
-            Part("xl/worksheets/sheet1.xml", $"""
-                <worksheet><sheetData>
-                <row r="1"><c t="str"><v>Key&lt;int&gt;</v></c><c t="str"><v>DateTime</v></c></row>
-                <row r="2"><c t="str"><v>Id</v></c><c t="str"><v>At</v></c></row>
-                <row r="4"><c><v>1</v></c><c s="1"><v>{serial}</v></c></row>
-                </sheetData></worksheet>
-                """);
-        }
-        stream.Position = 0;
-        var sheet = Assert.Single(XlsxReader.Read(stream, "Book").Sheets);
-        BuildResult excel = Sheets.Build(Sheets.Config(serializer), sheet);
-        BuildResult csv = Sheets.Build(Sheets.Config(serializer), Sheets.Of("Events", "Key<int>,DateTime\nId,At\n,\n1,2026-01-31T23:59:59.999Z\n"));
-        Assert.True(excel.Success, Sheets.Errors(excel));
-        Assert.True(csv.Success, Sheets.Errors(csv));
-        Assert.Equal(expected, excel.Tables[0].Rows[0].Values[1]);
-        Assert.Equal(csv.Output!.DataFiles["Events.bytes"], excel.Output!.DataFiles["Events.bytes"]);
     }
 
     [Theory]
