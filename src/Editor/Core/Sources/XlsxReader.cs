@@ -492,16 +492,15 @@ namespace HolySheet.Core.Sources
                 return FormatNumber(serial);
             }
 
-            // Round to the second: a time typed as 13:30 is stored as a fraction that lands a few ticks off.
-            value = new DateTime((value.Ticks + TimeSpan.TicksPerSecond / 2) / TimeSpan.TicksPerSecond * TimeSpan.TicksPerSecond);
+            // FromOADate already gives millisecond precision. Optional digits keep whole-second cells in their usual form.
             if (serial is >= 0 and < 1)
             {
-                return value.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+                return value.ToString("HH:mm:ss.FFF", CultureInfo.InvariantCulture);
             }
 
             return value.TimeOfDay == TimeSpan.Zero
                 ? value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-                : value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+                : value.ToString("yyyy-MM-dd HH:mm:ss.FFF", CultureInfo.InvariantCulture);
         }
 
         private static string NormalizeLineBreaks(string value)

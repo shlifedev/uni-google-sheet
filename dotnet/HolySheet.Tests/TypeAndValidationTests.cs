@@ -88,6 +88,7 @@ public class ScalarTests
     [InlineData("2026-01-31", 2026, 1, 31, 0, 0, 0)]
     [InlineData("2026-01-31 13:30:00", 2026, 1, 31, 13, 30, 0)]
     [InlineData("2026-01-31T13:30:05Z", 2026, 1, 31, 13, 30, 5)]
+    [InlineData("2026-02-01T01:30:00+09:00", 2026, 1, 31, 16, 30, 0)]
     [InlineData("2026/01/31", 2026, 1, 31, 0, 0, 0)]
     public void Dates_are_utc_whatever_the_machine_time_zone(string text, int year, int month, int day, int hour, int minute, int second)
     {
@@ -95,6 +96,17 @@ public class ScalarTests
         var date = (DateTime)value;
         Assert.Equal(new DateTime(year, month, day, hour, minute, second, DateTimeKind.Utc), date);
         Assert.Equal(DateTimeKind.Utc, date.Kind);
+    }
+
+    [Theory]
+    [InlineData("2026-02-01T08:59:59.1234567+09:00")]
+    [InlineData("2026-01-31T18:59:59.1234567-05:00")]
+    public void Offset_timestamps_normalize_to_utc_and_preserve_all_ticks(string input)
+    {
+        var expected = new DateTime(2026, 1, 31, 23, 59, 59, DateTimeKind.Utc).AddTicks(1234567);
+        Assert.True(Scalars.TryParse(ScalarKind.DateTime, input, out object value, out string reason), reason);
+        Assert.Equal(expected, value);
+        Assert.Equal(DateTimeKind.Utc, ((DateTime)value).Kind);
     }
 
     [Fact]
