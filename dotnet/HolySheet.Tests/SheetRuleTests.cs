@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Xml.Linq;
 using HolySheet.Core;
 using HolySheet.Core.Config;
 using HolySheet.Core.Schema;
@@ -50,6 +52,96 @@ public class XlsxReaderTests
                 }
             }
         }
+    }
+
+    [Theory]
+    [InlineData("worksheet")]
+    [InlineData("relationship")]
+    [InlineData("relationshipId")]
+    public void An_incomplete_workbook_cannot_replace_the_last_good_build(string missing)
+    {
+        using var temp = new TempDir();
+        string path = temp.Combine("Game.xlsx");
+        File.Copy(Repo.Fixture("Game.libreoffice.xlsx"), path);
+        var config = new HolySheetConfig { BaseDirectory = temp.Path, Sources = { new SourceConfig { Type = SourceType.Xlsx, Path = path } } };
+        var good = TableBuild.Run(config);
+        Assert.True(good.Success, Sheets.Errors(good));
+        TableBuild.Commit(config, good);
+        string data = config.Resolve(config.Output.Data);
+        byte[] manifest = File.ReadAllBytes(Path.Combine(data, "tables.manifest.json"));
+        byte[] text = File.ReadAllBytes(Path.Combine(data, "Text.bytes"));
+
+        // In this LibreOffice fixture the Text worksheet is rId8 and its part is sheet6.xml.
+        using (var zip = ZipFile.Open(path, ZipArchiveMode.Update))
+        {
+            if (missing == "worksheet") zip.GetEntry("xl/worksheets/sheet6.xml")!.Delete();
+            else if (missing == "relationship") EditPart(zip, "xl/_rels/workbook.xml.rels",
+                doc => doc.Descendants().Single(node => (string?)node.Attribute("Id") == "rId8").Remove());
+            else EditPart(zip, "xl/workbook.xml", doc => doc.Descendants().Single(node => (string?)node.Attribute("name") == "Text")
+                .Attributes().Single(attribute => attribute.Name.LocalName == "id").Remove());
+        }
+
+        var broken = TableBuild.Run(config);
+        Assert.False(broken.Success);
+        Assert.Contains("Text", Sheets.Errors(broken));
+        Assert.Throws<InvalidOperationException>(() => TableBuild.Commit(config, broken));
+        Assert.Equal(manifest, File.ReadAllBytes(Path.Combine(data, "tables.manifest.json")));
+        Assert.Equal(text, File.ReadAllBytes(Path.Combine(data, "Text.bytes")));
+    }
+
+    [Fact]
+    public void Removing_a_tab_from_the_workbook_allows_the_remaining_tables_to_build()
+    {
+        using var temp = new TempDir();
+        string path = temp.Combine("Game.xlsx");
+        File.Copy(Repo.Fixture("Game.libreoffice.xlsx"), path);
+        using (var zip = ZipFile.Open(path, ZipArchiveMode.Update))
+        {
+            EditPart(zip, "xl/workbook.xml", doc => doc.Descendants().Single(node => (string?)node.Attribute("name") == "Text").Remove());
+            EditPart(zip, "xl/_rels/workbook.xml.rels", doc => doc.Descendants().Single(node => (string?)node.Attribute("Id") == "rId8").Remove());
+            EditPart(zip, "[Content_Types].xml", doc => doc.Descendants().Single(node => (string?)node.Attribute("PartName") == "/xl/worksheets/sheet6.xml").Remove());
+            zip.GetEntry("xl/worksheets/sheet6.xml")!.Delete();
+        }
+
+        var result = TableBuild.Run(new HolySheetConfig { BaseDirectory = temp.Path, Sources = { new SourceConfig { Type = SourceType.Xlsx, Path = path } } });
+        Assert.True(result.Success, Sheets.Errors(result));
+        Assert.Contains(result.Tables, table => table.Schema.Name == "Item");
+        Assert.DoesNotContain(result.Tables, table => table.Schema.Name == "Text");
+    }
+
+    [Fact]
+    public void A_worksheet_is_identified_by_its_relationship_type_outside_the_usual_folder()
+    {
+        using var temp = new TempDir();
+        string path = temp.Combine("Game.xlsx");
+        File.Copy(Repo.Fixture("Game.libreoffice.xlsx"), path);
+        const string originalPart = "xl/worksheets/sheet6.xml";
+        const string movedPart = "xl/cells/strings.xml";
+        using (var zip = ZipFile.Open(path, ZipArchiveMode.Update))
+        {
+            var original = zip.GetEntry(originalPart)!;
+            using (Stream source = original.Open())
+            using (Stream target = zip.CreateEntry(movedPart).Open()) source.CopyTo(target);
+            original.Delete();
+            EditPart(zip, "xl/_rels/workbook.xml.rels", doc => doc.Descendants().Single(node => (string?)node.Attribute("Id") == "rId8")
+                .SetAttributeValue("Target", "cells/strings.xml"));
+            EditPart(zip, "[Content_Types].xml", doc => doc.Descendants().Single(node => (string?)node.Attribute("PartName") == "/" + originalPart)
+                .SetAttributeValue("PartName", "/" + movedPart));
+        }
+
+        var expected = Find(XlsxReader.Read(Repo.Fixture("Game.libreoffice.xlsx")), "Text");
+        var actual = Find(XlsxReader.Read(path), "Text");
+        Assert.Equal(expected.ToGrid(), actual.ToGrid());
+    }
+
+    private static void EditPart(ZipArchive zip, string name, Action<XDocument> edit)
+    {
+        using Stream stream = zip.GetEntry(name)!.Open();
+        var document = XDocument.Load(stream);
+        edit(document);
+        stream.SetLength(0);
+        stream.Position = 0;
+        document.Save(stream);
     }
 
     [Theory]
