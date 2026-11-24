@@ -11,12 +11,22 @@ on:
   workflow_dispatch:
 
 jobs:
+  engine:
+    name: Engine and runtime tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet test dotnet/HolySheet.Tests
+
   build:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             target: aarch64-apple-darwin
             bundles: app,dmg
           - os: windows-latest
