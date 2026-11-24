@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using NUnit.Framework;
 using HolySheet.Demo;
 using HolySheet.Demo.Data;
@@ -31,7 +32,10 @@ namespace HolySheet.Dev.Tests
             DemoTables tables = demo.Tables;
             Assert.IsNotNull(tables);
 
-            Assert.AreEqual(21, tables.Tables.Count);
+            CollectionAssert.AreEquivalent(
+                tables.Manifest.Tables.Select(entry => entry.Name),
+                tables.Tables.Select(table => table.Name),
+                "The demo should load every table listed in its shipped manifest.");
             Assert.AreEqual(44, tables.Item.Count);
             Assert.AreEqual("작은 회복 물약", tables.Item.Get(10001).Name);
             Assert.AreEqual(EItemType.Material, tables.Item.GetByCode("iron_ore").Type);
