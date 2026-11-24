@@ -108,6 +108,16 @@ namespace HolySheet.Core.Sources
                     }
                 }
 
+                if (snapshotDirectory != null)
+                {
+                    foreach (var group in byName.Keys.GroupBy(GoogleSheetsSource.SafeFileName, StringComparer.OrdinalIgnoreCase))
+                    {
+                        if (group.Skip(1).Any())
+                            diagnostics.AddError(location, $"The workbooks {string.Join(", ", group)} use the same snapshot folder '{group.Key}'.", "Give them distinct folder names.");
+                    }
+                    if (diagnostics.HasErrors) return Array.Empty<Workbook>();
+                }
+
                 List<DriveFile> wanted = byName.Values.Where(file => only == null || only.Touches(file.Name)).OrderBy(file => file.Name, StringComparer.Ordinal).ToList();
                 var results = new IReadOnlyList<Workbook>[wanted.Count];
                 var bags = new DiagnosticBag[wanted.Count];
@@ -148,6 +158,10 @@ namespace HolySheet.Core.Sources
             catch (GoogleSourceException exception)
             {
                 diagnostics.AddError(location, exception.Message, exception.Hint);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                diagnostics.AddError(location, exception.Message, "Check the files and permissions in the configured Google snapshot or cache.");
             }
             catch (HttpRequestException exception)
             {
@@ -335,7 +349,7 @@ namespace HolySheet.Core.Sources
                     string gone = Path.Combine(snapshotDirectory, folder);
                     if (!index.ContainsKey(folder) && IsOwnFolderName(folder) && Directory.Exists(gone))
                     {
-                        Directory.Delete(gone, recursive: true);
+                        SnapshotIndex.RemoveWorkbook(gone);
                     }
                 }
             }
@@ -406,7 +420,7 @@ namespace HolySheet.Core.Sources
             var workbooks = new List<Workbook>();
             foreach (KeyValuePair<string, (string Name, string? Link)> entry in ReadIndex(directory).OrderBy(entry => entry.Value.Name, StringComparer.Ordinal))
             {
-                var csv = new CsvDirectorySource(Path.Combine(directory, entry.Key), parser, entry.Value.Name, only);
+                var csv = CsvDirectorySource.FromSnapshot(Path.Combine(directory, entry.Key), parser, entry.Value.Name, null, only);
                 IReadOnlyList<Workbook> loaded = await csv.LoadAsync(diagnostics, cancellationToken).ConfigureAwait(false);
                 workbooks.AddRange(loaded.Select(workbook => workbook.WithOrigin(new WorkbookOrigin(SourceType.GoogleFolder, source.FolderId ?? "", entry.Value.Link))));
             }

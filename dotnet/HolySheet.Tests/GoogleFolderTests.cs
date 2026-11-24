@@ -126,6 +126,20 @@ public class GoogleFolderTests
     }
 
     [Fact]
+    public void Drive_workbooks_with_the_same_snapshot_path_are_reported_before_downloading()
+    {
+        using var temp = new TempDir();
+        (BuildResult result, StubHandler handler) = Build(Folder("Snapshot"), request =>
+            request.RequestUri!.AbsolutePath == "/drive/v3/files/folder-id" ? Drive()(request) :
+            Text("""{ "files": [ { "id": "a", "name": "Game/Data", "mimeType": "application/vnd.google-apps.spreadsheet" }, { "id": "b", "name": "Game_Data", "mimeType": "application/vnd.google-apps.spreadsheet" } ] }""", "application/json"), temp.Path);
+
+        Assert.False(result.Success);
+        Assert.Contains("same snapshot folder", Sheets.Errors(result));
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.False(Directory.Exists(temp.Combine("Snapshot")));
+    }
+
+    [Fact]
     public void A_folder_without_credentials_is_a_config_error()
     {
         var source = Folder();
@@ -271,6 +285,44 @@ public class GoogleFolderTests
         (BuildResult after, _) = Build(Folder("Snapshot"), Drive(removeWorkbook: true), temp.Path);
         Assert.True(after.Success, Sheets.Errors(after));
         Assert.False(Directory.Exists(temp.Combine("Snapshot", "Game.xlsx")));
+        Assert.DoesNotContain("Game.xlsx", File.ReadAllText(temp.Combine("Snapshot", GoogleFolderSource.IndexFileName)));
+    }
+
+    [Fact]
+    public void An_offline_snapshot_reads_only_owned_csvs_and_reports_a_missing_owned_tab()
+    {
+        using var temp = new TempDir();
+        (BuildResult online, _) = Build(Folder("Snapshot"), Drive(), temp.Path);
+        Assert.True(online.Success, Sheets.Errors(online));
+        File.WriteAllText(temp.Combine("Snapshot", "Game.xlsx", "Notes.csv"), "Key<int>\nId\n\n17\n");
+
+        (BuildResult offline, _) = Build(Folder("Snapshot"), _ => throw new InvalidOperationException(), temp.Path, offline: true);
+        Assert.True(offline.Success, Sheets.Errors(offline));
+        Assert.Equal(online.Output!.ContentHash, offline.Output!.ContentHash);
+
+        File.Delete(temp.Combine("Snapshot", "Game.xlsx", "Item.csv"));
+        (BuildResult missing, _) = Build(Folder("Snapshot"), _ => throw new InvalidOperationException(), temp.Path, offline: true);
+        Assert.False(missing.Success);
+        Assert.Contains("Item.csv", Sheets.Errors(missing));
+    }
+
+    [Fact]
+    public void Removing_a_drive_workbook_preserves_local_files_inside_its_snapshot()
+    {
+        using var temp = new TempDir();
+        (BuildResult online, _) = Build(Folder("Snapshot"), Drive(), temp.Path);
+        Assert.True(online.Success, Sheets.Errors(online));
+        string book = temp.Combine("Snapshot", "Game.xlsx");
+        Directory.CreateDirectory(Path.Combine(book, "Art"));
+        File.WriteAllText(Path.Combine(book, "Notes.csv"), "local notes");
+        File.WriteAllText(Path.Combine(book, "Art", "draft.txt"), "draft");
+
+        (BuildResult after, _) = Build(Folder("Snapshot"), Drive(removeWorkbook: true), temp.Path);
+        Assert.True(after.Success, Sheets.Errors(after));
+        Assert.True(File.Exists(Path.Combine(book, "Notes.csv")));
+        Assert.True(File.Exists(Path.Combine(book, "Art", "draft.txt")));
+        Assert.False(File.Exists(Path.Combine(book, "Item.csv")));
+        Assert.False(File.Exists(Path.Combine(book, SnapshotIndex.FileName)));
         Assert.DoesNotContain("Game.xlsx", File.ReadAllText(temp.Combine("Snapshot", GoogleFolderSource.IndexFileName)));
     }
 

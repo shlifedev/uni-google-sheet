@@ -33,6 +33,8 @@ namespace HolySheet.Core.Sources
         private readonly ICsvParser parser;
         private readonly string? workbookName;
         private readonly SheetSelection? only;
+        private bool fromSnapshot;
+        private string? fallbackName;
 
         public CsvDirectorySource(string directory, ICsvParser parser, string? workbookName = null, SheetSelection? only = null)
         {
@@ -42,27 +44,46 @@ namespace HolySheet.Core.Sources
             this.only = only;
         }
 
+        internal static CsvDirectorySource FromSnapshot(string directory, ICsvParser parser, string? name, string? fallbackName, SheetSelection? only)
+        {
+            return new CsvDirectorySource(directory, parser, name, only) { fromSnapshot = true, fallbackName = fallbackName };
+        }
+
         public string Description => directory;
 
         public IReadOnlyList<string> WatchPaths => new[] { directory };
 
         public Task<IReadOnlyList<Workbook>> LoadAsync(DiagnosticBag diagnostics, CancellationToken cancellationToken)
         {
-            string name = workbookName ?? Path.GetFileName(directory.TrimEnd('/', '\\'));
+            string folderName = Path.GetFileName(directory.TrimEnd('/', '\\'));
             if (!Directory.Exists(directory))
             {
                 diagnostics.AddError(directory, "The CSV folder does not exist.", "Create it, or fix the source path in the config.");
                 return Task.FromResult<IReadOnlyList<Workbook>>(Array.Empty<Workbook>());
             }
 
+            SnapshotIndex? snapshot;
+            try
+            {
+                snapshot = fromSnapshot ? SnapshotIndex.Read(directory) : null;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                diagnostics.AddError(directory, exception.Message, "Refresh the Google snapshot.");
+                return Task.FromResult<IReadOnlyList<Workbook>>(Array.Empty<Workbook>());
+            }
+
+            string name = workbookName ?? snapshot?.Workbook ?? fallbackName ?? folderName;
             if (only != null && !only.Touches(name))
             {
                 return Task.FromResult<IReadOnlyList<Workbook>>(Array.Empty<Workbook>());
             }
 
-            string[] files = Directory.GetFiles(directory, "*.csv", SearchOption.TopDirectoryOnly)
-                .Where(file => only == null || only.Includes(name, Path.GetFileNameWithoutExtension(file))).ToArray();
-            Array.Sort(files, StringComparer.Ordinal);
+            // Legacy snapshots and ordinary CSV sources get their sheet names from the file system.
+            var candidates = snapshot?.Workbook == null
+                ? Directory.GetFiles(directory, "*.csv", SearchOption.TopDirectoryOnly).Select(path => (Name: Path.GetFileNameWithoutExtension(path), Path: path))
+                : snapshot.Tabs.Select(tab => (Name: tab.Key, Path: Path.Combine(directory, tab.Value)));
+            var files = candidates.Where(file => only == null || only.Includes(name, file.Name)).OrderBy(file => file.Path, StringComparer.Ordinal).ToArray();
 
             // Files are independent, so they are read and parsed at the same time. Results and problems are then
             // collected in file order, which keeps the outcome the same however the work was scheduled.
@@ -72,7 +93,7 @@ namespace HolySheet.Core.Sources
             {
                 try
                 {
-                    grids[index] = parser.Parse(SourceFiles.ReadAllText(files[index]));
+                    grids[index] = parser.Parse(SourceFiles.ReadAllText(files[index].Path));
                 }
                 catch (Exception exception) when (exception is CsvFormatException or IOException)
                 {
@@ -83,7 +104,7 @@ namespace HolySheet.Core.Sources
             var sheets = new List<Sheet>(files.Length);
             for (int index = 0; index < files.Length; index++)
             {
-                string sheetName = Path.GetFileNameWithoutExtension(files[index]);
+                string sheetName = files[index].Name;
                 if (grids[index] is { } grid)
                 {
                     sheets.Add(Sheet.FromGrid(name, sheetName, grid));
@@ -241,8 +262,7 @@ namespace HolySheet.Core.Sources
                             // Offline builds read the CSV that the last online build saved, under the name that build used:
                             // without a configured name it is the spreadsheet's title, which only the snapshot remembers.
                             // A different name would make a partial build miss the cached workbook.
-                            string? savedName = Directory.Exists(snapshot) ? SnapshotIndex.Read(snapshot).Workbook : null;
-                            sources.Add(new CsvDirectorySource(snapshot, parser, source.Name ?? savedName ?? source.SpreadsheetId, only));
+                            sources.Add(CsvDirectorySource.FromSnapshot(snapshot, parser, source.Name, source.SpreadsheetId, only));
                         }
                         else
                         {

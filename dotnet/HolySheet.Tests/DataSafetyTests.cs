@@ -212,6 +212,39 @@ public sealed class DataSafetyTests
     }
 
     [Fact]
+    public async Task A_snapshot_keeps_local_csvs_and_preserves_tab_names_across_filename_collisions()
+    {
+        using var temp = new TempDir();
+        File.WriteAllText(temp.Combine("Notes.csv"), "local notes");
+        File.WriteAllText(temp.Combine("Item.csv"), "old");
+        File.WriteAllText(temp.Combine(SnapshotIndex.FileName), "holysheet-snapshot 1\nworkbook\tLive\nfile\tItem.csv\n");
+
+        GoogleSheetsSource.WriteSnapshot(temp.Path, "Live", ["Item", "Notes", "A/B", "A_B"],
+            ["updated", "from Google", "one", "two"], complete: true);
+        SnapshotIndex index = SnapshotIndex.Read(temp.Path);
+        Assert.Equal("local notes", File.ReadAllText(temp.Combine("Notes.csv")));
+        Assert.Equal("updated", File.ReadAllText(temp.Combine("Item.csv")));
+        Assert.Equal("from Google", File.ReadAllText(temp.Combine(index.Tabs["Notes"])));
+        Assert.Equal("one", File.ReadAllText(temp.Combine(index.Tabs["A/B"])));
+        Assert.Equal("two", File.ReadAllText(temp.Combine(index.Tabs["A_B"])));
+
+        var source = CsvDirectorySource.FromSnapshot(temp.Path, HolySheet.Core.Csv.BuiltinCsvParser.Instance, null, null, new SheetSelection().AddSheet("Live", "A/B"));
+        var diagnostics = new DiagnosticBag();
+        var offline = await source.LoadAsync(diagnostics, CancellationToken.None);
+        Assert.False(diagnostics.HasErrors);
+        Sheet selected = Assert.Single(Assert.Single(offline).Sheets);
+        Assert.Equal("A/B", selected.Name);
+        Assert.Equal("one", selected.GetCell(0, 0).Text);
+
+        GoogleSheetsSource.WriteSnapshot(temp.Path, "Live", ["A_B"], ["changed"], complete: false);
+        Assert.Equal(index.Tabs["A_B"], SnapshotIndex.Read(temp.Path).Tabs["A_B"]);
+        Assert.Equal("changed", File.ReadAllText(temp.Combine(index.Tabs["A_B"])));
+        GoogleSheetsSource.WriteSnapshot(temp.Path, "Live", ["Item"], ["updated"], complete: true);
+        Assert.Equal("local notes", File.ReadAllText(temp.Combine("Notes.csv")));
+        Assert.False(File.Exists(temp.Combine(index.Tabs["Notes"])));
+    }
+
+    [Fact]
     public void A_snapshot_never_writes_outside_its_folder()
     {
         Assert.Equal("_..", GoogleSheetsSource.SafeFileName(".."));
