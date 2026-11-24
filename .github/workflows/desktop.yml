@@ -11,14 +11,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  engine:
+    name: Engine and runtime tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet test dotnet/HolySheet.Tests
+
   build:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             target: aarch64-apple-darwin
-            bundles: app,dmg
+            bundles: app
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: nsis,msi
@@ -58,6 +68,19 @@ jobs:
 
       - name: Build
         run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Package macOS disk image
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/holysheet-dmg.log"
+          for delay in 0 5 15; do
+            sleep "$delay"
+            if npx tauri bundle --target ${{ matrix.target }} --bundles dmg 2>&1 | tee "$log"; then exit 0; fi
+            # Hosted macOS can briefly refuse to create a disk image. Other errors should fail immediately.
+            grep -Fq 'hdiutil: create failed - Resource busy' "$log" || exit 1
+          done
+          exit 1
 
       - uses: actions/upload-artifact@v4
         with:
