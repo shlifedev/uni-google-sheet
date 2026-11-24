@@ -47,24 +47,23 @@ namespace HolySheet.Core.Sources
             {
                 using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
                 List<(string Name, string RelationId)> sheetList = ReadSheetList(zip);
-                Dictionary<string, string> targets = ReadRelationships(zip);
+                var relationships = ReadRelationships(zip);
                 string[] sharedStrings = ReadSharedStrings(zip);
                 bool[] dateStyles = ReadDateStyles(zip, out bool date1904);
 
                 var sheets = new List<Sheet>(sheetList.Count);
                 foreach ((string name, string relationId) in sheetList)
                 {
-                    if (!targets.TryGetValue(relationId, out string? target))
+                    if (!relationships.TryGetValue(relationId, out var relationship))
                     {
-                        continue;
+                        throw new InvalidDataException($"Sheet '{name}' references missing or invalid workbook relationship '{relationId}'.");
                     }
 
-                    // Chart sheets and macro sheets are listed like worksheets but hold no cells.
-                    ZipArchiveEntry? entry = FindEntry(zip, ResolveTarget(target));
-                    if (entry == null || !ResolveTarget(target).Contains("worksheets/", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
+                    // Chart sheets and other non-grid parts can appear in the same sheet list.
+                    if (!relationship.IsWorksheet) continue;
+                    string target = ResolveTarget(relationship.Target);
+                    ZipArchiveEntry entry = FindEntry(zip, target)
+                        ?? throw new InvalidDataException($"Worksheet '{name}' is missing its data part '{target}'.");
 
                     sheets.Add(Sheet.FromGrid(workbookName, name, ReadSheet(entry, sharedStrings, dateStyles, date1904)));
                 }
@@ -101,18 +100,17 @@ namespace HolySheet.Core.Sources
                 }
 
                 reader.MoveToElement();
-                if (name != null && relationId != null)
-                {
-                    result.Add((name, relationId));
-                }
+                if (string.IsNullOrEmpty(name)) throw new InvalidDataException("The workbook lists a sheet without a name.");
+                if (string.IsNullOrEmpty(relationId)) throw new InvalidDataException($"Sheet '{name}' has no workbook relationship ID.");
+                result.Add((name!, relationId!));
             }
 
             return result;
         }
 
-        private static Dictionary<string, string> ReadRelationships(ZipArchive zip)
+        private static Dictionary<string, (string Target, bool IsWorksheet)> ReadRelationships(ZipArchive zip)
         {
-            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            var result = new Dictionary<string, (string, bool)>(StringComparer.Ordinal);
             ZipArchiveEntry? entry = FindEntry(zip, "xl/_rels/workbook.xml.rels");
             if (entry == null)
             {
@@ -123,9 +121,10 @@ namespace HolySheet.Core.Sources
             while (reader.Read())
             {
                 if (reader.NodeType == XmlNodeType.Element && reader.LocalName == "Relationship"
-                    && reader.GetAttribute("Id") is { } id && reader.GetAttribute("Target") is { } target)
+                    && reader.GetAttribute("Id") is { } id && reader.GetAttribute("Target") is { Length: > 0 } target
+                    && reader.GetAttribute("Type") is { Length: > 0 } type && reader.GetAttribute("TargetMode") != "External")
                 {
-                    result[id] = target;
+                    result[id] = (target, type.EndsWith("/worksheet", StringComparison.Ordinal));
                 }
             }
 
