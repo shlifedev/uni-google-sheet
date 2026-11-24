@@ -8,11 +8,6 @@ using HolySheet.Tooling;
 
 namespace HolySheet.Cli;
 
-/// <summary>
-/// Entry point of the <c>holysheet</c> command. It reads arguments, calls the engine and prints what happened.
-/// Exit codes: 0 success, 1 the sheets have errors (or data failed verification), 2 the command line is wrong,
-/// 3 the tool could not do its job (missing config, unreadable file, cannot write).
-/// </summary>
 public static class Program
 {
     public const int ExitSuccess = 0;
@@ -22,7 +17,6 @@ public static class Program
 
     public static async Task<int> Main(string[] args)
     {
-        // Referencing the Sep backend from here is what puts its assembly next to the tool; the engine finds it by name.
         _ = typeof(HolySheet.Csv.SepCsvParser);
 
         if (!Arguments.TryParse(args, out Arguments? arguments, out string error))
@@ -114,7 +108,6 @@ public static class Program
     }
 }
 
-/// <summary>The parsed command line.</summary>
 public sealed class Arguments
 {
     private static readonly HashSet<string> Flags = new(StringComparer.Ordinal) { "--json", "--offline", "--sequential", "--sample", "--unity", "--write-config", "--force", "--timings" };
@@ -124,7 +117,6 @@ public sealed class Arguments
     private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
     private readonly List<string> _only = [];
 
-    /// <summary>Every --only value, in order.</summary>
     public IReadOnlyList<string> Only => _only;
     private readonly HashSet<string> _flags = new(StringComparer.Ordinal);
 
@@ -197,7 +189,6 @@ public sealed class Arguments
     }
 }
 
-/// <summary>Prints for people or, with --json, collects one JSON document for programs.</summary>
 public sealed class Output(bool json)
 {
     private static readonly bool UseColor = !Console.IsOutputRedirected && Environment.GetEnvironmentVariable("NO_COLOR") == null;
@@ -480,7 +471,6 @@ internal static class Commands
                     console.Info($"[{DateTime.Now:HH:mm:ss}] change detected");
                 }
 
-                // A config edit takes effect on the next build without restarting the watch.
                 config = LoadConfig(arguments);
                 await BuildOnceAsync(config, arguments, console, commit: true, stop.Token).ConfigureAwait(false);
             }
@@ -529,7 +519,6 @@ internal static class Commands
         long downloadBytes = diff.Added.Concat(diff.Changed).Sum(name => newer.FindTable(name)!.Bytes);
         if (console.Json)
         {
-            // This is the patch plan: the files a client holding the old data needs to fetch, and the ones it can drop.
             console.Document(JsonValue.Object()
                 .Set("hasChanges", diff.HasChanges)
                 .Set("requiresNewCode", diff.RequiresNewCode)

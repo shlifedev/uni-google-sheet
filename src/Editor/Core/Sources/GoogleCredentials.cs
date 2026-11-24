@@ -14,25 +14,11 @@ using HolySheet.Core.Config;
 
 namespace HolySheet.Core.Sources
 {
-    /// <summary>
-    /// Supplies the credentials for Google sources whose auth is <c>{ "type": "custom", "provider": "&lt;name&gt;" }</c>,
-    /// for projects that keep them somewhere HolySheet does not read on its own: a secret manager, the OS keychain, a company token service.
-    /// <para>
-    /// In the Unity editor a provider needs no registration: any non-abstract class with a public parameterless constructor
-    /// that implements this interface is found in the editor's assemblies. Its name is the class name, or the one given
-    /// with <see cref="HolySheetCredentialProviderAttribute"/>. Elsewhere, hand the instances to <see cref="TableBuildOptions.CredentialProviders"/>.
-    /// </para>
-    /// <para>
-    /// A new instance is made for every build, and it is called on a background thread, once per source that names it
-    /// (a Drive folder asks once for all of its files). Do not use Unity's API from it.
-    /// </para>
-    /// </summary>
     public interface IGoogleCredentialProvider
     {
         Task<GoogleCredential> GetCredentialAsync(GoogleCredentialRequest request, CancellationToken cancellationToken);
     }
 
-    /// <summary>Names a credential provider in the config. Without it the provider's name is its class name.</summary>
     [AttributeUsage(AttributeTargets.Class, Inherited = false)]
     public sealed class HolySheetCredentialProviderAttribute : Attribute
     {
@@ -44,7 +30,6 @@ namespace HolySheet.Core.Sources
         public string? Name { get; }
     }
 
-    /// <summary>What a credential provider is asked for.</summary>
     public sealed class GoogleCredentialRequest
     {
         internal GoogleCredentialRequest(SourceConfig source, string baseDirectory, string scopes, HttpClient http)
@@ -55,20 +40,15 @@ namespace HolySheet.Core.Sources
             Http = http;
         }
 
-        /// <summary>The source that needs the credentials: its spreadsheet or folder id, its name and its auth settings.</summary>
         public SourceConfig Source { get; }
 
-        /// <summary>The folder of the config file, which relative paths in the config are resolved against.</summary>
         public string BaseDirectory { get; }
 
-        /// <summary>The OAuth scopes the token must carry, separated by spaces (read-only Drive and Sheets).</summary>
         public string Scopes { get; }
 
-        /// <summary>The build's HTTP client, for providers that exchange something for a token.</summary>
         public HttpClient Http { get; }
     }
 
-    /// <summary>The credentials a provider returns. Create one with the static methods.</summary>
     public sealed class GoogleCredential
     {
         private GoogleCredential(string? apiKey, string? accessToken, string? serviceAccountKeyJson, string? account)
@@ -79,19 +59,12 @@ namespace HolySheet.Core.Sources
             Account = account;
         }
 
-        /// <summary>No credentials: the spreadsheet is read as a public link.</summary>
         public static GoogleCredential None { get; } = new GoogleCredential(null, null, null, null);
 
-        /// <summary>A Google API key. It reads only link-shared files.</summary>
         public static GoogleCredential FromApiKey(string apiKey) => new GoogleCredential(Require(apiKey, nameof(apiKey)), null, null, null);
 
-        /// <summary>
-        /// An OAuth access token with the scopes in <see cref="GoogleCredentialRequest.Scopes"/>.
-        /// <paramref name="account"/> is the e-mail address it belongs to, shown in messages that say whom to share a file with.
-        /// </summary>
         public static GoogleCredential FromAccessToken(string accessToken, string? account = null) => new GoogleCredential(null, Require(accessToken, nameof(accessToken)), null, account);
 
-        /// <summary>The contents of a service account's JSON key, kept somewhere other than a file. HolySheet signs and exchanges it for a token.</summary>
         public static GoogleCredential FromServiceAccountKey(string keyJson) => new GoogleCredential(null, null, Require(keyJson, nameof(keyJson)), null);
 
         public string? ApiKey { get; }
@@ -113,10 +86,8 @@ namespace HolySheet.Core.Sources
         }
     }
 
-    /// <summary>Finds and names credential providers.</summary>
     public static class GoogleCredentialProviders
     {
-        /// <summary>The name a provider class is chosen by in the config.</summary>
         public static string NameOf(Type type)
         {
             Guard.NotNull(type, nameof(type));
@@ -124,7 +95,6 @@ namespace HolySheet.Core.Sources
             return string.IsNullOrWhiteSpace(name) ? type.Name : name!.Trim();
         }
 
-        /// <summary>True for a class that can be made into a provider: not abstract, implements the interface, has a public parameterless constructor.</summary>
         public static bool IsProvider(Type type)
         {
             Guard.NotNull(type, nameof(type));
@@ -132,11 +102,6 @@ namespace HolySheet.Core.Sources
                 && type.GetConstructor(Type.EmptyTypes) != null;
         }
 
-        /// <summary>
-        /// Makes one provider from each provider class among <paramref name="types"/>. Classes marked with
-        /// <see cref="HolySheetCredentialProviderAttribute"/> that cannot be used, and constructors that throw, are reported
-        /// in <paramref name="problems"/> and skipped.
-        /// </summary>
         public static IReadOnlyList<IGoogleCredentialProvider> Create(IEnumerable<Type> types, ICollection<string>? problems = null)
         {
             Guard.NotNull(types, nameof(types));
@@ -166,7 +131,6 @@ namespace HolySheet.Core.Sources
             return providers;
         }
 
-        /// <summary>The provider called <paramref name="name"/> (case does not matter), or an error that lists the ones there are.</summary>
         internal static IGoogleCredentialProvider Find(IReadOnlyList<IGoogleCredentialProvider>? providers, string? name)
         {
             if (string.IsNullOrWhiteSpace(name))
@@ -195,11 +159,6 @@ namespace HolySheet.Core.Sources
         }
     }
 
-    /// <summary>
-    /// Runs the command of auth type <c>command</c> and reads the credentials it prints: an access token, a JSON object with
-    /// <c>access_token</c>, or a service account's JSON key. Works the same in the editor, the CLI and CI, the way git's
-    /// credential helpers do.
-    /// </summary>
     internal static class CredentialCommand
     {
         private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(60);
@@ -288,7 +247,6 @@ namespace HolySheet.Core.Sources
 
             using (process)
             {
-                // Nothing is typed into the command: a prompt for input ends instead of waiting until the timeout.
                 process.StandardInput.Close();
                 Task<string> output = process.StandardOutput.ReadToEndAsync();
                 Task<string> error = process.StandardError.ReadToEndAsync();
@@ -303,7 +261,6 @@ namespace HolySheet.Core.Sources
                         }
                         catch (InvalidOperationException)
                         {
-                            // It ended on its own in the meantime.
                         }
 
                         cancellationToken.ThrowIfCancellationRequested();
@@ -312,13 +269,10 @@ namespace HolySheet.Core.Sources
                     }
                 }
 
-                // The process has exited, so both streams end and the reads complete.
                 return (process.ExitCode, output.Result, error.Result);
             }
         }
 
-        // Quotes one argument the way the process starter splits Arguments (the Windows command-line convention, which
-        // .NET and Mono also use on other systems), so the shell receives the command exactly as written.
         private static string QuoteArgument(string value)
         {
             var builder = new StringBuilder("\"");

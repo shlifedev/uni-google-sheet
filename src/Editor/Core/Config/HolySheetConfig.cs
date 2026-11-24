@@ -9,43 +9,27 @@ namespace HolySheet.Core.Config
 {
     public enum SourceType
     {
-        /// <summary>One .xlsx file, or a folder of them.</summary>
         Xlsx,
 
-        /// <summary>A folder of .csv files. The file name is the sheet name.</summary>
         Csv,
 
-        /// <summary>A Google spreadsheet, fetched over HTTPS and converted to CSV.</summary>
         Google,
 
-        /// <summary>
-        /// A Google Drive folder: every Google spreadsheet and .xlsx file directly inside it is a workbook.
-        /// Listing a folder needs an API key, a service account or an access token.
-        /// </summary>
         GoogleFolder
     }
 
     public enum GoogleAuthType
     {
-        /// <summary>The spreadsheet is shared as "anyone with the link can view". No credentials are sent.</summary>
         Public,
 
-        /// <summary>A Google API key. Reads the sheet list of spreadsheets that are link-shared.</summary>
         ApiKey,
 
-        /// <summary>A service account key file. The spreadsheet must be shared with the service account's e-mail address.</summary>
         ServiceAccount,
 
-        /// <summary>An OAuth access token supplied by the environment, for CI that already has one.</summary>
         AccessToken,
 
-        /// <summary>
-        /// A C# class of the project supplies the credentials (see <see cref="Sources.IGoogleCredentialProvider"/>), chosen by
-        /// <see cref="GoogleAuthConfig.Provider"/>. Only the Unity editor finds such classes on its own.
-        /// </summary>
         Custom,
 
-        /// <summary>A command prints the credentials (<see cref="GoogleAuthConfig.Command"/>), for example <c>gcloud auth print-access-token</c>.</summary>
         Command
     }
 
@@ -53,51 +37,33 @@ namespace HolySheet.Core.Config
     {
         public GoogleAuthType Type { get; set; } = GoogleAuthType.Public;
 
-        /// <summary>The API key itself. Prefer <see cref="ApiKeyEnv"/> so the key is not committed.</summary>
         public string? ApiKey { get; set; }
 
-        /// <summary>Name of the environment variable holding the API key.</summary>
         public string? ApiKeyEnv { get; set; }
 
-        /// <summary>Path of the service account JSON key file, relative to the config file.</summary>
         public string? KeyFile { get; set; }
 
-        /// <summary>Name of the environment variable holding an OAuth access token.</summary>
         public string? AccessTokenEnv { get; set; }
 
-        /// <summary>Name of the credential provider class, for <see cref="GoogleAuthType.Custom"/>.</summary>
         public string? Provider { get; set; }
 
-        /// <summary>
-        /// Command whose output is the credentials, for <see cref="GoogleAuthType.Command"/>: an access token, a JSON object
-        /// with <c>access_token</c>, or a service account's JSON key. It runs in the config file's folder, through the system shell.
-        /// </summary>
         public string? Command { get; set; }
     }
 
-    /// <summary>One tab of a Google spreadsheet, named explicitly so no API call is needed to list the tabs.</summary>
     public sealed record GoogleSheetRef(string Name, long Gid);
 
     public sealed class SourceConfig
     {
         public SourceType Type { get; set; }
 
-        /// <summary>File or folder for xlsx and csv sources, relative to the config file.</summary>
         public string? Path { get; set; }
 
-        /// <summary>The id from the spreadsheet URL: docs.google.com/spreadsheets/d/{this}/edit.</summary>
         public string? SpreadsheetId { get; set; }
 
-        /// <summary>The id from the folder URL: drive.google.com/drive/folders/{this}. For Google Drive folder sources.</summary>
         public string? FolderId { get; set; }
 
-        /// <summary>True for the sources read from Google over the network.</summary>
         public bool IsRemote => Type is SourceType.Google or SourceType.GoogleFolder;
 
-        /// <summary>
-        /// Takes a pasted URL or a bare id and returns the id: the part after /d/ (spreadsheets), /folders/ (Drive folders)
-        /// or ?id=. Anything that does not look like a URL is returned trimmed.
-        /// </summary>
         public static string ExtractGoogleId(string text)
         {
             string value = text.Trim();
@@ -123,33 +89,23 @@ namespace HolySheet.Core.Config
             return value;
         }
 
-        /// <summary>Name used for this spreadsheet in messages. Defaults to its title, or its id.</summary>
         public string? Name { get; set; }
 
         public GoogleAuthConfig Auth { get; set; } = new();
 
-        /// <summary>Tabs to read. Empty means "all of them", which needs a way to list them (an API key, a token, or the xlsx export).</summary>
         public List<GoogleSheetRef> Sheets { get; set; } = new();
 
-        /// <summary>
-        /// Folder where the CSV fetched from Google is also saved, relative to the config file.
-        /// Committing it gives reviewable diffs of sheet edits and lets builds run offline.
-        /// </summary>
         public string? Snapshot { get; set; }
     }
 
     public sealed class OutputConfig
     {
-        /// <summary>Folder for generated .g.cs files.</summary>
         public string Code { get; set; } = "Generated/Code";
 
-        /// <summary>Folder for the data files and the manifest.</summary>
         public string Data { get; set; } = "Generated/Data";
 
-        /// <summary>Optional folder that receives each table as CSV after the transform rules were applied.</summary>
         public string? Csv { get; set; }
 
-        /// <summary>Write tables.schema.json next to the data: the full layout, for patch tools and other consumers that have no generated code.</summary>
         public bool Schema { get; set; } = true;
 
         public string ManifestFile { get; set; } = "tables.manifest.json";
@@ -159,31 +115,25 @@ namespace HolySheet.Core.Config
     {
         public string Namespace { get; set; } = "Game.Data";
 
-        /// <summary>Name of the class that holds every table.</summary>
         public string TablesClass { get; set; } = "GameTables";
 
-        /// <summary>"memorypack" or "messagepack".</summary>
         public string Serializer { get; set; } = "memorypack";
     }
 
-    /// <summary>How a table sheet is laid out.</summary>
     public sealed class SheetConfig
     {
         public const string TypeRole = "type";
         public const string NameRole = "name";
         public const string CommentRole = "comment";
 
-        /// <summary>What each header row holds, top to bottom. Data starts on the row after the last one.</summary>
         public List<string> Header { get; set; } = new() { TypeRole, NameRole, CommentRole };
 
-        /// <summary>Separates the elements of an array written in one cell.</summary>
         public char ArraySeparator { get; set; } = ',';
 
         public int TypeRow => Header.IndexOf(TypeRole);
 
         public int NameRow => Header.IndexOf(NameRole);
 
-        /// <summary>-1 when the layout has no comment row.</summary>
         public int CommentRow => Header.IndexOf(CommentRole);
 
         public int FirstDataRow => Header.Count;
@@ -191,25 +141,17 @@ namespace HolySheet.Core.Config
 
     public sealed class SigningConfig
     {
-        /// <summary>Public key (rsa:modulus:exponent). When set it is baked into the generated code and loads require a valid signature.</summary>
         public string? PublicKey { get; set; }
 
-        /// <summary>Path of the private key file, relative to the config file. Keep it out of version control.</summary>
         public string? PrivateKeyFile { get; set; }
 
-        /// <summary>Name of the environment variable holding the private key text, for CI.</summary>
         public string? PrivateKeyEnv { get; set; }
     }
 
-    /// <summary>
-    /// Everything a build needs, read from <c>holysheet.json</c>. The CLI and the Unity editor window read and write the same file,
-    /// so a project is configured once and builds the same way on a developer machine and in CI.
-    /// </summary>
     public sealed class HolySheetConfig
     {
         public const string DefaultFileName = "holysheet.json";
 
-        /// <summary>Folder the relative paths in this config are resolved against: the folder of the config file.</summary>
         public string BaseDirectory { get; set; } = Directory.GetCurrentDirectory();
 
         public List<SourceConfig> Sources { get; set; } = new();
@@ -220,24 +162,18 @@ namespace HolySheet.Core.Config
 
         public SheetConfig Sheet { get; set; } = new();
 
-        /// <summary>"auto" (the built-in parser), "builtin" or "sep" (needs .NET 8 or newer).</summary>
         public string CsvBackend { get; set; } = "auto";
 
         public SigningConfig Signing { get; set; } = new();
 
-        /// <summary>Free text written to the manifest as the build line, such as a version number or commit id.</summary>
         public string? BuildLabel { get; set; }
 
-        /// <summary>Trusted project assemblies containing table validators, relative to the config file.</summary>
         public List<string> ValidatorAssemblies { get; } = new();
 
-        /// <summary>Convert and encode tables on several threads.</summary>
         public bool Parallel { get; set; } = true;
 
-        /// <summary>Where the sheets of the last build are kept for partial builds, relative to the config file.</summary>
         public string CacheDirectory { get; set; } = SheetCache.DefaultDirectory;
 
-        /// <summary>Whether an initial preview can be read entirely from local sources and configured snapshots.</summary>
         public bool CanPreviewOffline() => Sources.Where(source => source.IsRemote)
             .All(source => (!string.IsNullOrWhiteSpace(source.Snapshot) && Directory.Exists(Resolve(source.Snapshot!)))
                 || new GoogleLocalCopies(BaseDirectory).ReadLocal(source, null, null) != null);
@@ -476,7 +412,6 @@ namespace HolySheet.Core.Config
             File.WriteAllText(path, ToJson());
         }
 
-        /// <summary>Reports settings that cannot work, before any sheet is read.</summary>
         public void Validate(DiagnosticBag diagnostics, bool requireSources = true)
         {
             const string location = "config";
@@ -568,7 +503,6 @@ namespace HolySheet.Core.Config
                     continue;
                 }
 
-                // The output folders are places the tool deletes stale files from. They must never be a folder people put sheets in.
                 string input = Resolve(source.Path);
                 if (Directory.Exists(input) && (PathsEqual(input, code) || PathsEqual(input, data)))
                 {
@@ -576,8 +510,6 @@ namespace HolySheet.Core.Config
                 }
             }
 
-            // The CSV output and the snapshots are written over and pruned too: a build replaces their files with its own.
-            // Pointed at a folder of sheets, a build would overwrite those sheets with its output.
             string? csv = Output.Csv == null ? null : Resolve(Output.Csv);
             var inputs = Sources.Where(source => source.Path != null && source.Type is SourceType.Csv or SourceType.Xlsx).Select(source => (Name: source.Path!, Path: Resolve(source.Path!))).ToList();
             if (csv != null && inputs.FirstOrDefault(input => PathsEqual(input.Path, csv)) is { Name: { } shared })

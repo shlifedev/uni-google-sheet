@@ -7,10 +7,6 @@ using System.Threading;
 
 namespace HolySheet.Core
 {
-    /// <summary>
-    /// Watches source files and folders and calls back once changes have settled.
-    /// Saving a workbook produces a burst of file events (temporary file, rename, lock file); the debounce turns the burst into one call.
-    /// </summary>
     public sealed class SourceWatcher : IDisposable
     {
         private readonly List<FileSystemWatcher> _watchers = new();

@@ -9,14 +9,6 @@ using UnityEngine.Networking;
 
 namespace HolySheet
 {
-    /// <summary>
-    /// Reads table data from a folder under StreamingAssets.
-    /// On desktop, iOS and consoles the files are plain files, so both <see cref="Read"/> and <see cref="ReadAsync"/> work.
-    /// On Android and WebGL they sit inside the package or behind a URL: only <see cref="ReadAsync"/> works there.
-    /// Create it on the main thread. URL reads always run there, because UnityWebRequest works nowhere else, even when the
-    /// loader calls <see cref="ReadAsync"/> from a thread-pool thread (it continues there between files, and reads in
-    /// parallel there with <see cref="TableLoadOptions.Parallel"/>). Do not block the main thread on such a load.
-    /// </summary>
     public sealed class StreamingAssetsTableSource : TableSource
     {
         private readonly string _root;
@@ -24,17 +16,14 @@ namespace HolySheet
 
         public override string Description => _root;
 
-        /// <param name="folder">Folder relative to StreamingAssets, for example "Tables".</param>
         public StreamingAssetsTableSource(string folder)
         {
             _root = string.IsNullOrEmpty(folder) ? Application.streamingAssetsPath : Application.streamingAssetsPath + "/" + folder;
             _mainThread = SynchronizationContext.Current;
         }
 
-        /// <summary>True when the files can be opened directly, which is what the synchronous load and the watcher need.</summary>
         public bool IsFileSystem => !_root.Contains("://");
 
-        /// <summary>The absolute directory, usable with a <see cref="TableWatcher{T}"/> when <see cref="IsFileSystem"/> is true.</summary>
         public string Directory => _root;
 
         public override byte[]? Read(string fileName)
@@ -61,7 +50,6 @@ namespace HolySheet
                 return new ValueTask<byte[]?>(DownloadAsync(fileName, cancellationToken));
             }
 
-            // Called off the main thread: start the request there and hand the result back.
             var completion = new TaskCompletionSource<byte[]?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _mainThread.Post(_ => Forward(DownloadAsync(fileName, cancellationToken), completion, cancellationToken), null);
             return new ValueTask<byte[]?>(completion.Task);
@@ -83,7 +71,6 @@ namespace HolySheet
             }
         }
 
-        // Must start on the main thread; Task.Yield keeps it there between polls.
         private async Task<byte[]?> DownloadAsync(string fileName, CancellationToken cancellationToken)
         {
             using (UnityWebRequest request = UnityWebRequest.Get(_root + "/" + fileName))
@@ -105,11 +92,6 @@ namespace HolySheet
         }
     }
 
-    /// <summary>
-    /// Reads table data from a Resources folder. Each file is looked up as a TextAsset by its name without the last extension:
-    /// "Item.bytes" is <c>Resources.Load("folder/Item")</c> and "tables.manifest.json" is <c>Resources.Load("folder/tables.manifest")</c>.
-    /// Must be used on the main thread, so it cannot be combined with <see cref="TableLoadOptions.Parallel"/>.
-    /// </summary>
     public sealed class ResourcesTableSource : TableSource
     {
         private readonly string _folder;

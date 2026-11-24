@@ -6,11 +6,6 @@ using UnityEngine.SceneManagement;
 
 namespace HolySheet.Dev
 {
-    /// <summary>
-    /// Creates the demo scene. The scene is checked in; run this only to change it:
-    /// <code>unity run unity/HolySheet.Dev -- -executeMethod HolySheet.Dev.DemoSceneBuilder.Build</code>
-    /// Building it from code keeps it reproducible and free of editor-version-specific settings.
-    /// </summary>
     public static class DemoSceneBuilder
     {
         public const string ScenePath = "Assets/Samples/Demo/Demo.unity";

@@ -1,10 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!--
-      The sample tables as a consumer would use them: the generated code, the HolySheet runtime and the MemoryPack package.
-      Built for netstandard2.1 as well as .NET 10 to prove that the generated code compiles for Unity's API surface.
-      The MemoryPack source generator emits C# 11 for .NET 7+, so the language version follows the target.
-    -->
     <TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>
     <LangVersion Condition="'$(TargetFramework)' == 'netstandard2.1'">9.0</LangVersion>
     <LangVersion Condition="'$(TargetFramework)' == 'net10.0'">latest</LangVersion>

@@ -6,39 +6,25 @@ namespace HolySheet.Core.Schema
 {
     public enum TypeExpressionKind
     {
-        /// <summary>A plain name: a value type such as int, or the name of an enum.</summary>
         Named,
 
-        /// <summary>Enum&lt;Name&gt;.</summary>
         Enum,
 
-        /// <summary>Ref&lt;Table&gt;: points at a row of another table by its key.</summary>
         Reference,
 
-        /// <summary>Mapping&lt;Name&gt;: the column's text becomes the members of a generated enum whose values are the row keys. Not stored as data.</summary>
         Mapping
     }
 
-    /// <summary>
-    /// What a type cell says, before names are looked up. The grammar:
-    /// <code>
-    /// type     := [ "Key&lt;" | "Index&lt;" ] element [ "[]" ] [ "?" ] [ "&gt;" ]
-    /// element  := name | "Enum&lt;" name "&gt;" | "Ref&lt;" table "&gt;" | "Mapping&lt;" name "&gt;"
-    /// </code>
-    /// <c>List&lt;T&gt;</c> is accepted as another way to write <c>T[]</c>, and <c>Enum&lt;Name[]&gt;</c> as <c>Enum&lt;Name&gt;[]</c>.
-    /// </summary>
     public sealed class TypeExpression
     {
         public TypeExpressionKind Kind { get; }
 
-        /// <summary>A value type alias, an enum name or a table name, depending on <see cref="Kind"/>.</summary>
         public string Name { get; }
 
         public ColumnRole Role { get; }
 
         public bool IsArray { get; }
 
-        /// <summary>Written with a trailing "?": an empty cell is allowed and means "no value".</summary>
         public bool IsOptional { get; }
 
         private TypeExpression(TypeExpressionKind kind, string name, ColumnRole role, bool isArray, bool isOptional)
@@ -141,7 +127,6 @@ namespace HolySheet.Core.Schema
             return true;
         }
 
-        // "Wrapper<inner>" gives inner.
         private static bool TryUnwrap(string text, string wrapper, out string inner)
         {
             inner = "";
@@ -155,7 +140,6 @@ namespace HolySheet.Core.Schema
         }
     }
 
-    /// <summary>Looks up the names in a type expression: value types, enums, and tables for references.</summary>
     public sealed class TypeResolver
     {
         private readonly IReadOnlyDictionary<string, EnumDefinition> enums;
@@ -165,7 +149,6 @@ namespace HolySheet.Core.Schema
             this.enums = enums;
         }
 
-        /// <summary>Returns the type of a table's primary key, or null when the table does not exist or has no key.</summary>
         public delegate ColumnType? KeyLookup(string tableName, out bool tableExists);
 
         public bool TryResolve(TypeExpression expression, KeyLookup keyLookup, out ColumnType? type, out string reason, out string hint)
@@ -182,7 +165,6 @@ namespace HolySheet.Core.Schema
                         return true;
                     }
 
-                    // A bare name that is an enum works like Enum<Name>.
                     if (enums.TryGetValue(expression.Name, out EnumDefinition? bare))
                     {
                         type = ColumnType.OfEnum(bare, expression.IsArray);

@@ -5,10 +5,6 @@ using HolySheet.Core.Sources;
 
 namespace HolySheet.Desktop.Host;
 
-/// <summary>
-/// Where a workbook can be opened: the .xlsx or .csv file on disk, or the address of a Google spreadsheet or Drive folder.
-/// The same rules as the Unity window's "Open" (HolySheetWindow.FindSourceFile); the app opens what this returns.
-/// </summary>
 public static class SourceLocator
 {
     public static JsonObject Result(string? target) => new()
@@ -18,7 +14,6 @@ public static class SourceLocator
         ["isFolder"] = target != null && Directory.Exists(target)
     };
 
-    /// <summary>A CSV workbook opens at the given sheet's file. Null when no configured source has the workbook.</summary>
     public static string? FindSourceFile(HolySheetConfig? config, IReadOnlyDictionary<string, WorkbookOrigin>? origins, string workbook, string? sheet)
     {
         if (config == null)
@@ -44,7 +39,6 @@ public static class SourceLocator
             };
         }
 
-        // Not read (for example the file could not be parsed): look for it among the configured sources.
         foreach (SourceConfig source in config.Sources)
         {
             switch (source.Type)
@@ -77,10 +71,6 @@ public static class SourceLocator
         return null;
     }
 
-    /// <summary>
-    /// A problem names a cell ("Book / Sheet!C8"), a sheet ("Book / Sheet") or a workbook. With the cell's origin known,
-    /// that wins; otherwise the location text is split.
-    /// </summary>
     public static (string Workbook, string? Sheet) SplitProblem(string location, string? workbook, string? sheet)
     {
         if (workbook != null)

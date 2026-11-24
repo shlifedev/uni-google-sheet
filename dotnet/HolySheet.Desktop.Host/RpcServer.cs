@@ -4,7 +4,6 @@ using HolySheet.Core.Config;
 
 namespace HolySheet.Desktop.Host;
 
-/// <summary>An error the client should show: JSON-RPC error codes, plus the host's own.</summary>
 public sealed class RpcException(int code, string message) : Exception(message)
 {
     public const int ParseError = -32700;
@@ -13,26 +12,17 @@ public sealed class RpcException(int code, string message) : Exception(message)
     public const int InvalidParams = -32602;
     public const int InternalError = -32603;
 
-    /// <summary>The tool could not do it: a file is missing or unreadable, the config does not parse.</summary>
     public const int ToolError = 1;
 
-    /// <summary>A build is already running.</summary>
     public const int Busy = 2;
 
-    /// <summary>No project folder is open.</summary>
     public const int NoProject = 3;
 
     public int Code { get; } = code;
 }
 
-/// <summary>
-/// JSON-RPC 2.0 over a pair of text streams, one message per line. Requests are handled concurrently, so a
-/// preview can be answered while a build runs; responses carry the request id. The host also sends notifications
-/// (no id) when a build starts or ends, whoever started it.
-/// </summary>
 public sealed class RpcServer
 {
-    // Relaxed escaping: the reader is the app, not an HTML page, and messages full of \u0027 are hard to debug.
     private static readonly JsonSerializerOptions Compact = new() { WriteIndented = false, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     private readonly TextReader _input;
@@ -48,7 +38,6 @@ public sealed class RpcServer
 
     public DesktopProject Project { get; }
 
-    /// <summary>Reads requests until the input ends, then waits for the ones still running.</summary>
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
         var running = new List<Task>();
@@ -66,7 +55,6 @@ public sealed class RpcServer
         await Task.WhenAll(running).ConfigureAwait(false);
     }
 
-    /// <summary>Handles one request line and writes its response, if it has an id.</summary>
     public async Task HandleLineAsync(string line)
     {
         JsonNode? id = null;
@@ -106,7 +94,6 @@ public sealed class RpcServer
         }
     }
 
-    /// <summary>Calls one method. Tests use this directly; the protocol loop goes through <see cref="HandleLineAsync"/>.</summary>
     public Task<JsonNode?> DispatchAsync(string method, JsonObject parameters)
     {
         return method switch

@@ -15,26 +15,16 @@
   overflow-wrap: anywhere;
 }
 
-/* 화면 캡처: 페이지 배경과 구분되도록 테두리를 둡니다. */
 .sl-markdown-content img {
   border: 1px solid var(--sl-color-gray-5);
   border-radius: 6px;
 }
 
-/* 표의 첫 열과 제목 줄은 줄이 바뀌지 않게 합니다. ‘탭 이름’이나 `Key<int>`가 두 줄로 갈라지면 읽기 어렵습니다. */
 .sl-markdown-content table th,
 .sl-markdown-content table td:first-child {
   white-space: nowrap;
 }
 
-/*
- * 흐름도. 본문에서는 이렇게 씁니다.
- *   <div class="hs-flow not-content">
- *     <div><strong>제목</strong><span>설명</span></div>
- *     <div class="hs-accent">…</div>
- *   </div>
- * 좁은 화면에서는 위에서 아래로 쌓입니다.
- */
 .hs-flow {
   display: flex;
   align-items: stretch;
@@ -94,10 +84,6 @@
   }
 }
 
-/*
- * 스프레드시트 그림. 열 문자와 행 번호가 있는 표, 오른쪽에 각 행의 역할, 아래에 시트 탭.
- *   <div class="hs-sheet not-content"><table>…</table><div class="hs-tabs"><span class="hs-on">Item</span></div></div>
- */
 .hs-sheet {
   margin-block: 1.5rem;
   overflow-x: auto;
@@ -116,7 +102,6 @@
   text-align: left;
 }
 
-/* 열 문자와 행 번호 */
 .hs-sheet thead th,
 .hs-sheet tbody th {
   background: var(--sl-color-gray-6);
@@ -125,7 +110,6 @@
   text-align: center;
 }
 
-/* 헤더 행(타입, 이름, 설명) */
 .hs-sheet tr.hs-head td {
   background: var(--sl-color-accent-low);
   color: var(--sl-color-white);
@@ -135,7 +119,6 @@
   color: var(--sl-color-gray-3);
 }
 
-/* 오른쪽의 역할 표시 */
 .hs-sheet tr td.hs-note,
 .hs-sheet tr th.hs-note {
   border: 0;
@@ -149,7 +132,6 @@
   content: '← ';
 }
 
-/* 맨 아래에 두는 열 설명 줄: <tr class="hs-legend"><th></th><td>타입</td>…</tr> */
 .hs-sheet tr.hs-legend th,
 .hs-sheet tr.hs-legend td {
   border: 0;

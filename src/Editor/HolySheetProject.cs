@@ -16,15 +16,12 @@ using UnityEngine;
 
 namespace HolySheet.Editor
 {
-    /// <summary>What one run from the editor did.</summary>
     public sealed class HolySheetRunResult
     {
         public BuildResult Build { get; }
 
-        /// <summary>Null when the run only checked, or when the build had errors.</summary>
         public CommitReport? Commit { get; }
 
-        /// <summary>Set when the run itself failed (unreadable config, cannot write), as opposed to the sheets having errors.</summary>
         public string? Failure { get; }
 
         public bool WroteFiles => Commit != null && Commit.HasChanges;
@@ -37,48 +34,29 @@ namespace HolySheet.Editor
         }
     }
 
-    /// <summary>
-    /// The project's tables, as the editor sees them: where the config is, how to build, and what the last build said.
-    /// The config is <c>holysheet.json</c> in the project root, the same file the <c>holysheet</c> command line reads, so the editor
-    /// and a CI job build exactly the same output.
-    /// </summary>
     public static class HolySheetProject
     {
         private static Task<HolySheetRunResult>? _running;
 
-        /// <summary>The project folder: the one that contains Assets.</summary>
         public static string RootDirectory => Path.GetDirectoryName(Application.dataPath)!;
 
         public static string ConfigPath => Path.Combine(RootDirectory, HolySheetConfig.DefaultFileName);
 
         public static bool HasConfig => File.Exists(ConfigPath);
 
-        /// <summary>The result of the most recent run in this editor session.</summary>
         public static HolySheetRunResult? LastResult { get; private set; }
 
         public static bool IsRunning => _running != null && !_running.IsCompleted;
 
-        /// <summary>Raised on the main thread when a run starts.</summary>
         public static event Action? RunStarted;
 
-        /// <summary>Raised on the main thread when a run ends.</summary>
         public static event Action<HolySheetRunResult>? RunFinished;
 
-        /// <summary>
-        /// Supplies the transform rules for every build started from the editor. Assign it from an
-        /// <c>[InitializeOnLoadMethod]</c> to add project-specific sheet conventions; null uses the default rules.
-        /// </summary>
         public static Func<TransformPipeline>? CreatePipeline { get; set; }
 
-        /// <summary>
-        /// The names of the credential providers in the editor's assemblies, for sources with auth type "custom": every
-        /// non-abstract class with a public parameterless constructor that implements <see cref="IGoogleCredentialProvider"/>.
-        /// The name is the class name, or the one in <see cref="HolySheetCredentialProviderAttribute"/>.
-        /// </summary>
         public static IReadOnlyList<string> CredentialProviderNames() =>
             ProviderTypes().Where(GoogleCredentialProviders.IsProvider).Select(GoogleCredentialProviders.NameOf).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.Ordinal).ToList();
 
-        // Builds make new instances each time, so a provider never outlives a domain reload and edits to it apply at once.
         private static IReadOnlyList<IGoogleCredentialProvider> CreateCredentialProviders()
         {
             var problems = new List<string>();
@@ -91,11 +69,9 @@ namespace HolySheet.Editor
             return providers;
         }
 
-        // Classes marked with the attribute are included so that one which cannot be used is reported instead of ignored.
         private static IEnumerable<Type> ProviderTypes() =>
             TypeCache.GetTypesDerivedFrom<IGoogleCredentialProvider>().Concat(TypeCache.GetTypesWithAttribute<HolySheetCredentialProviderAttribute>());
 
-        /// <summary>The CSV parser this project's builds use on this editor.</summary>
         public static string DescribeCsvBackend(HolySheetConfig? config = null)
         {
             string requested = (config?.CsvBackend ?? CsvBackends.Auto).Trim().ToLowerInvariant();
@@ -107,19 +83,16 @@ namespace HolySheet.Editor
             return "builtin";
         }
 
-        /// <summary>True when the Sep backend can run in this editor: it needs .NET 8 or newer, which Unity 7 has.</summary>
         public static bool IsSepAvailable => CsvBackends.Fast != null;
 
         public static string DescribeRuntime() => RuntimeInformation.FrameworkDescription;
 
         public static HolySheetConfig LoadConfig() => HolySheetConfig.Load(ConfigPath);
 
-        /// <summary>Creates <c>holysheet.json</c> with paths that suit a Unity project, plus the sheet folder it points at.</summary>
         public static HolySheetConfig CreateDefaultConfig()
         {
             var config = new HolySheetConfig { BaseDirectory = RootDirectory };
             config.Sources.Add(new SourceConfig { Type = SourceType.Xlsx, Path = "Sheets" });
-            // Generated code is compiled by Unity. Data goes to StreamingAssets: plain files a watcher can follow and a patch can replace.
             config.Output.Code = "Assets/Game/Generated/Tables";
             config.Output.Data = "Assets/StreamingAssets/Tables";
             Directory.CreateDirectory(Path.Combine(RootDirectory, "Sheets"));
@@ -129,12 +102,6 @@ namespace HolySheet.Editor
 
         public static void SaveConfig(HolySheetConfig config) => config.Save(ConfigPath);
 
-        /// <summary>
-        /// Reads the sources and, when <paramref name="commit"/> is true and there are no errors, writes code and data.
-        /// With <paramref name="only"/>, reads just those workbooks and sheets again and takes the rest from the last build
-        /// (see <see cref="SheetCache"/>).
-        /// The work runs on a background thread; the returned task completes on it, while the events are raised on the main thread.
-        /// </summary>
         public static Task<HolySheetRunResult> RunAsync(bool commit, bool offline = false, SheetSelection? only = null)
             => StartRun(commit, offline, only, refreshGoogle: false);
 
@@ -153,7 +120,6 @@ namespace HolySheet.Editor
             }
 
             TransformPipeline? pipeline = CreatePipeline?.Invoke();
-            // Unity's own properties may only be read on the main thread, so the path is resolved before the work moves off it.
             string configPath = ConfigPath;
             IReadOnlyList<IGoogleCredentialProvider> providers = CreateCredentialProviders();
             Type[] validators = DiscoverValidators();
@@ -179,7 +145,6 @@ namespace HolySheet.Editor
             }
         }
 
-        /// <summary>Runs on the calling thread and returns when done. For batch mode and tests.</summary>
         public static HolySheetRunResult RunBlocking(bool commit, bool offline = false, SheetSelection? only = null)
         {
             HolySheetRunResult result = Run(ConfigPath, commit, offline, CreatePipeline?.Invoke(), only, CreateCredentialProviders(), DiscoverValidators(), refreshGoogle: false);
@@ -201,8 +166,6 @@ namespace HolySheet.Editor
                     ? GoogleTabCopies.ChangeAsync(config, previous, change.Workbook, change.Sheet, change.UseLocal, options).GetAwaiter().GetResult()
                     : TableBuild.Run(config, options);
                 CommitReport? report = commit && build.Success ? TableBuild.Commit(config, build) : null;
-                // The result is kept for the window, which only shows the tables as read and the problems.
-                // The typed values and generated bytes are several times larger and are not needed once written.
                 build.ReleaseBuildData();
                 return new HolySheetRunResult(build, report, null);
             }
@@ -217,14 +180,12 @@ namespace HolySheet.Editor
             LastResult = result;
             if (result.WroteFiles)
             {
-                // New code has to be compiled and new data imported before the game can use them.
                 AssetDatabase.Refresh();
             }
 
             RunFinished?.Invoke(result);
         }
 
-        /// <summary>One line describing a result, for the status bar and the console.</summary>
         public static string Summarize(HolySheetRunResult result)
         {
             if (result.Failure != null)
@@ -301,7 +262,6 @@ namespace HolySheet.Editor
             RunFinished += OnFinished;
         }
 
-        /// <summary>Writes a result to the console: one line per problem, then the summary.</summary>
         public static void LogResult(HolySheetRunResult result)
         {
             foreach (Diagnostic diagnostic in result.Build.Diagnostics.Items)
@@ -329,12 +289,6 @@ namespace HolySheet.Editor
         }
     }
 
-    /// <summary>
-    /// Entry points for batch mode, where no window exists:
-    /// <code>Unity -batchmode -quit -projectPath . -executeMethod HolySheet.Editor.HolySheetCommandLine.Build</code>
-    /// The editor exits with 0 on success, 1 when the sheets have errors and 3 when the tool could not run.
-    /// Add <c>-holySheetOffline</c> to build from the saved Google snapshot instead of the network.
-    /// </summary>
     public static class HolySheetCommandLine
     {
         public static void Build() => Run(commit: true);

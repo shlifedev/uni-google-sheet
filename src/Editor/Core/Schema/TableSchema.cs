@@ -8,7 +8,6 @@ using System.Text;
 
 namespace HolySheet.Core.Schema
 {
-    /// <summary>One column of a table: it becomes one property of the generated row class.</summary>
     public sealed class ColumnSchema
     {
         public ColumnSchema(string field, ColumnType type, ColumnRole role, string comment, Cell nameCell, IReadOnlyList<int> sourceIndexes)
@@ -29,16 +28,10 @@ namespace HolySheet.Core.Schema
 
         public string Comment { get; }
 
-        /// <summary>The cell that names the field. Problems about the column as a whole point here.</summary>
         public Cell NameCell { get; }
 
-        /// <summary>
-        /// Positions of this field's columns in the raw table. More than one means the sheet repeats the field name
-        /// and the columns were merged into one array.
-        /// </summary>
         public IReadOnlyList<int> SourceIndexes { get; }
 
-        /// <summary>Number of members this column takes in the stored row. An optional reference stores a flag and a key.</summary>
         public int StoredMemberCount => Type is { Kind: ColumnKind.Reference, IsOptional: true } ? 2 : 1;
     }
 
@@ -46,33 +39,27 @@ namespace HolySheet.Core.Schema
     {
         Table,
 
-        /// <summary>Written as "Name.Config" with fields down the first columns. It has exactly one row.</summary>
         Config
     }
 
-    /// <summary>The shape of one table. Generated code and data are both derived from it and from nothing else.</summary>
     public sealed class TableSchema
     {
         public string Name { get; }
 
         public TableKind Kind { get; }
 
-        /// <summary>The sheet that defines the table, such as "Game.xlsx / Item".</summary>
         public string Location { get; }
 
         public string Comment { get; }
 
-        /// <summary>In sheet order. This is also the order of members in the stored row.</summary>
         public IReadOnlyList<ColumnSchema> Columns { get; }
 
         public IReadOnlyList<ColumnSchema> Keys { get; }
 
         public IReadOnlyList<ColumnSchema> Indexes { get; }
 
-        /// <summary>The first key. References and column extension sheets find rows by it. Null for a table without keys.</summary>
         public ColumnSchema? PrimaryKey => Keys.Count > 0 ? Keys[0] : null;
 
-        /// <summary>Hash of this table's layout, filled in once every table and enum is known.</summary>
         public string Hash { get; internal set; } = "";
 
         public TableSchema(string name, TableKind kind, string location, IReadOnlyList<ColumnSchema> columns, string comment = "")
@@ -86,7 +73,6 @@ namespace HolySheet.Core.Schema
             Indexes = columns.Where(column => column.Role == ColumnRole.Index).ToList();
         }
 
-        // The naming rule for generated types lives here and nowhere else.
         public string RowTypeName => Name + "Row";
 
         public string TableTypeName => Name + "Table";
@@ -96,7 +82,6 @@ namespace HolySheet.Core.Schema
         public int StoredMemberCount => Columns.Sum(column => column.StoredMemberCount);
     }
 
-    /// <summary>One converted row.</summary>
     public sealed class RowData
     {
         public RowData(object[] values, Cell[] cells)
@@ -105,14 +90,11 @@ namespace HolySheet.Core.Schema
             Cells = cells;
         }
 
-        /// <summary>In the order of <see cref="TableSchema.Columns"/>. The runtime type of each value follows its column type.</summary>
         public object[] Values { get; }
 
-        /// <summary>The cell each value came from (the first one, for merged columns). Later checks use it to point at problems.</summary>
         public Cell[] Cells { get; }
     }
 
-    /// <summary>A table's shape and content.</summary>
     public sealed class TableData
     {
         public TableData(TableSchema schema, List<RowData> rows)
@@ -126,14 +108,8 @@ namespace HolySheet.Core.Schema
         public List<RowData> Rows { get; }
     }
 
-    /// <summary>
-    /// Hashes table layouts. Only what changes the stored bytes or the generated code goes in: names, types, roles, enum members.
-    /// Comments do not. The same hash is written to the generated code and to the manifest, so the loader can refuse data
-    /// that was built for a different layout instead of reading it wrong.
-    /// </summary>
     public static class SchemaHasher
     {
-        /// <summary>Bump when the way data is encoded changes without the schema text changing.</summary>
         public const int LayoutVersion = 1;
 
         public static string HashTable(TableSchema table, string serializer)
@@ -142,7 +118,6 @@ namespace HolySheet.Core.Schema
             builder.Append("layout ").Append(LayoutVersion.ToString(CultureInfo.InvariantCulture)).Append(' ').Append(serializer).Append('\n');
             AppendTable(builder, table);
 
-            // The enums a table uses are part of its layout: their integer type sizes the value, their members give it meaning.
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (ColumnSchema column in table.Columns)
             {
@@ -155,7 +130,6 @@ namespace HolySheet.Core.Schema
             return Sha256Hex(builder.ToString());
         }
 
-        /// <summary>Hash of the whole set. <paramref name="tables"/> and <paramref name="enums"/> must be sorted by name.</summary>
         public static string HashSet(IReadOnlyList<TableSchema> tables, IReadOnlyList<EnumDefinition> enums, string serializer)
         {
             var builder = new StringBuilder();
@@ -182,7 +156,6 @@ namespace HolySheet.Core.Schema
                 builder.Append(column.Role switch { ColumnRole.Key => " key", ColumnRole.Index => " index", _ => "" });
                 if (column.Type.Kind == ColumnKind.Reference)
                 {
-                    // A reference stores the target's key, so the key's type is part of this table's layout too.
                     builder.Append(" -> ").Append(column.Type.KeyType!.CanonicalName);
                 }
 
@@ -199,7 +172,6 @@ namespace HolySheet.Core.Schema
             }
         }
 
-        /// <summary>SHA-256 as lowercase hex. Must produce the same text as HolySheet.TableHash in the runtime.</summary>
         public static string Sha256Hex(byte[] data)
         {
             using SHA256 sha256 = SHA256.Create();

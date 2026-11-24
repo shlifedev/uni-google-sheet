@@ -47,25 +47,21 @@ public sealed class PartialBuildTests
         byte[] monster = project.DataFile("Monster");
         byte[] item = project.DataFile("Item");
 
-        // Both sheets change on disk, but only the item sheet is selected.
         project.Write("Item", "Key<int>,int\nId,Price\n,\n1,11\n");
         project.Write("Monster", "Key<int>,Ref<Item>\nId,Drop\n,\n1,1\n2,1\n");
         (BuildResult partial, CommitReport? report) = project.Build("Sheets/Item");
 
         Assert.True(partial.Success, Sheets.Errors(partial));
         Assert.Equal(["Sheets / Item"], partial.RefreshedSheets);
-        // Where each workbook came from survives the cache, for the window's tree.
         Assert.Equal(HolySheet.Core.Config.SourceType.Csv, partial.WorkbookOrigins["Sheets"].Type);
         Assert.Equal("Sheets", partial.WorkbookOrigins["Sheets"].Source);
         Assert.NotEqual(item, project.DataFile("Item"));
         Assert.Equal(monster, project.DataFile("Monster"));
         Assert.Single(partial.Tables.Single(table => table.Schema.Name == "Monster").Rows);
-        // Item.Rare was not selected either, but it still belongs to the table.
         Assert.Equal(2, partial.Tables.Single(table => table.Schema.Name == "Item").Rows.Count);
         Assert.Contains("Item.bytes", report!.Written);
         Assert.DoesNotContain("Monster.bytes", report.Written);
 
-        // The next full build picks up the monster change.
         project.Build();
         Assert.NotEqual(monster, project.DataFile("Monster"));
     }
@@ -104,7 +100,6 @@ public sealed class PartialBuildTests
         Assert.Contains("no sheet cache", Sheets.Errors(first));
 
         project.Build();
-        // Someone else's build arrives, for example through a pull.
         File.AppendAllText(Path.Combine(project.Data, "tables.manifest.json"), "\n");
         BuildResult stale = project.Build("Sheets/Item").Result;
         Assert.False(stale.Success);

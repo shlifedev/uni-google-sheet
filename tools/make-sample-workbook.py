@@ -1,22 +1,4 @@
 #!/usr/bin/env python3
-"""Writes the sample workbook used by the samples and the tests.
-
-    python3 tools/make-sample-workbook.py dotnet/samples/GameData/Sheets/Game.xlsx
-
-Needs openpyxl (pip install openpyxl). The workbook is checked in; run this only to change it.
-Cells are written with their real types (numbers, booleans, dates), because that is what a person
-typing into Excel produces and what the xlsx reader has to turn back into text.
-
-The sheets exercise every sheet rule:
-  Enums              enum definitions, with and without a value column, plain and Flags
-  Item               a table: two keys, an index, every kind of value, an ignored column and row, a repeated field
-  Item.Rare          more rows for Item, with the columns in another order
-  Item.Col.Balance   more columns for Item, matched by key, listing only some rows
-  Monster            references (required, optional, array), a Mapping column, an enum array
-  Text               a table keyed by text
-  Game.Config        a config sheet: one field per row
-  #Notes             an ignored sheet
-"""
 import datetime
 import sys
 

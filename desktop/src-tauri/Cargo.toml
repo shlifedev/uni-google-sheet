@@ -7,7 +7,6 @@ license = "MIT"
 edition = "2024"
 
 [lib]
-# The `_lib` suffix keeps the lib name apart from the bin name (a Windows linker issue: rust-lang/cargo#8519).
 name = "holysheet_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 

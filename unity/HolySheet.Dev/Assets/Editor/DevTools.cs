@@ -10,23 +10,16 @@ using UnityEngine.UIElements;
 
 namespace HolySheet.Dev
 {
-    /// <summary>Batch-mode helpers for developing the package. Not part of the package.</summary>
     public static class DevTools
     {
-        /// <summary>
-        /// Sets the import settings of the DLLs the package ships, and of the serializer DLLs this project uses.
-        /// Run it once after adding or renaming a DLL; the settings live in the .meta files, which are committed.
-        /// </summary>
         public static void ConfigurePlugins()
         {
             const string package = "Packages/com.lumera.holysheet/Editor/Plugins/";
-            // The Sep backend needs .NET 8+, which only the Unity 7 (CoreCLR) editor has. Nothing compiles against it; the engine finds it by name.
             foreach (string name in new[] { "HolySheet.Csv.Sep.dll", "Sep.dll", "csFastFloat.dll" })
             {
                 Configure(package + "CoreClr/" + name, editor: true, autoReference: false, constraints: new[] { "UNITY_7000_0_OR_NEWER" });
             }
 
-            // A Roslyn source generator is not a plugin: it runs inside the compiler. Unity recognizes it by the label.
             const string generator = "Assets/Plugins/MemoryPack/Analyzers/MemoryPack.Generator.dll";
             Configure(generator, editor: false, autoReference: false, constraints: new string[0]);
             AssetDatabase.SetLabels(AssetDatabase.LoadMainAssetAtPath(generator), new[] { "RoslynAnalyzer" });
@@ -68,16 +61,9 @@ namespace HolySheet.Dev
             Debug.Log("[HolySheet.Dev] " + path + " explicit=" + (explicitly != null) + " validate=" + (validate != null));
         }
 
-        /// <summary>
-        /// Opens the HolySheet window, visits every page and saves a PNG of each to the folder named by the HOLYSHEET_CAPTURE_DIR
-        /// environment variable, then quits. Needs a real editor window, so launch Unity without -batchmode:
-        /// <code>Unity -projectPath unity/HolySheet.Dev -executeMethod HolySheet.Dev.DevTools.CaptureWindow</code>
-        /// Used to look at the window after changing its layout or styles.
-        /// </summary>
         public static void CaptureWindow()
         {
             string directory = Environment.GetEnvironmentVariable("HOLYSHEET_CAPTURE_DIR") ?? "Captures";
-            // HOLYSHEET_CAPTURE_EXPAND=1 opens every collapsible section, to look at what is folded away by default.
             if (Environment.GetEnvironmentVariable("HOLYSHEET_CAPTURE_EXPAND") == "1")
             {
                 foreach (string section in new[] { "sources", "output", "build", "signing" })
@@ -90,14 +76,12 @@ namespace HolySheet.Dev
             HolySheet.Editor.HolySheetProject.RunBlocking(commit: false);
             HolySheet.Editor.HolySheetWindow.Open();
             var window = EditorWindow.GetWindow<HolySheet.Editor.HolySheetWindow>();
-            // HOLYSHEET_CAPTURE_SIZE=WIDTHxHEIGHT, in points.
             string[] size = (Environment.GetEnvironmentVariable("HOLYSHEET_CAPTURE_SIZE") ?? "1040x680").Split('x');
             window.position = new Rect(80, 80, float.Parse(size[0]), float.Parse(size[1]));
             var pages = HolySheet.Editor.HolySheetWindow.PageNames;
             int index = 0;
             int frames = 0;
             window.SelectPage(pages[0]);
-            // HOLYSHEET_CAPTURE_FILTER types into the table search box first, e.g. to show a sheet node.
             string filter = Environment.GetEnvironmentVariable("HOLYSHEET_CAPTURE_FILTER");
 
             void Tick()
@@ -112,7 +96,6 @@ namespace HolySheet.Dev
                     }
                 }
 
-                // HOLYSHEET_CAPTURE_FIND types into the table's find bar, to show finding inside a table.
                 string findText = Environment.GetEnvironmentVariable("HOLYSHEET_CAPTURE_FIND");
                 if (frames == 20 && index == 0 && !string.IsNullOrEmpty(findText) && window.OpenFind())
                 {
@@ -124,7 +107,6 @@ namespace HolySheet.Dev
                     window.rootVisualElement.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-find__field").value = findText;
                 }
 
-                // A page needs a few frames to lay out and paint before it can be grabbed.
                 if (++frames < 40)
                 {
                     return;
@@ -157,8 +139,6 @@ namespace HolySheet.Dev
             EditorApplication.update += Tick;
         }
 
-        // Copies what the window's view has painted into a texture. This reads the editor's own render target,
-        // not the screen, so it works without screen recording permission and whatever covers the window.
         private static byte[] Grab(EditorWindow window)
         {
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
@@ -177,7 +157,6 @@ namespace HolySheet.Dev
             texture.Apply();
             RenderTexture.active = previous;
 
-            // The grabbed image is upside down relative to PNG row order.
             Color32[] pixels = texture.GetPixels32();
             var flipped = new Color32[pixels.Length];
             for (int row = 0; row < height; row++)
@@ -193,11 +172,9 @@ namespace HolySheet.Dev
             return png;
         }
 
-        /// <summary>Writes the names of the editor's built-in icons to icons.txt, then exits. For picking icon names that exist.</summary>
         public static void ListIcons()
         {
             var names = new System.Collections.Generic.SortedSet<string>();
-            // The built-in icons live in the editor's asset bundle; the method that returns it is internal.
             var method = typeof(EditorGUIUtility).GetMethod("GetEditorAssetBundle", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
             var bundle = (AssetBundle)method.Invoke(null, null);
             foreach (string path in bundle.GetAllAssetNames())
@@ -215,10 +192,6 @@ namespace HolySheet.Dev
             }
         }
 
-        /// <summary>
-        /// Draws the icons named in HOLYSHEET_ICON_CANDIDATES (comma separated) side by side into icon-sheet.png, in that order,
-        /// then quits. Needs a real editor (not -batchmode). Used to look at built-in icons before choosing one.
-        /// </summary>
         public static void DrawIconSheet()
         {
             string[] names = (Environment.GetEnvironmentVariable("HOLYSHEET_ICON_CANDIDATES") ?? "").Split(',');
@@ -234,7 +207,6 @@ namespace HolySheet.Dev
                     continue;
                 }
 
-                // Built-in icons are not readable; copy through a render texture.
                 var target = RenderTexture.GetTemporary(32, 32, 0, RenderTextureFormat.ARGB32);
                 Graphics.Blit(texture, target);
                 RenderTexture previous = RenderTexture.active;
@@ -260,11 +232,6 @@ namespace HolySheet.Dev
             EditorApplication.Exit(0);
         }
 
-        /// <summary>
-        /// Measures the HolySheet window on large tables: Check time and memory, how long the table view takes to appear,
-        /// and frame times while jumping through the rows. Filters the tree to HOLYSHEET_BENCH_TABLE, writes bench.txt and
-        /// a screenshot of the last rows to HOLYSHEET_CAPTURE_DIR, then quits. Needs a real editor (not -batchmode).
-        /// </summary>
         public static void BenchWindow()
         {
             string directory = Environment.GetEnvironmentVariable("HOLYSHEET_CAPTURE_DIR") ?? "Captures";
@@ -292,7 +259,6 @@ namespace HolySheet.Dev
             System.Diagnostics.Stopwatch selectWatch = null;
             steps.Add(("select table", () =>
             {
-                // Looked up now, not earlier: the window builds its UI on its first frame.
                 var search = window.rootVisualElement.Q<UnityEditor.UIElements.ToolbarSearchField>();
                 selectWatch = System.Diagnostics.Stopwatch.StartNew();
                 search.value = tableName;
@@ -339,7 +305,6 @@ namespace HolySheet.Dev
                     }
                     catch (Exception exception)
                     {
-                        // Never retry a failing step every frame: report it and stop.
                         EditorApplication.update -= Tick;
                         report.AppendLine("FAILED at '" + steps[step].Name + "': " + exception);
                         File.WriteAllText(Path.Combine(directory, "bench.txt"), report.ToString());
@@ -370,7 +335,6 @@ namespace HolySheet.Dev
             EditorApplication.update += Tick;
         }
 
-        /// <summary>Writes what this editor is and which CSV backend it can run to dev-report.txt, then exits.</summary>
         public static void Report()
         {
             var report = new StringBuilder();

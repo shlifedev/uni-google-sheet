@@ -8,39 +8,22 @@ using HolySheet.Core.Schema;
 
 namespace HolySheet.Core.Codecs
 {
-    /// <summary>
-    /// One serializer the generated code can use. A codec does two things that must agree with each other:
-    /// it writes a table's rows in the serializer's wire format, and it supplies the attributes that make the serializer's
-    /// own source generator read that format into the generated row class.
-    /// <para>
-    /// The bytes are written from the schema alone. Nothing is compiled or loaded to produce them, and the serializer library
-    /// is not a dependency of the tool; the tests prove the match by reading the bytes back with the real library.
-    /// </para>
-    /// </summary>
     public interface ITableCodec
     {
-        /// <summary>The name used in the config and in the manifest.</summary>
         string Name { get; }
 
-        /// <summary>The data file for a table: an array of rows.</summary>
         byte[] Encode(TableData table);
 
-        /// <summary>Namespaces the generated row and table files import.</summary>
         IReadOnlyList<string> Usings { get; }
 
-        /// <summary>Attribute line placed on the row class.</summary>
         string RowAttribute { get; }
 
-        /// <summary>Attribute placed on the stored field at position <paramref name="order"/>.</summary>
         string FieldAttribute(int order);
 
-        /// <summary>Attribute placed on the private parameterless constructor the serializer creates rows with.</summary>
         string ConstructorAttribute { get; }
 
-        /// <summary>Attribute placed on public members that must not be serialized.</summary>
         string IgnoreAttribute { get; }
 
-        /// <summary>C# expression that turns <paramref name="dataVariable"/> (a byte[]) into <paramref name="rowType"/>[].</summary>
         string DeserializeExpression(string rowType, string dataVariable);
     }
 
@@ -51,12 +34,6 @@ namespace HolySheet.Core.Codecs
         public static ITableCodec? Find(string name) => All.FirstOrDefault(codec => codec.Name == name);
     }
 
-    /// <summary>
-    /// MemoryPack: values are stored as they sit in memory (little-endian, no tags), which makes loading close to a copy.
-    /// Layout of a table file: <c>int32 rowCount</c>, then per row <c>byte memberCount</c> followed by the members in column order.
-    /// Text is <c>int32 ~utf8Length, int32 utf16Length, utf8 bytes</c> (an empty text is a single <c>int32 0</c>).
-    /// An array is <c>int32 length</c> followed by its elements.
-    /// </summary>
     public sealed class MemoryPackCodec : ITableCodec
     {
         public const string CodecName = "memorypack";
@@ -169,18 +146,12 @@ namespace HolySheet.Core.Codecs
                     writer.Utf8(text, byteCount);
                     break;
                 default:
-                    // A DateTime is one 64-bit field holding the ticks and, in the top two bits, the kind. ToBinary gives exactly that for UTC.
                     writer.Int64LittleEndian(((DateTime)scalar).ToBinary());
                     break;
             }
         }
     }
 
-    /// <summary>
-    /// MessagePack: a tagged, compact, language-neutral format. A table file is an array of rows; a row is an array of its
-    /// members in column order. Integers use the shortest encoding that holds the value, as the MessagePack-CSharp writer does,
-    /// so the files are byte-identical to what that library would write.
-    /// </summary>
     public sealed class MessagePackCodec : ITableCodec
     {
         public const string CodecName = "messagepack";
@@ -219,7 +190,6 @@ namespace HolySheet.Core.Codecs
                         var elements = (object[])value;
                         if (IsStoredAsByteArray(type))
                         {
-                            // byte[] is MessagePack's binary type, not an array of numbers.
                             WriteBinaryHeader(writer, elements.Length);
                             foreach (object element in elements)
                             {
@@ -255,8 +225,6 @@ namespace HolySheet.Core.Codecs
             return writer.ToArray();
         }
 
-        // The generated field is byte[] for byte[] columns and also for arrays of references to a Key<byte> table, since a
-        // reference is stored as its key. An enum stays an enum array even when its underlying type is byte.
         private static bool IsStoredAsByteArray(ColumnType type) =>
             (type.KeyType ?? type) is { Kind: ColumnKind.Scalar, Scalar: ScalarKind.Byte };
 
@@ -414,7 +382,6 @@ namespace HolySheet.Core.Codecs
             }
         }
 
-        // The MessagePack timestamp extension (type -1), in the smallest of its three sizes that fits.
         private static void WriteTimestamp(ByteWriter writer, DateTime value)
         {
             long seconds = value.Ticks / TimeSpan.TicksPerSecond - UnixEpochSeconds;
@@ -448,10 +415,6 @@ namespace HolySheet.Core.Codecs
 
     internal static class LeafValues
     {
-        /// <summary>
-        /// Reduces a stored value to the scalar that is actually written: an enum to its underlying integer,
-        /// a reference to the target's key.
-        /// </summary>
         public static (ScalarKind Kind, object Value) Resolve(ColumnType type, object value)
         {
             if (type.Kind == ColumnKind.Reference)
@@ -461,7 +424,6 @@ namespace HolySheet.Core.Codecs
 
             if (type.Kind == ColumnKind.Enum)
             {
-                // Enum values travel through the pipeline as 64-bit numbers and take their real width here.
                 return Scalars.TryFromInt64(type.Scalar, (long)value, out object boxed)
                     ? (type.Scalar, boxed)
                     : throw new InvalidOperationException($"The value {value} does not fit the enum {type.Enum!.Name}.");
@@ -470,7 +432,6 @@ namespace HolySheet.Core.Codecs
             return (type.Scalar, value);
         }
 
-        /// <summary>The key written for an optional reference that points at nothing.</summary>
         public static object Default(ColumnType type)
         {
             ColumnType key = type.KeyType ?? type;
@@ -478,7 +439,6 @@ namespace HolySheet.Core.Codecs
         }
     }
 
-    /// <summary>A growable byte buffer with the few fixed-width writes the codecs need.</summary>
     internal sealed class ByteWriter
     {
         public ByteWriter(int capacity)

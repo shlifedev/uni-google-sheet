@@ -8,16 +8,10 @@ using HolySheet.Core.Transform;
 
 namespace HolySheet.Core.Building
 {
-    /// <summary>Turns raw tables into typed schemas: resolves every type cell and merges repeated field names into arrays.</summary>
     public static class SchemaBuilder
     {
-        /// <summary>
-        /// The stored row starts with a one-byte member count in the MemoryPack format, and values from 250 up are reserved.
-        /// The limit is applied to every serializer so that switching serializers never turns a valid sheet into an invalid one.
-        /// </summary>
         public const int MaxStoredMembers = 249;
 
-        // Names the generated row class already uses or inherits.
         private static readonly HashSet<string> ReservedFields = new(StringComparer.Ordinal)
         {
             "ToString", "Equals", "GetHashCode", "GetType", "MemberwiseClone", "Finalize", "ReferenceEquals"
@@ -25,7 +19,6 @@ namespace HolySheet.Core.Building
 
         public static List<(TableSchema Schema, RawTable Raw)> Build(IReadOnlyList<RawTable> tables, TypeResolver resolver, DiagnosticBag diagnostics)
         {
-            // First pass: the key type of every table, so that Ref<Table> columns can be resolved whatever order the sheets are in.
             var keyTypes = new Dictionary<string, ColumnType?>(StringComparer.Ordinal);
             foreach (RawTable table in tables)
             {
@@ -89,7 +82,6 @@ namespace HolySheet.Core.Building
 
                 if (expression!.Kind == TypeExpressionKind.Mapping)
                 {
-                    // Mapping columns produce an enum and are not stored.
                     continue;
                 }
 
@@ -124,7 +116,6 @@ namespace HolySheet.Core.Building
 
                 if (byField.TryGetValue(field, out int existingIndex))
                 {
-                    // The field name repeats: the columns become one array, in the order they appear.
                     ColumnSchema existing = columns[existingIndex];
                     if (existing.Role != ColumnRole.None || expression.Role != ColumnRole.None)
                     {
@@ -182,7 +173,6 @@ namespace HolySheet.Core.Building
         }
     }
 
-    /// <summary>Converts the text of one cell into the value its column type calls for.</summary>
     public static class CellParser
     {
         public static bool TryParse(ColumnType type, string text, char arraySeparator, out object value, out string reason)
@@ -198,7 +188,6 @@ namespace HolySheet.Core.Building
             return TryParseSingle(type, text, out value, out reason);
         }
 
-        /// <summary>Splits one cell into array elements and parses each. A blank cell adds nothing.</summary>
         public static bool TryParseElements(ColumnType elementType, string text, char arraySeparator, List<object> elements, out string reason)
         {
             var parts = new List<ArrayElement>();
@@ -228,10 +217,6 @@ namespace HolySheet.Core.Building
             return true;
         }
 
-        /// <summary>
-        /// A warning for an array cell that parsed but probably not as the author meant, or null.
-        /// Catches a number shown with thousands separators ("1,000" becomes 1 and 0) and text still written with the old '|' separator.
-        /// </summary>
         public static string? AmbiguityWarning(ColumnType elementType, string text, char arraySeparator, out string hint)
         {
             hint = "";
@@ -263,7 +248,6 @@ namespace HolySheet.Core.Building
             return value.Kind == ColumnKind.Scalar && (Scalars.IsInteger(value.Scalar) || value.Scalar is ScalarKind.Float or ScalarKind.Double);
         }
 
-        // "1,000", "-12,345,678", "1,000.5": what a sheet shows for a number with a thousands-separator format.
         private static bool LooksLikeGroupedNumber(string text)
         {
             int start = text[0] == '-' ? 1 : 0;
@@ -294,7 +278,6 @@ namespace HolySheet.Core.Building
                 case ColumnKind.Reference:
                     if (isElement)
                     {
-                        // An array of references stores the keys themselves.
                         return TryParseSingle(type.KeyType!, text, out value, out reason, isElement: true);
                     }
 
@@ -309,7 +292,6 @@ namespace HolySheet.Core.Building
                     value = ok ? new RefValue(true, key) : RefValue.None;
                     return ok;
                 default:
-                    // Text used as an array element is trimmed; a whole text cell is kept exactly as written.
                     return Scalars.TryParse(type.Scalar, text, out value, out reason);
             }
         }
@@ -320,7 +302,6 @@ namespace HolySheet.Core.Building
             string trimmed = text.Trim();
             if (trimmed.Length == 0)
             {
-                // An empty cell is the member whose value is zero, the same as default(TEnum) in C#.
                 value = 0L;
                 if (definition.FindByValue(0) == null)
                 {
@@ -369,7 +350,6 @@ namespace HolySheet.Core.Building
         }
     }
 
-    /// <summary>Converts the rows of a raw table to values, reporting every cell that does not fit its column's type.</summary>
     public static class RowConverter
     {
         public static TableData Convert(RawTable raw, TableSchema schema, char arraySeparator, DiagnosticBag diagnostics)
@@ -388,7 +368,6 @@ namespace HolySheet.Core.Building
                     cells[index] = cell;
                     if (column.SourceIndexes.Count > 1)
                     {
-                        // Merged columns: every cell contributes its elements, left to right. Blank cells contribute none.
                         elements.Clear();
                         foreach (int sourceIndex in column.SourceIndexes)
                         {
@@ -415,7 +394,6 @@ namespace HolySheet.Core.Building
                         continue;
                     }
 
-                    // Keys are trimmed so that a stray space cannot make two keys that look the same.
                     string text = column.Role == ColumnRole.Key && column.Type.Scalar == ScalarKind.String && column.Type.Kind == ColumnKind.Scalar ? cell.Trimmed : cell.Text;
                     if (CellParser.TryParse(column.Type, text, arraySeparator, out object value, out string reason))
                     {
@@ -468,7 +446,6 @@ namespace HolySheet.Core.Building
         }
     }
 
-    /// <summary>Checks that need whole tables: keys must be unique, and references must point at rows that exist.</summary>
     public static class DataValidator
     {
         public static void Validate(IReadOnlyList<TableData> tables, DiagnosticBag diagnostics)
@@ -510,7 +487,6 @@ namespace HolySheet.Core.Building
                 for (int index = 0; index < table.Schema.Columns.Count; index++)
                 {
                     ColumnType type = table.Schema.Columns[index].Type;
-                    // A target that failed to build has its own errors; adding one per reference would bury them.
                     if (type.Kind != ColumnKind.Reference || !primaryKeys.TryGetValue(type.TargetTable!, out HashSet<object>? keys))
                     {
                         continue;
@@ -542,13 +518,11 @@ namespace HolySheet.Core.Building
             diagnostics.AddError(cell, $"The table '{targetTable}' has no row with key '{key}'.", $"Add the row to '{targetTable}', or fix the key here.");
         }
 
-        // Integer keys of different widths must compare equal when they hold the same number.
         private static object Comparable(object value) => value is string ? value : Scalars.ToInt64(value);
 
         private static string Display(object value) => System.Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
     }
 
-    /// <summary>One element of an array cell. A quoted element keeps its text exactly, even when empty.</summary>
     public readonly struct ArrayElement
     {
         public ArrayElement(string text, bool quoted)
@@ -562,11 +536,6 @@ namespace HolySheet.Core.Building
         public bool Quoted { get; }
     }
 
-    /// <summary>
-    /// Splits the text of an array cell. Elements are separated by the array separator, and the whole list may be wrapped in
-    /// [ ]. An element in double quotes may contain the separator, brackets and spaces; \" and \\ inside quotes stand for " and \.
-    ///   1, 2, 3          [1, 2, 3]          ["Hello, world", plain]          "say \"hi\""
-    /// </summary>
     public static class ArraySplitter
     {
         public static bool IsBracketed(string trimmed) => trimmed.Length >= 2 && trimmed[0] == '[' && trimmed[trimmed.Length - 1] == ']';
@@ -578,7 +547,6 @@ namespace HolySheet.Core.Building
             string body = text.Trim();
             if (IsBracketed(body))
             {
-                // Inside brackets ',' always works. A different configured separator is used when the list contains it.
                 body = body.Substring(1, body.Length - 2);
                 separator = arraySeparator != ',' && ContainsOutsideQuotes(body, arraySeparator) ? arraySeparator : ',';
             }
@@ -626,11 +594,10 @@ namespace HolySheet.Core.Building
                     return true;
                 }
 
-                position++; // the separator
+                position++;
             }
         }
 
-        /// <summary>True when the character appears outside double-quoted elements.</summary>
         public static bool ContainsOutsideQuotes(string text, char character)
         {
             bool inQuotes = false;
@@ -654,7 +621,6 @@ namespace HolySheet.Core.Building
             return false;
         }
 
-        // Curly quotes count too: they come in when text is pasted from a word processor.
         private static bool IsQuote(char c) => c is '"' or '“' or '”';
 
         private static void SkipSpace(string text, ref int position, char separator)

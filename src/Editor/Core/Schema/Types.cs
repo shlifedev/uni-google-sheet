@@ -6,7 +6,6 @@ using System.Linq;
 
 namespace HolySheet.Core.Schema
 {
-    /// <summary>Names that can be used for tables, fields, enums and enum members: C# identifiers that are not keywords.</summary>
     public static class Identifier
     {
         public const string Rule = "Start with a letter or underscore, then letters, digits or underscores; no spaces, and not a C# keyword.";
@@ -46,7 +45,6 @@ namespace HolySheet.Core.Schema
         }
     }
 
-    /// <summary>The value types a cell can hold. Each has one exact encoding in every serializer.</summary>
     public enum ScalarKind
     {
         Bool,
@@ -102,12 +100,10 @@ namespace HolySheet.Core.Schema
             _ => "System.DateTime"
         };
 
-        /// <summary>The name used in type cells and in schema hashes.</summary>
         public static string CanonicalName(ScalarKind kind) => kind == ScalarKind.DateTime ? "DateTime" : CSharpName(kind);
 
         public static bool IsInteger(ScalarKind kind) => kind is >= ScalarKind.SByte and <= ScalarKind.ULong;
 
-        /// <summary>Keys must compare exactly, so only integers and strings qualify.</summary>
         public static bool CanBeKey(ScalarKind kind) => IsInteger(kind) || kind == ScalarKind.String;
 
         public static object Default(ScalarKind kind) => kind switch
@@ -136,7 +132,6 @@ namespace HolySheet.Core.Schema
             _ => "10"
         };
 
-        /// <summary>Converts cell text to a value. An empty cell is the type's default. Parsing never depends on the machine's culture.</summary>
         public static bool TryParse(ScalarKind kind, string text, out object value, out string reason)
         {
             reason = "";
@@ -215,7 +210,6 @@ namespace HolySheet.Core.Schema
 
             if (!ok)
             {
-                // Tell "not a whole number at all" apart from "a number that does not fit", because the fixes differ.
                 reason = decimal.TryParse(trimmed, integer, invariant, out _)
                     ? $"does not fit in {CSharpName(kind)} ({Range(kind)})"
                     : $"is not a whole number. Write it like 10, without decimals or thousands separators";
@@ -248,7 +242,6 @@ namespace HolySheet.Core.Schema
             _ => "0 to about 1.8e19"
         };
 
-        /// <summary>The integer value as a signed 64-bit number, for enum members and key comparisons.</summary>
         public static long ToInt64(object value) => value switch
         {
             sbyte v => v,
@@ -262,7 +255,6 @@ namespace HolySheet.Core.Schema
             _ => throw new InvalidOperationException($"{value.GetType().Name} is not an integer.")
         };
 
-        /// <summary>Boxes a 64-bit value as the integer type <paramref name="kind"/>, or reports that it does not fit.</summary>
         public static bool TryFromInt64(ScalarKind kind, long value, out object boxed)
         {
             switch (kind)
@@ -300,7 +292,6 @@ namespace HolySheet.Core.Schema
 
     public sealed record EnumMember(string Name, long Value, string Comment = "");
 
-    /// <summary>An enum defined in an Enums sheet or produced by a Mapping column.</summary>
     public sealed class EnumDefinition
     {
         public EnumDefinition(string name, ScalarKind underlying, bool isFlags, IReadOnlyList<EnumMember> members, string comment, string location)
@@ -318,7 +309,6 @@ namespace HolySheet.Core.Schema
 
         public string Name { get; }
 
-        /// <summary>The integer type that stores the enum. It decides the size of the value in the data file.</summary>
         public ScalarKind Underlying { get; }
 
         public bool IsFlags { get; }
@@ -341,43 +331,34 @@ namespace HolySheet.Core.Schema
         Reference
     }
 
-    /// <summary>What a column is for, beyond holding a value.</summary>
     public enum ColumnRole
     {
         None,
 
-        /// <summary>Unique per row. Rows can be looked up by it; the first key of a table is its primary key.</summary>
         Key,
 
-        /// <summary>Not unique. Rows can be listed by it.</summary>
         Index
     }
 
-    /// <summary>A reference cell's value: the key of the row it points at, or nothing.</summary>
     public sealed record RefValue(bool HasValue, object? Key)
     {
         public static RefValue None { get; } = new(false, null);
     }
 
-    /// <summary>The resolved type of a column: what C# type it becomes, how its cells parse, and how its values are laid out in the data.</summary>
     public sealed class ColumnType
     {
         public ColumnKind Kind { get; }
 
-        /// <summary>The value type itself for scalars; the underlying integer for enums; the key's value type for references.</summary>
         public ScalarKind Scalar { get; }
 
         public EnumDefinition? Enum { get; }
 
-        /// <summary>For references: the table pointed at.</summary>
         public string? TargetTable { get; }
 
-        /// <summary>For references: the type of the target table's primary key.</summary>
         public ColumnType? KeyType { get; }
 
         public bool IsArray { get; }
 
-        /// <summary>For references: an empty cell means "points at nothing" instead of being an error.</summary>
         public bool IsOptional { get; }
 
         private ColumnType(ColumnKind kind, ScalarKind scalar, EnumDefinition? enumDefinition, string? targetTable, ColumnType? keyType, bool isArray, bool isOptional)
@@ -404,7 +385,6 @@ namespace HolySheet.Core.Schema
 
         public bool CanBeKey => !IsArray && Kind != ColumnKind.Reference && (Kind == ColumnKind.Enum || Scalars.CanBeKey(Scalar));
 
-        /// <summary>One spelling per type, used in schema hashes and messages: "int", "float[]", "Enum&lt;EKind&gt;", "Ref&lt;Item&gt;?".</summary>
         public string CanonicalName
         {
             get
@@ -419,7 +399,6 @@ namespace HolySheet.Core.Schema
             }
         }
 
-        /// <summary>The C# type of one stored value: the scalar, the enum, or for references the target's key type.</summary>
         public string CSharpValueType => Kind switch
         {
             ColumnKind.Enum => Enum!.Name,

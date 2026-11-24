@@ -7,14 +7,12 @@ import { TableTree } from "./TableTree";
 import { PreviewPane } from "./Preview";
 import { ProblemsBar, ProblemsList } from "./Problems";
 
-/** The tree on the left; the data on the right with the problems panel under it, as in the Unity window. */
 export function TablesPage() {
   const { model, problemsOpen } = useApp();
   const view = useTablesView();
   const tree = useMemo(() => buildTree(model), [model]);
   const focused = useMemo(() => flattenTree(tree).find((entry) => entry.node.key === view.focus)?.node ?? null, [tree, view.focus]);
 
-  // ⌘F / Ctrl+F opens the find bar of the table on show; Esc in it closes it.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {

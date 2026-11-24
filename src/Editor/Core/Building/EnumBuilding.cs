@@ -8,19 +8,6 @@ using HolySheet.Core.Transform;
 
 namespace HolySheet.Core.Building
 {
-    /// <summary>
-    /// Reads an Enums sheet. One column defines one enum, using the same header rows as a table:
-    /// <code>
-    /// type     (blank = int)   byte                   Flags&lt;int&gt;
-    /// name     enum name       EItemKind              EAccess
-    /// comment                  kind of item           what a role may do
-    /// data     member names    None                   None       0
-    ///                          Potion                 Read       1 &lt;&lt; 0
-    ///                          Gold       10          Write      1 &lt;&lt; 1
-    /// </code>
-    /// When the column right of an enum has no name in the name row, it holds that enum's values.
-    /// A member without a value is the previous member plus one, starting at zero.
-    /// </summary>
     public static class EnumSheetReader
     {
         public static List<EnumDefinition> Read(Sheet sheet, SheetConfig layout, DiagnosticBag diagnostics)
@@ -145,7 +132,6 @@ namespace HolySheet.Core.Building
             return valid ? new EnumDefinition(name, underlying, isFlags, members, comment, nameCell.Origin.ToString()) : null;
         }
 
-        // Evaluates what people write for enum values: 5, 0x10, 1 << 3, Read | Write, or a mix joined with |.
         internal static bool TryEvaluate(string text, IReadOnlyDictionary<string, long> members, out long value, out string reason)
         {
             value = 0;
@@ -206,16 +192,6 @@ namespace HolySheet.Core.Building
         }
     }
 
-    /// <summary>
-    /// Builds enums from Mapping&lt;Name&gt; columns: the column's text is the member name and the row's key is the member's value.
-    /// <code>
-    /// Key&lt;int&gt;   Mapping&lt;EMonsterId&gt;   string
-    /// Id         Code                  Name
-    /// 1001       Slime                 Slime           →  enum EMonsterId { Slime = 1001, Goblin = 1002 }
-    /// 1002       Goblin                Goblin
-    /// </code>
-    /// The Mapping column itself is not stored. In code, write <c>(EMonsterId)row.Id</c> or <c>table.Get((int)EMonsterId.Slime)</c>.
-    /// </summary>
     public static class MappingBuilder
     {
         public static List<EnumDefinition> Build(RawTable table, DiagnosticBag diagnostics)
@@ -273,7 +249,6 @@ namespace HolySheet.Core.Building
                         continue;
                     }
 
-                    // A key that is not a number is reported once, where keys are checked. Here the member is just left out.
                     if (Scalars.TryParse(underlying, row[keyIndex].Text, out object key, out _) && !row[keyIndex].IsBlank)
                     {
                         members.Add(new EnumMember(memberName, Scalars.ToInt64(key)));

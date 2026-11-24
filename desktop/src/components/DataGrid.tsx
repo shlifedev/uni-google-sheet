@@ -1,5 +1,3 @@
-// A virtualized read-only grid: only the rows in view are in the DOM, so a table of a few hundred thousand rows
-// scrolls as fast as one of ten. Headings sort (click; Shift+click adds a column) and can be resized.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useApp } from "../store";
@@ -20,7 +18,6 @@ export interface GridColumn {
 }
 
 interface Props<T> {
-  /** Changes when a different table is shown: widths and scroll start over. */
   identity: string;
   columns: GridColumn[];
   rows: T[];
@@ -29,13 +26,11 @@ interface Props<T> {
   rowHead?: { title: string; label: (row: T) => string; tooltip: (row: T) => string; width: number };
   sorts: SortSpec[];
   onSort: (sorts: SortSpec[]) => void;
-  /** Marks this text in the cells of these columns (null: every column). */
   highlight?: { query: string; columns: Set<number> | null };
 }
 
 const rowHeight = 20;
 
-/** Click: sort by this column, then reverse it, then stop. Shift+click: add it as the next column, or reverse it there. */
 export function nextSorts(sorts: SortSpec[], column: number | "row", additive: boolean): SortSpec[] {
   const existing = sorts.find((sort) => sort.column === column);
   if (additive) {
@@ -92,7 +87,6 @@ export function DataGrid<T>({ identity, columns, rows, cell, cellTitle, rowHead,
     );
   };
 
-  // A grid without column types (the enum list) has one-line headings.
   const typed = columns.some((column) => column.type);
   const alignment = preferences.alignment;
   const className = useMemo(
@@ -145,7 +139,6 @@ export function DataGrid<T>({ identity, columns, rows, cell, cellTitle, rowHead,
                 </div>
               )}
               {columns.map((column, index) => {
-                // A cell may hold a line break; the grid shows one line per row.
                 const text = cell(row, index).replace(/\r?\n/g, " ");
                 const marked = highlight && highlight.query && (highlight.columns === null || highlight.columns.has(index));
                 return (

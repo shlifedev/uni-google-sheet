@@ -1,18 +1,10 @@
 namespace HolySheet.Tooling;
 
-/// <summary>What checking a data folder against its manifest found.</summary>
-/// <param name="Signature">"valid", "INVALID", "MISSING", or a sentence saying why it was not checked.</param>
-/// <param name="Tables">How many tables the manifest lists; 0 when it could not be read.</param>
-/// <param name="Content">The manifest's content hash, or null when it could not be read.</param>
 public sealed record VerifyReport(string Directory, string Signature, int Tables, string? Content, IReadOnlyList<string> Problems)
 {
     public bool Success => Problems.Count == 0;
 }
 
-/// <summary>
-/// Checks that a data folder is what a build wrote: every file the manifest lists is there with the right size and hash,
-/// and, given a public key, that the manifest is signed by it. This is the check a game does on load, run ahead of time.
-/// </summary>
 public static class DataVerifier
 {
     public static VerifyReport Verify(string directory, string? publicKey, string manifestName = TableManifest.DefaultFileName)

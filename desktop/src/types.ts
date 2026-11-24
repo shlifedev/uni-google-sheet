@@ -1,5 +1,3 @@
-// The shapes the engine process (dotnet/HolySheet.Desktop.Host) sends. Keep in step with DesktopProject.cs, TableView.cs, Json.cs.
-
 export type Severity = "error" | "warning";
 
 export interface Diagnostic {
@@ -7,7 +5,6 @@ export interface Diagnostic {
   location: string;
   message: string;
   hint: string;
-  /** The diagnostic as one line, the text the copy actions put on the clipboard. */
   text: string;
   workbook?: string;
   sheet?: string;
@@ -83,7 +80,6 @@ export interface SourceConfig {
   snapshot?: string;
 }
 
-/** holysheet.json as the engine writes it (HolySheetConfig.ToJson). Optional parts are left out when not set. */
 export interface HolySheetConfig {
   sources: SourceConfig[];
   output: { code: string; data: string; csv?: string; schema: boolean; manifestFile?: string };
@@ -115,7 +111,6 @@ export interface ProjectState {
   keyIgnored: boolean;
   running: boolean;
   lastRun: RunResult | null;
-  /** Only on config.save: what the engine thinks of the saved config. */
   diagnostics?: Diagnostic[];
   privateKeyFile?: string;
 }
@@ -135,7 +130,6 @@ export interface TableInfo {
 export interface EnumMember {
   name: string;
   value: number;
-  /** The value as shown: flags that are one bit read "8  (1 << 3)". */
   display: string;
   comment: string;
 }
@@ -147,7 +141,6 @@ export interface EnumInfo {
   comment: string;
   workbook: string;
   sheet: string;
-  /** Made by a Mapping column (under its table) rather than an Enums sheet (under its workbook). */
   mapping: boolean;
   members: EnumMember[];
 }

@@ -40,7 +40,6 @@ function useViewMenu(): (element: HTMLElement) => void {
   };
 }
 
-/** What the right side shows for the node the tree has in focus. */
 export function PreviewPane({ node }: { node: TreeNode | null }) {
   if (!node) return <div className="view"><div className="empty">{T("Select a table to see its rows.")}</div></div>;
   if (node.enums) return <EnumPreview node={node} />;
@@ -92,7 +91,6 @@ function TablePreview({ table, sheet }: { table: string; sheet: string | null })
   const searchAll = preferences.findInAllColumns || !hasKey;
   const query = findOpen ? findQuery.trim() : "";
 
-  // Filter, then sort. Rows keep their sheet order through the filter, so sorting by Row puts that order back.
   const rows = useMemo(() => {
     if (!data) return [] as PreviewRow[];
     let shown = data.rows;
@@ -121,7 +119,6 @@ function TablePreview({ table, sheet }: { table: string; sheet: string | null })
     key: column.key,
     width: 120,
   }));
-  // As wide as the longest label needs, so 200,000 rows do not show as "199…".
   const labelLength = data.rows.reduce((longest, row) => Math.max(longest, row.label.length), 1);
   const location = sheet ? F("{0}  ·  part of {1}", data.location, data.table) : data.location;
 
@@ -185,7 +182,6 @@ function TablePreview({ table, sheet }: { table: string; sheet: string | null })
           cell={(row, column) => row.cells[column] ?? ""}
           cellTitle={(row, column) => {
             const info = data.columns[column];
-            // The address is exact for cells of the row's own sheet; columns another sheet added live elsewhere.
             return info.sheet === row.sheet ? `${row.sheet}!${info.letter}${row.row}` : info.sheet;
           }}
           rowHead={{

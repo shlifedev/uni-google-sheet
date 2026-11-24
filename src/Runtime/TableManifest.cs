@@ -6,32 +6,22 @@ using System.Text;
 
 namespace HolySheet
 {
-    /// <summary>One table of a manifest.</summary>
     public sealed class TableManifestEntry
     {
         public string Name { get; }
 
-        /// <summary>The data file, relative to the manifest. For example "Item.bytes".</summary>
         public string File { get; }
 
         public int Rows { get; }
 
-        /// <summary>Size of the data file in bytes.</summary>
         public long Bytes { get; }
 
-        /// <summary>SHA-256 of the data file, lowercase hex.</summary>
         public string Hash { get; }
 
-        /// <summary>Hash of this table's layout. It only changes when the generated row class would change.</summary>
         public string Schema { get; }
 
-        /// <summary>
-        /// Members this runtime does not know. Kept so newer tools can add metadata without breaking older clients.
-        /// A string member gives its text; any other member gives its JSON.
-        /// </summary>
         public IReadOnlyDictionary<string, string> Extra { get; }
 
-        /// <summary>The same members as <see cref="Extra"/>, each as its minified JSON. This is what is written back and signed.</summary>
         internal IReadOnlyDictionary<string, string> RawExtra { get; }
 
         public TableManifestEntry(string name, string file, int rows, long bytes, string hash, string schema, IReadOnlyDictionary<string, string>? extra = null)
@@ -88,24 +78,18 @@ namespace HolySheet
         private static readonly IReadOnlyDictionary<string, string> EmptyExtra = new Dictionary<string, string>(0);
     }
 
-    /// <summary>What differs between two manifests. This is the input a patch system needs: which files to fetch, which to drop.</summary>
     public sealed class TableManifestDiff
     {
-        /// <summary>Tables only in the newer manifest.</summary>
         public IReadOnlyList<string> Added { get; }
 
-        /// <summary>Tables only in the older manifest.</summary>
         public IReadOnlyList<string> Removed { get; }
 
-        /// <summary>Tables in both whose data file differs.</summary>
         public IReadOnlyList<string> Changed { get; }
 
-        /// <summary>The subset of <see cref="Changed"/> whose layout differs too. These need new generated code, not just new data.</summary>
         public IReadOnlyList<string> SchemaChanged { get; }
 
         public IReadOnlyList<string> Unchanged { get; }
 
-        /// <summary>True when the set-level schema differs: the newer data cannot be read by code generated for the older one.</summary>
         public bool RequiresNewCode { get; }
 
         public bool HasChanges => Added.Count > 0 || Removed.Count > 0 || Changed.Count > 0;
@@ -121,25 +105,6 @@ namespace HolySheet
         }
     }
 
-    /// <summary>
-    /// The list of data files in one build of the tables, written next to them by the tool as JSON.
-    /// The tool writes it in one fixed form, one table per line, so it diffs cleanly in version control:
-    /// <code>
-    /// {
-    ///   "holysheet": 1,
-    ///   "serializer": "memorypack",
-    ///   "schema": "9d92…",           hash of every table layout and enum; baked into the generated code
-    ///   "content": "5c1e…",          hash of every data file hash; identifies this exact build of the data
-    ///   "tool": "holysheet/2.0.0",
-    ///   "tables": [
-    ///     { "name": "Item", "file": "Item.bytes", "rows": 12, "bytes": 345, "hash": "…", "schema": "…" }
-    ///   ],
-    ///   "signature": { "algorithm": "rsa-sha256", "value": "…" }     optional
-    /// }
-    /// </code>
-    /// The signature covers <see cref="SignedText"/>: the fixed form of everything except the signature, rebuilt from what was read.
-    /// Members this runtime does not know, at the top or in a table, are kept and written back, not rejected.
-    /// </summary>
     public sealed class TableManifest
     {
         public const int FormatVersion = 1;
@@ -154,10 +119,8 @@ namespace HolySheet
         private const string TablesMember = "tables";
         private const string SignatureMember = "signature";
 
-        /// <summary>Top-level members with a meaning of their own. Anything else is a property.</summary>
         internal static readonly string[] TopMembers = { FormatMember, SerializerMember, SchemaMember, ContentMember, TablesMember, SignatureMember };
 
-        /// <summary>Table members with a meaning of their own. Anything else is an extra.</summary>
         internal static readonly string[] TableMembers = { "name", "file", "rows", "bytes", "hash", "schema" };
 
         private readonly List<TableManifestEntry> _tables;
@@ -165,28 +128,18 @@ namespace HolySheet
         private readonly Dictionary<string, string> _rawProperties;
         private readonly Dictionary<string, string> _properties;
 
-        /// <summary>"memorypack" or "messagepack".</summary>
         public string Serializer { get; }
 
-        /// <summary>Hash of all table layouts and enums. Must equal the constant in the generated code.</summary>
         public string Schema { get; }
 
-        /// <summary>Hash over every table's name and data hash. Two manifests with the same value describe identical data.</summary>
         public string Content { get; }
 
-        /// <summary>Tables in ordinal name order.</summary>
         public IReadOnlyList<TableManifestEntry> Tables => _tables;
 
-        /// <summary>
-        /// Top-level members this runtime has no dedicated property for, keyed by name. For example "build" and "tool".
-        /// A string member gives its text; any other member gives its JSON.
-        /// </summary>
         public IReadOnlyDictionary<string, string> Properties => _properties;
 
-        /// <summary>Base64 signature, or null when the manifest is not signed.</summary>
         public string? Signature { get; }
 
-        /// <summary>The exact text the signature covers: the manifest in its fixed form, without the signature member.</summary>
         public string SignedText { get; }
 
         public TableManifest(string serializer, string schema, IEnumerable<TableManifestEntry> tables, IEnumerable<KeyValuePair<string, string>>? properties = null, string? signature = null)
@@ -250,13 +203,11 @@ namespace HolySheet
             return _tablesByName.TryGetValue(name, out TableManifestEntry? entry) ? entry : null;
         }
 
-        /// <summary>Returns the same manifest with a signature attached.</summary>
         public TableManifest WithSignature(string signature)
         {
             return new TableManifest(Serializer, Schema, _tables, _rawProperties, signature);
         }
 
-        /// <summary>The manifest file: <see cref="SignedText"/>, with the signature as the last member when there is one.</summary>
         public string ToText()
         {
             if (Signature == null)
@@ -264,7 +215,6 @@ namespace HolySheet
                 return SignedText;
             }
 
-            // SignedText ends with "\n}\n". The signature goes in front of the closing brace.
             var builder = new StringBuilder(SignedText.Length + Signature.Length + 64);
             builder.Append(SignedText, 0, SignedText.Length - 3);
             builder.Append(",\n  ").Append('"').Append(SignatureMember).Append("\": { \"algorithm\": ");
@@ -275,7 +225,6 @@ namespace HolySheet
             return builder.ToString();
         }
 
-        /// <summary>Compares an older manifest (or null for "nothing installed") with a newer one.</summary>
         public static TableManifestDiff Diff(TableManifest? older, TableManifest newer)
         {
             if (newer == null)
@@ -429,7 +378,6 @@ namespace HolySheet
                 throw Invalid(exception.Message);
             }
 
-            // The content member is derived data. If it disagrees with the tables, someone edited one and not the other.
             if (content != null && content != manifest.Content)
             {
                 throw new TableLoadException(TableLoadError.HashMismatch,
@@ -586,7 +534,6 @@ namespace HolySheet
             return raw;
         }
 
-        // The tool's ManifestWriter writes this same text byte for byte; the tests compare the two.
         private string BuildSignedText()
         {
             var builder = new StringBuilder(256 + _tables.Count * 220);

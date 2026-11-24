@@ -12,7 +12,6 @@ internal static class Json
 
     public static JsonArray Array(IEnumerable<JsonNode?> items) => new(items.ToArray());
 
-    /// <summary>A copy without the properties set to null: the config parser treats a missing key as "not set".</summary>
     public static JsonObject WithoutNulls(JsonObject source)
     {
         var copy = new JsonObject();
@@ -37,7 +36,6 @@ internal static class Json
         return copy;
     }
 
-    /// <summary>The name holysheet.json uses for a source type.</summary>
     public static string SourceTypeName(SourceType type) => type switch
     {
         SourceType.Xlsx => "xlsx",
@@ -48,7 +46,6 @@ internal static class Json
     };
 }
 
-/// <summary>How a run and its problems are written for the app. Diagnostics have the same shape as <c>holysheet build --json</c>.</summary>
 internal static class RunJson
 {
     public static JsonObject Describe(RunRecord record)
@@ -82,7 +79,6 @@ internal static class RunJson
             ["deleted"] = Json.Strings(commit?.Deleted ?? []),
             ["unchanged"] = commit?.Unchanged ?? 0,
             ["finishedAt"] = record.FinishedAt.ToString("O"),
-            // A run that failed outright has one problem: why. The window shows it the same way.
             ["diagnostics"] = Json.Array(record.Failure != null
                 ? [Diagnostic(new Diagnostic(Severity.Error, "holysheet", null, record.Failure, ""))]
                 : build.Diagnostics.Items.Where(item => item.Severity == Severity.Error).Concat(build.Diagnostics.Items.Where(item => item.Severity != Severity.Error)).Select(Diagnostic))

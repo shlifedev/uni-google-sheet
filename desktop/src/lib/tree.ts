@@ -1,6 +1,3 @@
-// The table tree, built the way the Unity window builds it (HolySheetWindow.FillTree): one node per connected source once
-// there is more than one, then workbooks, their tables (with the sheets a table was built from), and enums: those an
-// Enums sheet defines under their workbook, those a Mapping column makes under its table.
 import { Count, T, F } from "../i18n";
 import type { EnumInfo, GoogleTab, SheetRole, SourceType, TableInfo, TableModel, WorkbookInfo } from "../types";
 
@@ -8,7 +5,6 @@ export type NodeKind = "group" | "workbook" | "table" | "config" | "sheet" | "en
 export type IconName = "excel" | "sheets" | "drive" | "folder" | "table" | "config" | "enum";
 
 export interface TreeNode {
-  /** Identifies the node across rebuilds, so the selection and the open nodes survive a run. */
   key: string;
   kind: NodeKind;
   label: string;
@@ -18,13 +14,9 @@ export interface TreeNode {
   children: TreeNode[];
   table?: TableInfo;
   googleTab?: GoogleTab;
-  /** On sheet, enum and enum sheet nodes. */
   sheet?: string;
-  /** On workbook, sheet, enum and enum sheet nodes. */
   workbook?: string;
-  /** On group nodes: the workbooks under it. */
   groupWorkbooks?: string[];
-  /** On enum nodes: the enum; on enum sheet nodes: every enum the sheet defines. */
   enums?: EnumInfo[];
 }
 
@@ -74,7 +66,6 @@ function groupIcon(group: Group): IconName {
   }
 }
 
-// xlsx files show as Excel workbooks, CSV folders as folders, Google spreadsheets as Sheets. A Drive folder holds both.
 function workbookIcon(origin: WorkbookInfo | undefined, workbook: string): IconName {
   const isXlsx = workbook.toLowerCase().endsWith(".xlsx");
   switch (origin?.type) {
@@ -91,7 +82,6 @@ function workbookIcon(origin: WorkbookInfo | undefined, workbook: string): IconN
   }
 }
 
-// The last folder of a path, or the start of a Google id.
 export function shortSource(source: string): string {
   const trimmed = source.replace(/[/\\]+$/, "");
   const slash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
@@ -99,7 +89,6 @@ export function shortSource(source: string): string {
   return trimmed.length > 10 ? trimmed.slice(0, 8) + "…" : trimmed;
 }
 
-/** The sheet rule: "Enums", or a name ending in ".Enums" (Battle.Enums). */
 export function isEnumsSheet(sheet: string): boolean {
   return sheet === "Enums" || sheet.endsWith(".Enums");
 }
@@ -115,7 +104,6 @@ export function describeSheet(table: string, role: SheetRole): string {
   }
 }
 
-/** "byte · Flags · 6 members" / "int · Mapping · 12 members". */
 export function describeEnum(definition: EnumInfo): string {
   return (
     definition.underlying +
@@ -216,7 +204,6 @@ export function buildTree(model: TableModel): TreeNode[] {
         }
       }
 
-      // Enums a Mapping column of this table makes.
       for (const entry of table.sheets) {
         for (const definition of mappingEnums.get(entry.workbook + " / " + entry.sheet) ?? []) {
           sheetNodes.push(enumNode(definition));
@@ -229,7 +216,6 @@ export function buildTree(model: TableModel): TreeNode[] {
         kind: isConfig ? "config" : "table",
         label: table.name,
         icon: isConfig ? "config" : "table",
-        // A table built from more than one sheet (Item + Item.Rare + Item.Col.Balance) says how many more.
         note: table.sheets.length > 1 ? "+" + (table.sheets.length - 1) : "",
         tooltip:
           (isConfig ? T("Config table: one row, fields written down the sheet.\n") : "") +
@@ -244,7 +230,6 @@ export function buildTree(model: TableModel): TreeNode[] {
       });
     }
 
-    // Enums sheets, after the tables.
     for (const { sheet, enums } of sheetEnums.get(workbook) ?? []) {
       children.push({
         key: `enumsheet:${workbook}/${sheet}`,
@@ -287,7 +272,6 @@ export function buildTree(model: TableModel): TreeNode[] {
     }
   }
 
-  // One node per connected source (each entry under "sources" in holysheet.json), once there is more than one.
   const connections = new Map<string, { group: Group; source: string; entries: typeof workbookNodes }>();
   for (const entry of workbookNodes) {
     const id = entry.group + "\u0000" + entry.source;
@@ -300,7 +284,6 @@ export function buildTree(model: TableModel): TreeNode[] {
     return workbookNodes.map((entry) => entry.node);
   }
 
-  // A kind with more than one connection (two Excel folders) is told apart by its folder or id.
   const perKind = new Map<Group, number>();
   for (const { group } of connections.values()) perKind.set(group, (perKind.get(group) ?? 0) + 1);
 
@@ -321,7 +304,6 @@ export function buildTree(model: TableModel): TreeNode[] {
   });
 }
 
-/** Every node, depth first, with its parent keys: for search, selection lookups and "expand to show". */
 export function flattenTree(nodes: TreeNode[], parents: string[] = [], out: { node: TreeNode; parents: string[] }[] = []) {
   for (const node of nodes) {
     out.push({ node, parents });
@@ -330,7 +312,6 @@ export function flattenTree(nodes: TreeNode[], parents: string[] = [], out: { no
   return out;
 }
 
-/** The keys open by default: groups, workbooks. */
 export function defaultExpanded(nodes: TreeNode[]): Set<string> {
   const keys = new Set<string>();
   for (const { node } of flattenTree(nodes)) {
@@ -339,7 +320,6 @@ export function defaultExpanded(nodes: TreeNode[]): Set<string> {
   return keys;
 }
 
-/** What a set of selected nodes reads again in a partial build: whole workbooks, and single sheets. */
 export interface Selection {
   workbooks: Set<string>;
   sheets: Map<string, { workbook: string; sheet: string }>;
@@ -370,7 +350,6 @@ export function includes(selection: Selection, workbook: string, sheet: string):
   return selection.workbooks.has(workbook) || selection.sheets.has(workbook + "\u0000" + sheet);
 }
 
-/** The --only entries for the engine: "Item.xlsx" or "Item.xlsx/Item.Rare". */
 export function onlyArguments(selection: Selection): string[] {
   return [
     ...[...selection.workbooks].sort(byName),
@@ -378,7 +357,6 @@ export function onlyArguments(selection: Selection): string[] {
   ];
 }
 
-/** The tables a selection builds again, and the enums of Enums sheets it reads again. */
 export function selectionImpact(model: TableModel, selection: Selection): { tables: string[]; enums: string[] } {
   const tables = model.tables
     .filter((table) => table.sheets.some((entry) => includes(selection, entry.workbook, entry.sheet)))
@@ -390,7 +368,6 @@ export function selectionImpact(model: TableModel, selection: Selection): { tabl
   return { tables, enums };
 }
 
-/** "Item.xlsx", "Job · 2 sheets", "3 sheets", "Item.xlsx + 2 sheets": what the selection bar calls the selection. */
 export function describeSelection(selected: TreeNode[], selection: Selection): string {
   if (selected.length === 1) {
     const node = selected[0];

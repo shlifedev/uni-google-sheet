@@ -1,16 +1,13 @@
-// Two panes with a draggable line between them. The size is the second-or-first pane's pixels, kept by the caller.
 import { useRef } from "react";
 
 interface Props {
   direction: "horizontal" | "vertical";
-  /** Pixels of the pane that keeps its size: the first for "horizontal" (a sidebar), the second for "vertical" (a bottom panel). */
   size: number;
   min: number;
   max: number;
   onSize: (size: number) => void;
   first: React.ReactNode;
   second: React.ReactNode;
-  /** Hides the sized pane's content and the handle (a closed bottom panel); the other pane takes all the room. */
   collapsed?: boolean;
 }
 
@@ -41,7 +38,6 @@ export function Split({ direction, size, min, max, onSize, first, second, collap
       style={horizontal ? { width: 1, cursor: "col-resize", position: "relative" } : { height: 1, cursor: "row-resize", position: "relative" }}
       onPointerDown={startDrag}
     >
-      {/* A wider invisible grip than the 1px line. */}
       <div
         style={
           horizontal

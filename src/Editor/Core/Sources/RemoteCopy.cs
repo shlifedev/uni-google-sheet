@@ -7,11 +7,6 @@ using System.Text;
 
 namespace HolySheet.Core.Sources
 {
-    /// <summary>
-    /// The tabs of a Google file as last downloaded, with the Drive version they were downloaded at. When Drive reports the
-    /// same version again, the file has not changed and the tabs are read from here instead of from Google, which costs one
-    /// cheap Drive request instead of Sheets API requests. Kept under the sheet cache folder, one folder per file id.
-    /// </summary>
     internal static class RemoteCopy
     {
         private const string IndexFileName = "copy.index";
@@ -90,7 +85,6 @@ namespace HolySheet.Core.Sources
                     index.Append("tab\t").Append(file).Append('\t').Append(OneLine(tabs[position].Name)).Append('\n');
                 }
 
-                // Written last: an interrupted save leaves no index, so nothing half-written is ever read.
                 File.WriteAllText(Path.Combine(folder, IndexFileName), index.ToString(), Utf8);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

@@ -12,7 +12,6 @@ public class CsvTests
         [new SepCsvParser()]
     ];
 
-    /// <summary>Each case is CSV text and the rows it must give, with fields joined by '¦' and rows by '⏎'.</summary>
     public static IEnumerable<object[]> Cases()
     {
         (string Name, string Text, string Expected)[] cases =
@@ -84,7 +83,6 @@ public class CsvTests
     [Fact]
     public void Both_parsers_agree_on_generated_text()
     {
-        // Many random documents built from the pieces that make CSV hard: quotes, commas, line breaks, empties, unicode.
         string[] pieces = ["a", "", " ", "1.5", "x,y", "he said \"hi\"", "two\nlines", "tab\there", "한글", "\"", ",", "a b", "-1", "end "];
         var random = new Random(20261118);
         var builtin = BuiltinCsvParser.Instance;
@@ -125,7 +123,6 @@ public class CsvTests
         Assert.Equal("builtin", CsvBackends.Resolve("auto").Name);
         Assert.Equal("builtin", CsvBackends.Resolve(null).Name);
         Assert.Equal("builtin", CsvBackends.Resolve("builtin").Name);
-        // The test host is .NET 10, so the Sep assembly loads. On Unity 6 (Mono) asking for it is an error.
         Assert.Equal("sep", CsvBackends.Resolve("sep").Name);
         Assert.NotNull(CsvBackends.Fast);
         Assert.Throws<ArgumentException>(() => CsvBackends.Resolve("fastest"));

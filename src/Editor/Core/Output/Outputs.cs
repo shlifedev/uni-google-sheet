@@ -12,21 +12,16 @@ using HolySheet.Core.Schema;
 
 namespace HolySheet.Core.Output
 {
-    /// <summary>Everything one build produces, held in memory. Nothing is on disk until <see cref="OutputCommitter"/> writes it.</summary>
     public sealed class GeneratedOutput
     {
-        /// <summary>File name to C# source.</summary>
         public SortedDictionary<string, string> CodeFiles { get; } = new(StringComparer.Ordinal);
 
-        /// <summary>File name to content, for the data folder: one file per table, plus the schema description.</summary>
         public SortedDictionary<string, byte[]> DataFiles { get; } = new(StringComparer.Ordinal);
 
-        /// <summary>File name to CSV text of each table after the transform rules.</summary>
         public SortedDictionary<string, string> CsvFiles { get; } = new(StringComparer.Ordinal);
 
         public string ManifestFileName { get; set; } = "tables.manifest.json";
 
-        /// <summary>The manifest. It is written last, so its appearance on disk means every data file is already in place.</summary>
         public string ManifestText { get; set; } = "";
 
         public string SchemaHash { get; set; } = "";
@@ -34,19 +29,13 @@ namespace HolySheet.Core.Output
         public string ContentHash { get; set; } = "";
     }
 
-    /// <summary>One table of the manifest.</summary>
     public sealed record ManifestTable(string Name, string File, int Rows, long Bytes, string Hash, string Schema);
 
-    /// <summary>
-    /// Writes the manifest JSON. The format is defined by <c>HolySheet.TableManifest</c> in the runtime, which is the reader;
-    /// this writer must produce exactly what that class would (its <c>SignedText</c> and <c>ToText</c>), and the tests compare the two.
-    /// </summary>
     public static class ManifestWriter
     {
         public const string DataExtension = ".bytes";
         public const string SignatureAlgorithm = "rsa-sha256";
 
-        /// <summary>The text a signature covers: the whole manifest without its signature member.</summary>
         public static string Write(string serializer, string schemaHash, IReadOnlyList<ManifestTable> tables, IReadOnlyDictionary<string, string> properties, out string contentHash)
         {
             List<ManifestTable> sorted = tables.OrderBy(table => table.Name, StringComparer.Ordinal).ToList();
@@ -91,7 +80,6 @@ namespace HolySheet.Core.Output
             return builder.ToString();
         }
 
-        /// <summary>Adds the signature as the last member, in front of the closing brace.</summary>
         public static string AppendSignature(string signedText, string signature)
         {
             var builder = new StringBuilder(signedText.Length + signature.Length + 64);
@@ -113,7 +101,6 @@ namespace HolySheet.Core.Output
             builder.Append(",\n");
         }
 
-        // The same escaping as the runtime's ManifestJson.WriteString: quotes, backslashes and control characters only.
         private static void Quote(StringBuilder builder, string value)
         {
             builder.Append('"');
@@ -160,15 +147,10 @@ namespace HolySheet.Core.Output
         }
     }
 
-    /// <summary>
-    /// Signing keys. The private key stays on the build machine and signs the manifest; the public key is baked into the
-    /// generated code and lets every client check that the data it loads came from that build machine.
-    /// </summary>
     public static class SigningKeys
     {
         private const string PrivateHeader = "holysheet-private-key 1";
 
-        /// <summary>Creates a new RSA key pair. Returns the private key file text and the public key in its config form.</summary>
         public static (string PrivateKey, string PublicKey) Generate(int bits = 2048)
         {
             using RSA rsa = RSA.Create();
@@ -232,7 +214,6 @@ namespace HolySheet.Core.Output
             }
         }
 
-        /// <summary>The public key in the text form the runtime reads: rsa:{base64 modulus}:{base64 exponent}.</summary>
         public static string FormatPublicKey(RSAParameters key) => "rsa:" + Convert.ToBase64String(key.Modulus!) + ":" + Convert.ToBase64String(key.Exponent!);
 
         public static string Sign(string signedText, RSAParameters privateKey)
@@ -242,12 +223,10 @@ namespace HolySheet.Core.Output
             return Convert.ToBase64String(rsa.SignData(Encoding.UTF8.GetBytes(signedText), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
         }
 
-        /// <summary>Finds the private key a config points at: the environment variable first, then the file. Null when neither is set.</summary>
         public static string? ReadPrivateKey(HolySheetConfig config)
         {
             if (!string.IsNullOrEmpty(config.Signing.PrivateKeyEnv) && Environment.GetEnvironmentVariable(config.Signing.PrivateKeyEnv) is { Length: > 0 } fromEnvironment)
             {
-                // CI secret stores often flatten line breaks; accept "\n" written out.
                 return fromEnvironment.Replace("\\n", "\n");
             }
 
@@ -266,10 +245,6 @@ namespace HolySheet.Core.Output
         }
     }
 
-    /// <summary>
-    /// Describes every table and enum as JSON, written next to the data as tables.schema.json.
-    /// It lets tools that have no generated code (a patch builder, a balance viewer, a server in another language) read the data.
-    /// </summary>
     public static class SchemaJson
     {
         public const string FileName = "tables.schema.json";
@@ -328,7 +303,6 @@ namespace HolySheet.Core.Output
         }
     }
 
-    /// <summary>What a commit changed. Paths are relative to their output folder.</summary>
     public sealed class CommitReport
     {
         public List<string> Written { get; } = new();
@@ -340,20 +314,10 @@ namespace HolySheet.Core.Output
         public bool HasChanges => Written.Count > 0 || Deleted.Count > 0;
     }
 
-    /// <summary>
-    /// Puts a build's output on disk.
-    /// <list type="bullet">
-    /// <item>A file whose content is already right is not touched, so nothing recompiles or shows up in version control for no reason.</item>
-    /// <item>Before writing, checks ownership of every existing destination using the generated code marker, the previous manifest and schema, or the CSV list.</item>
-    /// <item>The manifest is written last and by rename, so a reader that sees a manifest always finds the data files it lists.</item>
-    /// <item>If writing fails part way, the files already changed are put back.</item>
-    /// </list>
-    /// </summary>
     public static class OutputCommitter
     {
         private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
-        /// <summary>The list of CSV files the tool wrote into the CSV output folder. Starts with a dot so Unity does not import it.</summary>
         public const string CsvListFileName = ".holysheet-csv";
 
         private const string CsvListHeader = "holysheet-csv 1";
@@ -385,7 +349,6 @@ namespace HolySheet.Core.Output
             List<string>? manifestFiles = ReadPreviousDataFiles(manifestPath) ?? ReadLegacyDataFiles(manifestPath);
             var previous = new HashSet<string>(manifestFiles ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
 
-            // A folder last built when the manifest was text: what it lists counts as the previous build, and the old manifest goes.
             string legacyPath = Path.Combine(dataDirectory, LegacyManifestFileName);
             List<string>? legacy = string.Equals(output.ManifestFileName, LegacyManifestFileName, StringComparison.OrdinalIgnoreCase) ? null : ReadLegacyDataFiles(legacyPath);
             if (legacy != null)
@@ -419,7 +382,6 @@ namespace HolySheet.Core.Output
 
             if (csvDirectory != null)
             {
-                // CSV files carry no marker, so the folder records the ones HolySheet may replace or remove.
                 string listPath = Path.Combine(csvDirectory, CsvListFileName);
                 HashSet<string>? previousCsv = ReadCsvList(listPath);
                 var keptCsv = new HashSet<string>(StringComparer.Ordinal);
@@ -457,8 +419,6 @@ namespace HolySheet.Core.Output
                 return true;
             }
 
-            // A case-only table rename can address the same file. Require both spellings to resolve
-            // and only one directory entry, so a separate user file on a case-sensitive volume stays safe.
             if (!File.Exists(Path.Combine(directory, name)) || !names.Any(other =>
                 string.Equals(other, name, StringComparison.OrdinalIgnoreCase) && File.Exists(Path.Combine(directory, other))))
             {
@@ -517,7 +477,6 @@ namespace HolySheet.Core.Output
             var files = new HashSet<string>(StringComparer.Ordinal);
             foreach (string file in lines.Skip(1))
             {
-                // Only plain .csv names in this folder: a hand-edited list must never make the tool delete anything else.
                 if (!file.StartsWith("#", StringComparison.Ordinal) && file == Path.GetFileName(file)
                     && file.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
                 {
@@ -570,13 +529,8 @@ namespace HolySheet.Core.Output
             return files;
         }
 
-        /// <summary>The manifest name before it became JSON. A data folder from an older build still has one.</summary>
         public const string LegacyManifestFileName = "tables.manifest.txt";
 
-        /// <summary>
-        /// The data files an old text manifest lists, when <paramref name="path"/> is one this tool wrote (its first line says so).
-        /// Null when it is not there or not ours: a file someone else named the same is left alone.
-        /// </summary>
         private static List<string>? ReadLegacyDataFiles(string path)
         {
             if (!File.Exists(path))
@@ -617,7 +571,6 @@ namespace HolySheet.Core.Output
             }
         }
 
-        // A table owns only a plain data file in this folder.
         private static void AddDataFileName(List<string> files, string? file)
         {
             if (file != null && file == Path.GetFileName(file) && file.EndsWith(ManifestWriter.DataExtension, StringComparison.OrdinalIgnoreCase))
@@ -627,11 +580,6 @@ namespace HolySheet.Core.Output
         }
     }
 
-    /// <summary>
-    /// Lets one build at a time write a project's output, across processes: the CLI, the Unity editor and watchers.
-    /// The lock is a file created with create-new, which every runtime and file system makes atomic. It holds the owner's
-    /// process id, so a lock left behind by a process that died is recognized and taken over.
-    /// </summary>
     internal sealed class OutputLock : IDisposable
     {
         public const string FileName = "build.lock";
@@ -656,8 +604,6 @@ namespace HolySheet.Core.Output
             {
                 try
                 {
-                    // On Windows the system deletes the file when the handle closes, even after a crash. Elsewhere it is
-                    // deleted by Dispose, and a crashed owner is detected by its process id.
                     var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 64, IsWindows ? FileOptions.DeleteOnClose : FileOptions.None);
                     byte[] owner = Encoding.ASCII.GetBytes(System.Diagnostics.Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture));
                     stream.Write(owner, 0, owner.Length);
@@ -691,7 +637,6 @@ namespace HolySheet.Core.Output
 
             if (!IsWindows)
             {
-                // Removed while still open, so another process can never lose a lock it has just created to this delete.
                 TryDelete(path);
             }
 
@@ -715,7 +660,6 @@ namespace HolySheet.Core.Output
 
             if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int processId))
             {
-                // Just created and not written yet, or damaged. Only an old one is abandoned.
                 return DateTime.UtcNow - written > TimeSpan.FromSeconds(30);
             }
 

@@ -1,7 +1,3 @@
-/* HolySheet desktop. An editor tool, not a web page: flat bars, square corners, dense rows, color only where it carries
-   meaning (problems, column types, the running state). The dark theme is in the range of Unity's dark editor.
-   The theme is the user's choice (Settings > App): data-theme on <html>, or the system's when it is absent. */
-
 :root {
   --bg: #f3f3f4;
   --surface: #ffffff;
@@ -164,8 +160,6 @@ textarea {
   user-select: text;
 }
 
-/* ---- Layout ---- */
-
 .app {
   display: flex;
   flex-direction: column;
@@ -207,8 +201,6 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* ---- Controls ---- */
 
 .button {
   display: inline-flex;
@@ -390,8 +382,6 @@ select.field {
   color: var(--text-3);
 }
 
-/* ---- Toolbar ---- */
-
 .toolbar {
   display: flex;
   align-items: center;
@@ -471,8 +461,6 @@ select.field {
   }
 }
 
-/* ---- Split panes ---- */
-
 .split-handle {
   flex: none;
   background: var(--border);
@@ -489,8 +477,6 @@ select.field {
 .split-handle[data-separator="hover"] {
   background: var(--accent);
 }
-
-/* ---- Tree ---- */
 
 .sidebar {
   display: flex;
@@ -601,8 +587,6 @@ select.field {
   white-space: nowrap;
   flex: none;
 }
-
-/* ---- Data view ---- */
 
 .view {
   display: flex;
@@ -820,8 +804,6 @@ select.field {
   text-align: center;
 }
 
-/* ---- Problems ---- */
-
 .problems {
   display: flex;
   flex-direction: column;
@@ -906,8 +888,6 @@ select.field {
 .problem .hint {
   color: var(--text-3);
 }
-
-/* ---- Settings ---- */
 
 .settings {
   height: 100%;
@@ -1026,8 +1006,6 @@ select.field {
   color: var(--error);
 }
 
-/* ---- Start page ---- */
-
 .start {
   display: flex;
   align-items: center;
@@ -1098,8 +1076,6 @@ select.field {
   border-color: var(--error);
   background: var(--error-soft);
 }
-
-/* ---- Menus and notices ---- */
 
 .menu {
   position: fixed;
@@ -1183,8 +1159,6 @@ select.field {
   white-space: pre-line;
 }
 
-/* ---- Details ---- */
-
 .toggle:hover:not(:disabled):not(.on) {
   background: var(--surface-3);
   color: var(--text);
@@ -1194,13 +1168,10 @@ select.field {
   opacity: 0.5;
 }
 
-/* Thin scroll bars where the system draws wide ones (Windows). */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
-
-/* ---- Settings sections: a bar across the page that folds, like a component header in Unity's Inspector ---- */
 
 .segmented button + button {
   border-left: 1px solid var(--control-border);

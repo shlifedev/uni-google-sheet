@@ -1,4 +1,3 @@
-// Every text the app shows through T() or F() has a Korean translation, from HolySheetText.cs or ko.app.json.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,7 +11,6 @@ function sources(directory: string): string[] {
   });
 }
 
-/** The English texts passed as literals to T("…") and F("…"), with JS string escapes undone. */
 export function usedTexts(): string[] {
   const found = new Set<string>();
   const call = /\b[TF]\(\s*"((?:[^"\\]|\\.)*)"/g;

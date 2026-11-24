@@ -1,4 +1,3 @@
-/** The text with every case-insensitive occurrence of the query marked. Plain text when there is no query. */
 export function Highlight({ text, query }: { text: string; query: string }) {
   if (!query) return <>{text}</>;
   const lower = text.toLowerCase();

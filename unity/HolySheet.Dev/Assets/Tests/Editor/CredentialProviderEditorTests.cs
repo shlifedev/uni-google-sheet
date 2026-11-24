@@ -6,7 +6,6 @@ using HolySheet.Editor;
 
 namespace HolySheet.Dev.Tests
 {
-    /// <summary>Credential providers are found in the editor's assemblies by themselves, which only a real editor can show.</summary>
     public class CredentialProviderEditorTests
     {
         [HolySheetCredentialProvider("holysheet-test-provider")]

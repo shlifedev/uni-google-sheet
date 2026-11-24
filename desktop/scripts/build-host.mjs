@@ -1,8 +1,3 @@
-// Publishes the engine (dotnet/HolySheet.Desktop.Host) as a self-contained single file and puts it where Tauri looks for
-// the sidecar: src-tauri/binaries/holysheet-host-<target triple>[.exe]. Runs before `tauri dev` and `tauri build`.
-//
-// The .NET SDK is taken from $DOTNET, then the macOS installer location (Homebrew's `dotnet` may be an older SDK),
-// then PATH. The target comes from TAURI_ENV_TARGET_TRIPLE (set by the Tauri CLI) or the Rust host triple.
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, chmodSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -38,8 +33,6 @@ const triple = process.env.TAURI_ENV_TARGET_TRIPLE || hostTriple();
 const rid = rids[triple];
 if (!rid) throw new Error(`No .NET runtime identifier is known for the target '${triple}'.`);
 
-// Not EnableCompressionInSingleFile: with it the published host crashed (AccessViolationException inside
-// System.Text.Json) on the second request, every time, on .NET 10.0.12 / osx-arm64. The installers compress anyway.
 const windows = triple.includes("windows");
 const out = join(desktop, "src-tauri", "target", "holysheet-host", rid);
 console.log(`[build-host] publishing holysheet-host for ${rid} (${triple})`);

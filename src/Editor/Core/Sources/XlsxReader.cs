@@ -9,7 +9,6 @@ using System.Xml;
 
 namespace HolySheet.Core.Sources
 {
-    /// <summary>The file is not an xlsx workbook this reader understands.</summary>
     public sealed class XlsxFormatException : Exception
     {
         public XlsxFormatException(string message, Exception? inner = null) : base(message, inner)
@@ -17,26 +16,17 @@ namespace HolySheet.Core.Sources
         }
     }
 
-    /// <summary>
-    /// Reads the cell values of an .xlsx workbook. An xlsx file is a zip of XML parts; this reads the few parts that hold values
-    /// and ignores everything about appearance. It reads what a cell holds, not how it is displayed, with three exceptions that
-    /// keep the text the same as what the author sees: whole numbers have no ".0", date-formatted numbers become ISO dates,
-    /// and booleans are "true"/"false". Formula cells give their last calculated value.
-    /// </summary>
     public static class XlsxReader
     {
-        // Number formats that Excel defines as dates or times without listing them in the file.
         private static readonly HashSet<int> BuiltinDateFormats = new HashSet<int>
         {
             14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 45, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58
         };
 
-        // Integers up to here are exact in a double. Beyond it the fraction digits are kept as they are.
         private const double MaxExactInteger = 9007199254740992.0;
 
         public static Workbook Read(string path)
         {
-            // FileShare.ReadWrite: Excel keeps the file open while the author is editing it.
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             return Read(stream, Path.GetFileName(path));
         }
@@ -93,7 +83,6 @@ namespace HolySheet.Core.Sources
                 string? relationId = null;
                 for (bool has = reader.MoveToFirstAttribute(); has; has = reader.MoveToNextAttribute())
                 {
-                    // The relationship id is the one attribute named "id" that carries a namespace prefix (r:id).
                     if (reader.LocalName == "id" && reader.Prefix.Length > 0)
                     {
                         relationId = reader.Value;
@@ -158,8 +147,6 @@ namespace HolySheet.Core.Sources
             return result.ToArray();
         }
 
-        // Reads the text of an <si> or <is> element: its <t> children, including those inside formatted runs,
-        // but not the phonetic guide text (<rPh>) that East Asian input methods add.
         private static string ReadRichText(XmlReader reader)
         {
             if (reader.IsEmptyElement)
@@ -200,7 +187,6 @@ namespace HolySheet.Core.Sources
             return builder.ToString();
         }
 
-        // Leaves the reader on the element's end tag.
         private static string ReadInnerText(XmlReader reader)
         {
             if (reader.IsEmptyElement)
@@ -224,7 +210,6 @@ namespace HolySheet.Core.Sources
             return text ?? "";
         }
 
-        // For each cell style index: does it display its number as a date or time?
         private static bool[] ReadDateStyles(ZipArchive zip, out bool date1904)
         {
             date1904 = false;
@@ -285,7 +270,6 @@ namespace HolySheet.Core.Sources
             return styles.ToArray();
         }
 
-        // A format code shows a date or time when, outside quoted text and [bracketed] sections, it uses a date letter.
         internal static bool IsDateFormatCode(string code)
         {
             bool quoted = false;
@@ -337,7 +321,6 @@ namespace HolySheet.Core.Sources
 
                 if (reader.LocalName == "row")
                 {
-                    // Rows and cells normally carry their position, but the attribute is optional: without it they follow in order.
                     rowIndex = int.TryParse(reader.GetAttribute("r"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int rowNumber) ? rowNumber - 1 : rowIndex + 1;
                     columnIndex = -1;
                 }
@@ -407,7 +390,6 @@ namespace HolySheet.Core.Sources
                 }
                 else if (reader.LocalName == "f" && !reader.IsEmptyElement)
                 {
-                    // Skip the formula text; the cached result is in <v>.
                     ReadInnerText(reader);
                 }
             }
@@ -433,8 +415,6 @@ namespace HolySheet.Core.Sources
                         return "";
                     }
 
-                    // A whole number written out in full is kept digit for digit. Going through a double would round
-                    // anything past 2^53, and some writers do store such numbers in full.
                     if (!isDate && IsPlainInteger(value!))
                     {
                         return value!;
@@ -468,7 +448,6 @@ namespace HolySheet.Core.Sources
             return true;
         }
 
-        /// <summary>Excel stores every number as a double. 5 must come out as "5", not "5.0", or it would not parse as an integer.</summary>
         public static string FormatNumber(double number)
         {
             if (Math.Floor(number) == number && Math.Abs(number) < MaxExactInteger)
@@ -484,7 +463,6 @@ namespace HolySheet.Core.Sources
             DateTime value;
             try
             {
-                // The 1904 date system (old Mac workbooks) starts 1462 days later than the 1900 system.
                 value = DateTime.FromOADate(date1904 ? serial + 1462 : serial);
             }
             catch (ArgumentException)
@@ -509,7 +487,6 @@ namespace HolySheet.Core.Sources
             return value.Contains('\r') ? value.Replace("\r\n", "\n").Replace('\r', '\n') : value;
         }
 
-        // "AB12" → 27
         private static int ColumnIndex(string reference)
         {
             int column = 0;

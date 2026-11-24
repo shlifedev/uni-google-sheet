@@ -17,15 +17,10 @@ using static HolySheet.Editor.HolySheetText;
 
 namespace HolySheet.Editor
 {
-    /// <summary>
-    /// Tools > HolySheet > Tables. Build, look at the tables, read the problems, change holysheet.json.
-    /// Everything runs through <see cref="HolySheetProject"/>, so the window can do nothing the command line cannot.
-    /// </summary>
     public sealed class HolySheetWindow : EditorWindow
     {
         private const string StyleSheetPath = "Packages/com.lumera.holysheet/Editor/HolySheetWindow.uss";
 
-        // Problems are not a page: they open in a panel under the table view, so the data stays in sight.
         private static readonly string[] Pages = { "Tables", "Settings" };
 
         private static readonly (string Label, string[] Rows)[] HeaderLayouts =
@@ -39,7 +34,6 @@ namespace HolySheet.Editor
 
         private static readonly List<string> Serializers = new List<string> { "memorypack", "messagepack" };
         private static readonly List<string> CsvBackendNames = new List<string> { "auto", "builtin", "sep" };
-        // In GoogleAuthType order, in the window's language.
         private static List<string> AuthNames => new List<string> { T("Public link"), T("API key"), T("Service account"), T("Access token"), T("Custom provider"), T("Command") };
 
         private HolySheetConfig? _config;
@@ -48,7 +42,6 @@ namespace HolySheet.Editor
         private string? _selectedTable;
         private string? _verifyReport;
 
-        // The problems panel under the table view: open or not, and its height, kept while the window is open.
         private bool _problemsOpen;
         private float _problemsHeight = 150f;
 
@@ -72,7 +65,6 @@ namespace HolySheet.Editor
 
         public void SelectPage(string page)
         {
-            // "Problems" was a page of its own; it now opens the problems panel under the tables.
             if (page == "Problems")
             {
                 _problemsOpen = true;
@@ -93,8 +85,6 @@ namespace HolySheet.Editor
 
         private void OnEnable()
         {
-            // Set here, not in Open: a window that Unity restores from a saved layout never goes through Open, and would
-            // keep whatever title the layout was saved with.
             titleContent = new GUIContent("HolySheet");
             HolySheetProject.RunStarted += OnRunStarted;
             HolySheetProject.RunFinished += OnRunFinished;
@@ -118,15 +108,12 @@ namespace HolySheet.Editor
 
             root.AddToClassList("holysheet");
             root.AddToClassList(EditorGUIUtility.isProSkin ? "holysheet--dark" : "holysheet--light");
-            // Unity targets the panel root when no control has focus. Follow the window when it is docked or moved.
             root.RegisterCallback<AttachToPanelEvent>(evt =>
                 evt.destinationPanel.visualTree.RegisterCallback<KeyDownEvent>(OnRefreshKey, TrickleDown.TrickleDown));
             root.RegisterCallback<DetachFromPanelEvent>(evt =>
                 evt.originPanel.visualTree.UnregisterCallback<KeyDownEvent>(OnRefreshKey, TrickleDown.TrickleDown));
             root.panel?.visualTree.RegisterCallback<KeyDownEvent>(OnRefreshKey, TrickleDown.TrickleDown);
             root.Add(BuildToolbar());
-            // Ctrl+F (Cmd+F on macOS) opens the find bar of the table preview. Unity routes that shortcut through its
-            // Edit > Find menu as a "Find" command, so both the command and the raw key are handled.
             root.RegisterCallback<ValidateCommandEvent>(evt =>
             {
                 if (evt.commandName == "Find" && _page == "Tables" && _findBar != null)
@@ -162,14 +149,11 @@ namespace HolySheet.Editor
 
             ReloadConfig();
             CheckIfNothingWasRead();
-            // Errors from a run before the window opened are shown too, not only those that arrive while it is open.
             HolySheetRunResult? last = HolySheetProject.LastResult;
             _problemsOpen |= last != null && (last.Failure != null || last.Build.Diagnostics.HasErrors);
             Refresh();
         }
 
-        // After a restart or script reload, restore the preview from local files and snapshots when possible.
-        // Reading from Google waits for an explicit refresh or build.
         private void CheckIfNothingWasRead()
         {
             if (_config == null || HolySheetProject.LastResult != null || HolySheetProject.IsRunning)
@@ -182,8 +166,6 @@ namespace HolySheet.Editor
                 HolySheetProject.RunAsync(commit: false, offline: true);
             }
         }
-
-        // ------------------------------------------------------------ toolbar
 
         private Toolbar BuildToolbar()
         {
@@ -216,7 +198,6 @@ namespace HolySheet.Editor
             toolbar.Add(_statusIcon);
             _statusText = new Label();
             _statusText.AddToClassList("holysheet-status");
-            // The status says how many problems there are; clicking it shows them.
             _statusText.RegisterCallback<ClickEvent>(_ => SelectPage("Problems"));
             _statusIcon.RegisterCallback<ClickEvent>(_ => SelectPage("Problems"));
             toolbar.Add(_statusText);
@@ -299,8 +280,6 @@ namespace HolySheet.Editor
                 _banner.Add(new HelpBox(F("{0} is not in this project. The generated code will not compile until it is added.", SerializerPackage(_config.Codegen.Serializer)), HelpBoxMessageType.Warning));
             }
         }
-
-        // ------------------------------------------------------------ actions
 
         private void OnRefreshKey(KeyDownEvent evt)
         {
@@ -408,8 +387,6 @@ namespace HolySheet.Editor
             Refresh();
         }
 
-        // ------------------------------------------------------------ pages
-
         private void ShowPage()
         {
             RefreshToolbar();
@@ -495,7 +472,6 @@ namespace HolySheet.Editor
             return container;
         }
 
-        // The workbook (and sheet) a tree node stands for. Source groups stand for no single file.
         private static (string Workbook, string? Sheet)? SourceOf(TableNode node)
         {
             if (node.GroupWorkbooks != null)
@@ -513,7 +489,6 @@ namespace HolySheet.Editor
                 return null;
             }
 
-            // A table opens at the sheet that defines it: its location is "Workbook / Sheet".
             int separator = node.Table.Location.IndexOf(" / ", StringComparison.Ordinal);
             return separator < 0 ? (node.Table.Location, null) : (node.Table.Location.Substring(0, separator), node.Table.Location.Substring(separator + 3));
         }
@@ -526,7 +501,6 @@ namespace HolySheet.Editor
             }
         }
 
-        // A problem names a cell ("Book / Sheet!C8"), a sheet ("Book / Sheet"), a workbook, or the config.
         private static void OpenProblem(Diagnostic problem)
         {
             if (problem.Location == "config" || problem.Location == "holysheet")
@@ -562,15 +536,10 @@ namespace HolySheet.Editor
             }
             else
             {
-                // The program the system uses for the file: Excel for .xlsx, the text editor for .csv.
                 EditorUtility.OpenWithDefaultApp(target);
             }
         }
 
-        /// <summary>
-        /// Where a workbook can be opened: the .xlsx or .csv file on disk, or the address of a Google spreadsheet or Drive
-        /// file. A CSV workbook opens at the given sheet's file. Null when no configured source has it.
-        /// </summary>
         public static string? FindSourceFile(string workbook, string? sheet = null)
         {
             HolySheetConfig config;
@@ -610,7 +579,6 @@ namespace HolySheet.Editor
                 }
             }
 
-            // Not read (for example the file could not be parsed): look for it among the configured sources.
             foreach (SourceConfig source in config.Sources)
             {
                 switch (source.Type)
@@ -667,8 +635,6 @@ namespace HolySheet.Editor
             var icon = new Image();
             icon.AddToClassList("holysheet-problem__icon");
             row.Add(icon);
-            // Plain labels, not selectable ones: a selectable label takes the clicks, so a double-click would select a
-            // word instead of opening the file. Copying is on the right-click menu.
             var text = new VisualElement();
             text.AddToClassList("holysheet-fill");
             text.Add(Plain("holysheet-problem__message"));
@@ -716,7 +682,6 @@ namespace HolySheet.Editor
             hint.style.display = diagnostic.Hint.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
-        /// <summary>A node of the table tree: a workbook, or a table in it.</summary>
         private sealed class TableNode
         {
             public string Label = "";
@@ -726,28 +691,21 @@ namespace HolySheet.Editor
             public GoogleTab? GoogleTab;
             public RawTable? Table;
 
-            /// <summary>Set on the sheet nodes under a table built from several sheets.</summary>
             public string? Sheet;
 
-            /// <summary>The workbook of a workbook node or a sheet node.</summary>
             public string? Workbook;
 
-            /// <summary>Identifies the node across rebuilds of the tree, so a selection survives filtering.</summary>
             public string Key = "";
 
-            /// <summary>Set on source nodes (one per connected source): the workbooks shown under it.</summary>
             public string[]? GroupWorkbooks;
 
-            /// <summary>Set on an enum node: one enum from an Enums sheet or a Mapping column.</summary>
             public EnumDefinition? Enum;
 
-            /// <summary>Set on an Enums sheet node: the enums the sheet defines.</summary>
             public EnumDefinition[]? EnumSheet;
 
             public bool IsEnum => Enum != null || EnumSheet != null;
         }
 
-        /// <summary>The kind of source a workbook came from; the tree's top level groups by connection.</summary>
         private enum SourceGroup
         {
             Excel,
@@ -781,11 +739,9 @@ namespace HolySheet.Editor
             }
         }
 
-        // The connection a workbook came from: its kind and the path, spreadsheet id or folder id in holysheet.json.
         private (SourceGroup Kind, string Source) ConnectionOf(string workbook) =>
             (GroupOf(workbook), _origins.TryGetValue(workbook, out WorkbookOrigin? origin) ? origin.Source : "");
 
-        // The last folder of a path, or the start of a Google id.
         private static string ShortSource(string source)
         {
             string trimmed = source.TrimEnd('/', '\\');
@@ -830,30 +786,22 @@ namespace HolySheet.Editor
             }
         }
 
-        // The keys of the selected tree nodes. Several can be selected (Ctrl/Cmd or Shift click) for a partial build.
         private readonly HashSet<string> _selectedKeys = new HashSet<string>();
 
-        // What the selected nodes cover: a workbook node is the whole workbook, a table node every sheet it was built from.
         private SheetSelection _treeSelection = new SheetSelection();
 
         private string? _selectedSheet;
 
-        // What the tree's search box holds. It does not filter: matching names are marked yellow, as in the table's
-        // find, and scrolled to.
         private string _tableFilter = "";
         private List<TreeViewItemData<TableNode>> _treeRoots = new List<TreeViewItemData<TableNode>>();
-        // The ids of the nodes whose name matches, best first, and which of them Enter went to last (-1: none yet).
         private readonly List<int> _treeMatches = new List<int>();
         private int _treeMatchIndex = -1;
         private Label? _treeMatchCount;
 
-        // The sheets each table was assembled from. Counting them walks every row, so it is done once per build.
         private readonly Dictionary<RawTable, (string Workbook, string Sheet)[]> _sheetsByTable = new Dictionary<RawTable, (string Workbook, string Sheet)[]>();
 
         private VisualElement BuildTables() => BuildTableView();
 
-        // The data on top, the problems panel under it (closed to a one-line bar unless opened), split so it can be resized.
-        // It sits under the data only: the tree beside it keeps the full height.
         private VisualElement WithProblems(VisualElement data)
         {
             var page = new VisualElement();
@@ -881,7 +829,6 @@ namespace HolySheet.Editor
             return page;
         }
 
-        // A bar under the data: the counts, and a click opens or closes the panel above it.
         private VisualElement BuildProblemsBar(TwoPaneSplitView split)
         {
             HolySheetRunResult? result = HolySheetProject.LastResult;
@@ -916,7 +863,6 @@ namespace HolySheet.Editor
             if (items.Count > 0)
             {
                 var copy = new ToolbarButton(() => EditorGUIUtility.systemCopyBuffer = string.Join("\n\n", items.Select(item => item.ToString()))) { text = T("Copy all") };
-                // Copying is not a click on the bar.
                 copy.RegisterCallback<ClickEvent>(click => click.StopPropagation());
                 bar.Add(copy);
             }
@@ -955,7 +901,6 @@ namespace HolySheet.Editor
             BuildResult? build = HolySheetProject.LastResult?.Build;
             if (build == null || (build.RawTables.Count == 0 && build.GoogleTabs.Count == 0))
             {
-                // No tables, but there may be problems that explain why.
                 return WithProblems(Empty(HolySheetProject.IsRunning ? T("Reading the sheets…") : T("Run Check to see the tables as the build reads them.")));
             }
 
@@ -988,7 +933,6 @@ namespace HolySheet.Editor
                 Label name = element.Q<Label>(className: "holysheet-tree-row__name");
                 string query = _tableFilter.Trim();
                 string marked = query.Length > 0 ? Highlight(node.Label, query) : "";
-                // Rich text only while a match is marked, so a name with "<b>" in it shows as written.
                 name.enableRichText = marked.Length > 0;
                 name.text = marked.Length > 0 ? marked : node.Label;
                 Label note = element.Q<Label>(className: "holysheet-tree-row__note");
@@ -1009,7 +953,6 @@ namespace HolySheet.Editor
             }, TrickleDown.TrickleDown);
             side.Add(tree);
 
-            // What is selected in the tree: the toolbar's "Build selection" builds only that. Checking it is in the context menu.
             var selectionBar = new Toolbar();
             selectionBar.AddToClassList("holysheet-selection");
             var selectionLabel = new Label();
@@ -1018,7 +961,6 @@ namespace HolySheet.Editor
             side.Add(selectionBar);
             _selectionBar = selectionBar;
             _selectionLabel = selectionLabel;
-            // Double-click (or Enter) opens the workbook the node came from.
             tree.itemsChosen += _ =>
             {
                 if (tree.selectedIndex >= 0)
@@ -1091,11 +1033,9 @@ namespace HolySheet.Editor
 
                 if (shown != null && _selectedEnumKey != null)
                 {
-                    // Back from an enum to a table: draw the table even if it was the one shown before.
                     _selectedEnumKey = null;
                     preview.Clear();
                 }
-                // With several nodes selected the preview shows the one clicked last.
                 if (shown != null && (shown.Table!.Name != _selectedTable || shown.Sheet != _selectedSheet || preview.childCount == 0))
                 {
                     _selectedTable = shown.Table.Name;
@@ -1109,7 +1049,6 @@ namespace HolySheet.Editor
                 _tableFilter = change.newValue ?? "";
                 ApplyTreeSearch(tree, scroll: true);
             });
-            // Enter goes to the next match and selects it, so its table shows; Shift+Enter goes back.
             search.RegisterCallback<KeyDownEvent>(key =>
             {
                 if (key.keyCode != KeyCode.Return && key.keyCode != KeyCode.KeypadEnter)
@@ -1127,10 +1066,6 @@ namespace HolySheet.Editor
             return split;
         }
 
-        // Workbook > table > sheet. A table built from one sheet has no sheet nodes; one built from several
-        // (Item, Item.Rare, Item.Col.Balance) lists them under it, collapsed. The search box does not filter the tree;
-        // it highlights the names that match and scrolls to them (see ApplyTreeSearch).
-        // Selects what was selected before, else the first table.
         private void FillTree(TreeView tree, IReadOnlyList<RawTable> tables, VisualElement preview)
         {
             GoogleTab? Tab(string workbook, string sheet) =>
@@ -1142,7 +1077,6 @@ namespace HolySheet.Editor
             (int Id, RawTable Table, string? Sheet)? previous = null, first = null;
             var keyed = new List<(string Key, int Id)>();
             _origins = HolySheetProject.LastResult?.Build.WorkbookOrigins ?? new Dictionary<string, WorkbookOrigin>();
-            // Enums: those of an Enums sheet go under their workbook, those a Mapping column makes go under its table.
             var sheetEnums = new Dictionary<string, List<(string Sheet, List<EnumDefinition> Enums)>>(StringComparer.Ordinal);
             var mappingEnums = new Dictionary<string, List<EnumDefinition>>(StringComparer.Ordinal);
             foreach (EnumDefinition definition in HolySheetProject.LastResult?.Build.Enums ?? (IReadOnlyList<EnumDefinition>)Array.Empty<EnumDefinition>())
@@ -1180,7 +1114,6 @@ namespace HolySheet.Editor
 
             (int Id, TableNode Node)? enumPrevious = null;
             ILookup<string, RawTable> tablesByWorkbook = tables.ToLookup(WorkbookOf);
-            // Keep tabs that currently have no table accessible, including a pinned tab with an empty or invalid header.
             var represented = new HashSet<(string, string)>(tables.SelectMany(table => SheetRefsOf(table)));
             foreach (var pair in sheetEnums)
                 foreach (var group in pair.Value) represented.Add((pair.Key, group.Sheet));
@@ -1188,7 +1121,6 @@ namespace HolySheet.Editor
             List<string> workbooks = tablesByWorkbook.Select(group => group.Key).Concat(sheetEnums.Keys).Concat(standalone.Select(group => group.Key)).Distinct()
                 .OrderBy(name => (int)GroupOf(name)).ThenBy(name => ConnectionOf(name).Source, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
-            // One node per connected source (each entry under "sources" in holysheet.json), once there is more than one.
             bool showGroups = workbooks.Select(ConnectionOf).Distinct().Count() > 1;
             var workbookNodes = new List<((SourceGroup Kind, string Source) Group, string Workbook, TreeViewItemData<TableNode> Node)>();
             foreach (string workbookName in workbooks)
@@ -1224,7 +1156,6 @@ namespace HolySheet.Editor
                         }
                     }
 
-                    // Enums a Mapping column of this table makes.
                     foreach ((string mappingWorkbook, string mappingSheet) in SheetRefsOf(table))
                     {
                         if (!mappingEnums.TryGetValue(mappingWorkbook + " / " + mappingSheet, out List<EnumDefinition>? made))
@@ -1252,7 +1183,6 @@ namespace HolySheet.Editor
                         Key = "table:" + table.Name,
                         GoogleTab = references.Length == 1 ? Tab(references[0].Workbook, references[0].Sheet) : null,
                         Icon = table.Kind == TableKind.Config ? "Settings" : TableIconName,
-                        // A table built from more than one sheet (Item + Item.Rare + Item.Col.Balance) says how many more.
                         Note = sheets.Length > 1 ? "+" + (sheets.Length - 1) : "",
                         Tooltip = (table.Kind == TableKind.Config ? T("Config table: one row, fields written down the sheet.\n") : "")
                             + Plural(table.Rows.Count, "row") + " · " + Plural(table.Columns.Count, "column") + "\n" + string.Join("\n", sheets)
@@ -1270,7 +1200,6 @@ namespace HolySheet.Editor
                     }
                 }
 
-                // Enums sheets, after the tables.
                 if (sheetEnums.TryGetValue(workbookName, out List<(string Sheet, List<EnumDefinition> Enums)>? enumSheets))
                 {
                     foreach ((string enumSheet, List<EnumDefinition> definitions) in enumSheets)
@@ -1348,7 +1277,6 @@ namespace HolySheet.Editor
             }
             else
             {
-                // A source with more than one connection of its kind (two Excel folders) is told apart by its folder or id.
                 var kinds = workbookNodes.Select(entry => entry.Group).Distinct().GroupBy(group => group.Kind)
                     .ToDictionary(kind => kind.Key, kind => kind.Count());
                 foreach (IGrouping<(SourceGroup Kind, string Source), ((SourceGroup Kind, string Source) Group, string Workbook, TreeViewItemData<TableNode> Node)> group in workbookNodes.GroupBy(entry => entry.Group))
@@ -1389,7 +1317,6 @@ namespace HolySheet.Editor
             ApplyTreeSearch(tree, scroll: false);
 
             preview.Clear();
-            // Keep the earlier selection; an enum that was selected stays selected.
             (int Id, RawTable Table, string? Sheet)? selected = previous ?? first;
             (int Id, TableNode Node)? enumSelected = enumPrevious;
             if (enumSelected != null)
@@ -1413,7 +1340,6 @@ namespace HolySheet.Editor
 
             _selectedTable = selected.Value.Table.Name;
             _selectedSheet = selected.Value.Sheet;
-            // A multiple selection is kept for the nodes still shown; a single one follows the previewed table.
             var ids = new List<int>();
             if (_selectedKeys.Count > 1)
             {
@@ -1440,10 +1366,6 @@ namespace HolySheet.Editor
             ShowPreview(preview, selected.Value.Table, selected.Value.Sheet);
         }
 
-        /// <summary>
-        /// Marks the tree names that contain the search text, opens the nodes above them and, when <paramref name="scroll"/>
-        /// is set and no match is in view, scrolls to the best one. The tree keeps every node and the selection stays.
-        /// </summary>
         private void ApplyTreeSearch(TreeView tree, bool scroll)
         {
             string query = _tableFilter.Trim();
@@ -1483,21 +1405,18 @@ namespace HolySheet.Editor
                     }
                 }
 
-                // A name typed in full comes first, then the others in tree order.
                 _treeMatches.AddRange(exact);
                 _treeMatches.AddRange(partial);
             }
 
             tree.RefreshItems();
             UpdateTreeMatchCount(query);
-            // A match already in view is enough: the tree only moves when every match is out of sight.
             if (scroll && _treeMatches.Count > 0 && !_treeMatches.Any(id => IsInView(tree, id)))
             {
                 tree.ScrollToItemById(_treeMatches[0]);
             }
         }
 
-        // Whether the row of a node is within the visible part of the tree.
         private static bool IsInView(TreeView tree, int id)
         {
             int index = tree.viewController.GetIndexForId(id);
@@ -1512,7 +1431,6 @@ namespace HolySheet.Editor
             return top >= offset && top + tree.fixedItemHeight <= offset + scroll.contentViewport.layout.height;
         }
 
-        /// <summary>Selects the next (or, with -1, the previous) match, scrolls to it and shows it.</summary>
         private void StepTreeSearch(TreeView tree, int step)
         {
             if (_treeMatches.Count == 0)
@@ -1520,7 +1438,6 @@ namespace HolySheet.Editor
                 return;
             }
 
-            // The first Enter goes to the match the search scrolled to; the next ones move on from there.
             _treeMatchIndex = _treeMatchIndex < 0
                 ? (step > 0 ? 0 : _treeMatches.Count - 1)
                 : (_treeMatchIndex + step + _treeMatches.Count) % _treeMatches.Count;
@@ -1547,7 +1464,6 @@ namespace HolySheet.Editor
         private Label? _selectionLabel;
         private ToolbarButton? _selectionBuild;
 
-        // Turns the selected nodes into the sheets a partial build reads again.
         private void UpdateTreeSelection(TreeView tree)
         {
             var selection = new SheetSelection();
@@ -1592,7 +1508,6 @@ namespace HolySheet.Editor
             RefreshSelectionBuild();
         }
 
-        // The toolbar's "Build selection (2)": shown on the Tables page while something is selected.
         private void RefreshSelectionBuild()
         {
             if (_selectionBuild == null)
@@ -1609,13 +1524,11 @@ namespace HolySheet.Editor
                 return;
             }
 
-            // The number of tables the selection actually builds again: every table built from a selected sheet or workbook.
             List<string> tables = (HolySheetProject.LastResult?.Build.RawTables ?? Array.Empty<RawTable>())
                 .Where(table => SheetRefsOf(table).Any(entry => selection.Includes(entry.Workbook, entry.Sheet)))
                 .Select(table => table.Name)
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToList();
-            // Enums sheets build no table but do change the generated enums, so they are counted too.
             List<string> enums = (HolySheetProject.LastResult?.Build.Enums ?? (IReadOnlyList<EnumDefinition>)Array.Empty<EnumDefinition>())
                 .Where(definition => SplitLocation(definition.Location) is var at && IsEnumsSheet(at.Sheet) && selection.Includes(at.Workbook, at.Sheet))
                 .Select(definition => definition.Name)
@@ -1634,7 +1547,6 @@ namespace HolySheet.Editor
 
         private TableNode? _singleSelectedNode;
 
-        /// <summary>"Item.xlsx", "Job · 2 sheets", "3 sheets", "Item.xlsx + 2 sheets": what the selection bar and the context menu call the selection.</summary>
         private string DescribeSelection()
         {
             if (_singleSelectedNode?.GroupWorkbooks != null)
@@ -1667,7 +1579,6 @@ namespace HolySheet.Editor
 
         private const string EnumIconName = "holysheet:enum";
 
-        // "Book / Sheet!B2" or "Book / Sheet" into its workbook and sheet.
         private static (string Workbook, string Sheet) SplitLocation(string location)
         {
             int separator = location.IndexOf(" / ", StringComparison.Ordinal);
@@ -1681,7 +1592,6 @@ namespace HolySheet.Editor
             return (location.Substring(0, separator), cell >= 0 ? sheet.Substring(0, cell) : sheet);
         }
 
-        // The sheet rule: "Enums", or a name ending in ".Enums" (Battle.Enums).
         private static bool IsEnumsSheet(string sheet) => sheet == "Enums" || sheet.EndsWith(".Enums", StringComparison.Ordinal);
 
         private TableNode EnumNode(EnumDefinition definition, bool mapping)
@@ -1700,7 +1610,6 @@ namespace HolySheet.Editor
             };
         }
 
-        // "byte · Flags · 6 members" / "int · Mapping · 12 members".
         private static string DescribeEnum(EnumDefinition definition, bool mapping)
         {
             return definition.Underlying.ToString().ToLowerInvariant()
@@ -1709,11 +1618,9 @@ namespace HolySheet.Editor
                 + " · " + Plural(definition.Members.Count, "member");
         }
 
-        /// <summary>An enum's members, or every enum of an Enums sheet: name, value, comment.</summary>
         private void ShowEnumPreview(VisualElement container, TableNode node)
         {
             container.Clear();
-            // Find works on tables only.
             _findBar = null;
             _findField = null;
             EnumDefinition[] definitions = node.Enum != null ? new[] { node.Enum } : node.EnumSheet ?? Array.Empty<EnumDefinition>();
@@ -1750,7 +1657,6 @@ namespace HolySheet.Editor
             columns.Add((T("Value"), 2, 110f, true));
             columns.Add((T("Comment"), 3, 260f, false));
 
-            // The rows in the order on screen; sorting replaces it, member order is kept in rows.
             List<string[]> shown = rows;
             var grid = new MultiColumnListView
             {
@@ -1806,7 +1712,6 @@ namespace HolySheet.Editor
             container.Add(grid);
         }
 
-        // Flags read better as bits: "8  (1 << 3)".
         private static string FormatEnumValue(EnumDefinition definition, long value)
         {
             if (definition.IsFlags && value > 0 && (value & (value - 1)) == 0)
@@ -1868,7 +1773,6 @@ namespace HolySheet.Editor
                     }
                 }
 
-                // Extra columns come from Table.Col.* sheets, extra rows from Table.Child sheets.
                 foreach (RawColumn column in table.Columns)
                 {
                     Add(column.NameCell.Origin);
@@ -1889,7 +1793,6 @@ namespace HolySheet.Editor
             return sheets;
         }
 
-        // xlsx files show as Excel workbooks, CSV folders as folders, and anything else is a Google spreadsheet.
         private string WorkbookIcon(string workbook)
         {
             if (_origins.TryGetValue(workbook, out WorkbookOrigin? origin))
@@ -1901,7 +1804,6 @@ namespace HolySheet.Editor
                     case SourceType.Google:
                         return GoogleSheetsIconName;
                     case SourceType.GoogleFolder:
-                        // A Drive folder holds both: Google spreadsheets and uploaded .xlsx files.
                         return workbook.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? ExcelIconName : GoogleSheetsIconName;
                     default:
                         return ExcelIconName;
@@ -1918,7 +1820,6 @@ namespace HolySheet.Editor
             return csv ? "Folder Icon" : GoogleSheetsIconName;
         }
 
-        // A sheet's location is "Workbook / Sheet". A workbook is a file or a spreadsheet title, which cannot contain '/'.
         private static string WorkbookOf(RawTable table)
         {
             int separator = table.Location.IndexOf(" / ", StringComparison.Ordinal);
@@ -1927,21 +1828,14 @@ namespace HolySheet.Editor
 
         private static bool Contains(string text, string part) => text.IndexOf(part, StringComparison.OrdinalIgnoreCase) >= 0;
 
-        /// <summary>
-        /// Shows a table, or the part of it that came from one sheet: that sheet's rows, and its columns when it is a column
-        /// extension (plus the key they are matched by).
-        /// </summary>
         private VisualElement? _findBar;
         private ToolbarSearchField? _findField;
 
-        // Find searches the key column unless the user switched to all columns. One choice for every table.
         private bool _findInAllColumns;
 
-        // Matched text: a yellow background with dark text, readable on both editor themes.
         private const string MarkOpen = "<mark=#F2C94CE6><color=#1E1E1E>";
         private const string MarkClose = "</color></mark>";
 
-        /// <summary>Shows the find bar of the table preview and puts the cursor in it. False when there is no table to search.</summary>
         public bool OpenFind()
         {
             if (_page != "Tables" || _findBar == null || _findField == null)
@@ -1991,7 +1885,6 @@ namespace HolySheet.Editor
                     rows = fromSheet;
                     if (ownColumns.Count > 0 && ownColumns.Count < columns.Count && fromSheet.Count > 0)
                     {
-                        // The defining sheet: hide the columns that other sheets added.
                         columns = ownColumns;
                     }
                 }
@@ -2012,7 +1905,6 @@ namespace HolySheet.Editor
             captionRow.Add(shortcut);
             container.Add(captionRow);
 
-            // Find bar: search the key or every column, type, and only matching rows stay, with the matches highlighted.
             var findBar = new Toolbar();
             findBar.AddToClassList("holysheet-find");
             findBar.style.display = DisplayStyle.None;
@@ -2044,16 +1936,11 @@ namespace HolySheet.Editor
                 fixedItemHeight = 20,
                 showAlternatingRowBackgrounds = AlternatingRowBackground.ContentOnly,
                 selectionType = SelectionType.None,
-                // Clicking a heading sorts by it, Shift+click adds a second column. Unity draws the arrows; the rows are
-                // ordered here, after the find filter, so find and sort work together.
                 sortingMode = ColumnSortingMode.Custom
             };
             grid.AddToClassList("holysheet-fill");
             grid.AddToClassList("holysheet-grid");
             ApplyViewStyle(grid);
-            // The row number is the sheet's own, so it matches the cell addresses on the Problems page. Rows that another
-            // sheet added (Item.Rare) carry that sheet's short name, so "Rare 4" is not mistaken for row 4 of Item.
-            // The column is as wide as the longest label needs, so 200,000 rows do not show as "199…".
             string definingSheet = table.Columns.Count > 0 ? table.Columns[0].NameCell.Origin.Sheet : "";
             string RowLabel(Cell[] row)
             {
@@ -2110,8 +1997,6 @@ namespace HolySheet.Editor
                     title = raw.Name,
                     width = 120,
                     makeHeader = () => Header(raw.Name, raw.TypeText, raw.Comment),
-                    // Values keep the default text color; only the type under the heading is colored.
-                    // Numbers line up on the right, as in a spreadsheet.
                     makeCell = () => Cell(number ? "holysheet-cell--number" : ""),
                     bindCell = (element, row) =>
                     {
@@ -2120,7 +2005,6 @@ namespace HolySheet.Editor
                         string text = cell.Text.Replace('\n', ' ');
                         bool searched = query.Length > 0 && (searchAll || column == keyColumn);
                         string marked = searched ? Highlight(text, query) : "";
-                        // Rich text is only on while highlighting, so a cell that happens to contain "<b>" shows it as typed.
                         label.enableRichText = marked.Length > 0;
                         label.text = marked.Length > 0 ? marked : text;
                         label.tooltip = cell.Origin.A1;
@@ -2134,7 +2018,6 @@ namespace HolySheet.Editor
             noMatch.style.display = DisplayStyle.None;
             container.Add(noMatch);
 
-            // How each column compares when sorted. The Row column is sheet order, which SortRows knows by itself.
             var sortKinds = new Dictionary<string, (int Column, SortKind Kind)>();
             foreach (int index in columns)
             {
@@ -2152,7 +2035,6 @@ namespace HolySheet.Editor
                 return (found.Kind, row => column < row.Length ? row[column].Text : "");
             }
 
-            // Filter, then sort. Rows keep their sheet order through the filter, so sorting by Row puts that order back.
             void ApplyView()
             {
                 query = (findField.value ?? "").Trim();
@@ -2191,7 +2073,6 @@ namespace HolySheet.Editor
             grid.columnSortingChanged += ApplyView;
         }
 
-        /// <summary>How a column's text is compared when the data view is sorted.</summary>
         internal enum SortKind
         {
             Text,
@@ -2199,7 +2080,6 @@ namespace HolySheet.Editor
             Bool
         }
 
-        // Single numbers sort by value and booleans false before true. Everything else, arrays included, sorts as text.
         private static SortKind SortKindOf(string typeText)
         {
             if (IsArray(typeText))
@@ -2219,7 +2099,6 @@ namespace HolySheet.Editor
             }
         }
 
-        // A cell's sort value, read once per sort. Missing: empty, or not a number in a number column.
         private readonly struct SortKey
         {
             public readonly bool Missing;
@@ -2244,7 +2123,6 @@ namespace HolySheet.Editor
                 switch (kind)
                 {
                     case SortKind.Number:
-                        // Only the leading number counts, so an enum value shown as "8  (1 << 3)" sorts as 8.
                         int end = 0;
                         while (end < text.Length && !char.IsWhiteSpace(text[end]))
                         {
@@ -2255,7 +2133,6 @@ namespace HolySheet.Editor
                             ? new SortKey(false, number, text)
                             : new SortKey(true, 0, text);
                     case SortKind.Bool:
-                        // As the build reads booleans: 1 / true and 0 / false.
                         if (text == "1" || string.Equals(text, "true", StringComparison.OrdinalIgnoreCase))
                         {
                             return new SortKey(false, 1, text);
@@ -2270,17 +2147,11 @@ namespace HolySheet.Editor
             }
         }
 
-        /// <summary>
-        /// Orders <paramref name="rows"/> by the grid's sorted columns, first column first. A column named "row" is the
-        /// order the rows came in; others are looked up with <paramref name="columnFor"/>. Empty cells go last in either
-        /// direction, as in a spreadsheet, and ties keep the order the rows came in.
-        /// </summary>
         internal static List<T> SortRows<T>(List<T> rows, IEnumerable<SortColumnDescription> sorted, Func<string, (SortKind Kind, Func<T, string> Text)?> columnFor)
         {
             var keys = new List<(SortKey[]? Keys, SortKind Kind, bool Descending)>();
             foreach (SortColumnDescription description in sorted)
             {
-                // A heading click describes the column by index, code by name; the resolved column has both.
                 string name = description.column?.name ?? "";
                 if (name.Length == 0)
                 {
@@ -2299,7 +2170,6 @@ namespace HolySheet.Editor
                     continue;
                 }
 
-                // Parse each cell once here, not on every comparison: a table can have a few hundred thousand rows.
                 var values = new SortKey[rows.Count];
                 for (int i = 0; i < rows.Count; i++)
                 {
@@ -2330,7 +2200,6 @@ namespace HolySheet.Editor
                         SortKey y = values[b];
                         if (x.Missing || y.Missing)
                         {
-                            // Not flipped by the direction: blanks stay at the bottom.
                             result = x.Missing == y.Missing ? 0 : x.Missing ? 1 : -1;
                             if (result != 0)
                             {
@@ -2349,7 +2218,6 @@ namespace HolySheet.Editor
                     }
                 }
 
-                // Array.Sort is not stable; the original position breaks ties.
                 return a.CompareTo(b);
             });
 
@@ -2362,10 +2230,6 @@ namespace HolySheet.Editor
             return sortedRows;
         }
 
-        /// <summary>
-        /// Text order for people: case is ignored and runs of digits compare as numbers, so "Item2" comes before "Item10".
-        /// Other characters compare by code point, which puts Hangul in 가나다 order.
-        /// </summary>
         public static int CompareNatural(string a, string b)
         {
             int i = 0;
@@ -2386,7 +2250,6 @@ namespace HolySheet.Editor
                         endB++;
                     }
 
-                    // Leading zeros do not change the value; "007" equals "7" here, and the final ordinal check splits them.
                     int startA = i;
                     while (startA < endA - 1 && a[startA] == '0')
                     {
@@ -2436,10 +2299,6 @@ namespace HolySheet.Editor
 
         private static bool IsAsciiDigit(char c) => c >= '0' && c <= '9';
 
-        /// <summary>
-        /// Wraps every occurrence of <paramref name="query"/> (ignoring case) in a highlight. The rest is wrapped in noparse,
-        /// so text that looks like a rich text tag is shown as written. Empty when there is no match.
-        /// </summary>
         private static string Highlight(string text, string query)
         {
             int at = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
@@ -2468,15 +2327,10 @@ namespace HolySheet.Editor
         {
             if (text.Length > 0)
             {
-                // "</noparse>" inside the text would end the noparse block early; break it so it cannot.
                 builder.Append("<noparse>").Append(text.Replace("</noparse>", "</no\u200Bparse>")).Append("</noparse>");
             }
         }
 
-        /// <summary>
-        /// The color group of a column type, used on the type under each heading and, more softly, on the values.
-        /// Integers, decimals, booleans, dates, enums and references each get their own color; text keeps the default.
-        /// </summary>
         private static string TypeClass(string typeText)
         {
             if (!TypeExpression.TryParse(typeText, out TypeExpression? expression, out _) || expression == null)
@@ -2496,7 +2350,6 @@ namespace HolySheet.Editor
 
             if (!Scalars.TryFind(expression.Name, out ScalarKind kind))
             {
-                // A bare name that is not a value type is an enum.
                 return "holysheet-type--enum";
             }
 
@@ -2538,7 +2391,6 @@ namespace HolySheet.Editor
             return header;
         }
 
-        /// <summary>Lines drawn between the cells of the data view.</summary>
         public enum GridLines
         {
             None,
@@ -2547,7 +2399,6 @@ namespace HolySheet.Editor
             Both
         }
 
-        /// <summary>How text sits in the cells of the data view. Auto puts numbers on the right and the rest on the left.</summary>
         public enum CellAlignment
         {
             Auto,
@@ -2556,8 +2407,6 @@ namespace HolySheet.Editor
             Right
         }
 
-        // How the data view looks is a matter of taste, so it is kept per user in UserSettings, next to the language.
-        // Out of the box: lines between every cell, text in the middle, striped rows.
         public static GridLines ViewGridLines
         {
             get => Enum.TryParse(HolySheetText.GetSetting("view.gridLines"), true, out GridLines lines) ? lines : GridLines.Both;
@@ -2576,7 +2425,6 @@ namespace HolySheet.Editor
             set => HolySheetText.SetSetting("view.stripes", value ? "true" : "false");
         }
 
-        /// <summary>Gives a data grid the user's view style: grid lines, alignment and striped rows.</summary>
         private static void ApplyViewStyle(MultiColumnListView grid)
         {
             GridLines lines = ViewGridLines;
@@ -2593,7 +2441,6 @@ namespace HolySheet.Editor
             }
         }
 
-        /// <summary>Saves the view style for this user and applies it to the grids on screen.</summary>
         public void SetViewStyle(GridLines lines, CellAlignment alignment, bool stripes)
         {
             ViewGridLines = lines;
@@ -2602,16 +2449,13 @@ namespace HolySheet.Editor
             rootVisualElement.Query<MultiColumnListView>(className: "holysheet-grid").ForEach(ApplyViewStyle);
         }
 
-        /// <summary>A small "View" dropdown button in a caption: grid lines, text alignment and striped rows.</summary>
         private Button ViewMenu()
         {
             var view = new Button { tooltip = T("How the table looks. Kept for you only, in UserSettings.") };
             view.AddToClassList("holysheet-caption__menu");
-            // A label and an arrow side by side; the button's own text would be drawn under the arrow.
             var label = new Label(T("View"));
             label.AddToClassList("holysheet-caption__menu-label");
             view.Add(label);
-            // The arrow of Unity's own popup fields, so it reads as a dropdown.
             var arrow = new VisualElement();
             arrow.AddToClassList("unity-base-popup-field__arrow");
             arrow.AddToClassList("holysheet-caption__menu-arrow");
@@ -2673,7 +2517,6 @@ namespace HolySheet.Editor
                 menu.AddItem(new GUIContent(T("Excel workbook")), false, () => AddSource(new SourceConfig { Type = SourceType.Xlsx, Path = "Sheets" }));
                 menu.AddItem(new GUIContent(T("CSV folder")), false, () => AddSource(new SourceConfig { Type = SourceType.Csv, Path = "Sheets/Csv" }));
                 menu.AddItem(new GUIContent("Google Sheets"), false, () => AddSource(new SourceConfig { Type = SourceType.Google, SpreadsheetId = "" }));
-                // A folder can only be listed with credentials, so it starts on an API key rather than on "public".
                 menu.AddItem(new GUIContent(T("Google Drive folder")), false, () => AddSource(new SourceConfig { Type = SourceType.GoogleFolder, FolderId = "", Auth = { Type = GoogleAuthType.ApiKey } }));
                 menu.DropDown(add.worldBound);
             };
@@ -2807,7 +2650,6 @@ namespace HolySheet.Editor
                 source.Auth.Type = (GoogleAuthType)AuthNames.IndexOf(value);
                 if (source.Auth.Type == GoogleAuthType.Custom && string.IsNullOrEmpty(source.Auth.Provider) && HolySheetProject.CredentialProviderNames() is { Count: 1 } only)
                 {
-                    // With a single provider in the project there is nothing to choose.
                     source.Auth.Provider = only[0];
                 }
 
@@ -2851,7 +2693,6 @@ namespace HolySheet.Editor
                 List<GoogleSheetRef>? parsed = ParseTabs(change.newValue);
                 if (parsed == null)
                 {
-                    // Keep what was there rather than silently dropping the entries that did not parse.
                     tabs.SetValueWithoutNotify(FormatTabs(source.Sheets));
                     Debug.LogWarning("[HolySheet] Tabs must be Name:gid pairs separated by commas, e.g. Item:0, Monster:123456.");
                     return;
@@ -2865,7 +2706,6 @@ namespace HolySheet.Editor
             return card;
         }
 
-        // Custom credentials: the provider classes this editor found, by name.
         private void AddProviderChoice(VisualElement card, SourceConfig source)
         {
             List<string> names = HolySheetProject.CredentialProviderNames().ToList();
@@ -2882,7 +2722,6 @@ namespace HolySheet.Editor
             bool missing = !string.IsNullOrEmpty(current) && !names.Contains(current!, StringComparer.OrdinalIgnoreCase);
             if (missing)
             {
-                // Kept in the list so the choice in holysheet.json is shown as it is, not silently replaced.
                 names.Add(current!);
             }
 
@@ -2907,19 +2746,16 @@ namespace HolySheet.Editor
             ShowPage();
         }
 
-        // Settings of this window for this user, not of the project: kept in UserSettings, not in holysheet.json.
         private Foldout BuildEditorSettings()
         {
             Foldout editor = Section(T("Editor"), "editor", "d_UnityEditor.SceneHierarchyWindow", open: true);
             string systemName = Application.systemLanguage == SystemLanguage.Korean ? "한국어" : "English";
             var names = new List<string> { F("System ({0})", systemName), "English", "한국어" };
-            // Not through Choice(): that saves holysheet.json, and the language is not part of it.
             var language = new DropdownField(T("Language"), names, (int)HolySheetText.Language) { tooltip = T("The language of this window. Kept for you only, in UserSettings.") };
             language.AddToClassList(DropdownField.alignedFieldUssClassName);
             language.RegisterValueChangedCallback(change =>
             {
                 HolySheetText.Language = (HolySheetLanguage)names.IndexOf(change.newValue);
-                // Every label is made in the language of the moment, so the window is built again.
                 rootVisualElement.schedule.Execute(CreateGUI);
             });
             editor.Add(language);
@@ -3038,8 +2874,6 @@ namespace HolySheet.Editor
             ShowPage();
         }
 
-        // ------------------------------------------------------------ fields
-
         private enum Browse
         {
             Folder,
@@ -3052,7 +2886,6 @@ namespace HolySheet.Editor
             string stateKey = "HolySheet.Window.Section." + key;
             var foldout = new Foldout { text = title, value = SessionState.GetBool(stateKey, open) };
             foldout.AddToClassList("holysheet-section");
-            // The header looks like an inspector component header: an icon before the title, a bar behind it.
             VisualElement? input = foldout.Q(className: Foldout.inputUssClassName);
             if (input != null)
             {
@@ -3084,10 +2917,6 @@ namespace HolySheet.Editor
         private static Texture2D? _tableIcon;
         private static bool _tableIconProSkin;
 
-        /// <summary>
-        /// A small table glyph: frame, filled header row, grid lines. Drawn in code in the editor's text color, because no
-        /// built-in icon looks like a plain table and an icon picked by name can be missing on one of the two skins.
-        /// </summary>
         private static Texture2D TableIcon()
         {
             if (_tableIcon != null && _tableIconProSkin == EditorGUIUtility.isProSkin)
@@ -3103,7 +2932,6 @@ namespace HolySheet.Editor
             {
                 for (int x = 0; x < size; x++)
                 {
-                    // Texture rows run bottom to top; "top" is measured from the upper edge.
                     int top = size - 1 - y;
                     bool inside = x >= 3 && x <= 28 && top >= 5 && top <= 26;
                     bool frame = inside && (x <= 4 || x >= 27 || top <= 6 || top >= 25);
@@ -3137,7 +2965,6 @@ namespace HolySheet.Editor
                 case GoogleSheetsIconName:
                     return DrawnIcon(name, GoogleSheetsPixel);
                 case EnumIconName:
-                    // In the enum type color of the current skin.
                     return EditorGUIUtility.isProSkin ? DrawnIcon(name + ":dark", (x, y) => EnumPixel(x, y, EnumDark)) : DrawnIcon(name + ":light", (x, y) => EnumPixel(x, y, EnumLight));
                 default:
                     return Icon(name);
@@ -3150,7 +2977,6 @@ namespace HolySheet.Editor
         private static readonly Color EnumDark = new Color32(0xD8, 0xC5, 0x78, 0xFF);
         private static readonly Color EnumLight = new Color32(0x85, 0x70, 0x0F, 0xFF);
 
-        // A short list: three bullets with lines, the look of a set of named values.
         private static Color? EnumPixel(float x, float y, Color ink)
         {
             for (int row = 0; row < 3; row++)
@@ -3168,13 +2994,10 @@ namespace HolySheet.Editor
         private static readonly Color SheetsGreen = new Color32(0x0F, 0x9D, 0x58, 0xFF);
         private static readonly Color SheetsFold = new Color32(0x87, 0xCE, 0xAC, 0xFF);
 
-        // The Excel file look: a green workbook with grid bands, and the dark green tile with a white X in front of it.
-        // Coordinates are on a 32 by 32 grid, y down.
         private static Color? ExcelPixel(float x, float y)
         {
             if (InRoundedRect(x, y, 3f, 6f, 19f, 26f, 2f))
             {
-                // The X: two strokes across the tile.
                 float u = (x - 6.5f) / 9f, v = (y - 9.5f) / 13f;
                 bool inside = u >= 0f && u <= 1f && v >= 0f && v <= 1f;
                 bool stroke = inside && (Mathf.Abs(u - v) < 0.2f || Mathf.Abs(u + v - 1f) < 0.2f);
@@ -3183,7 +3006,6 @@ namespace HolySheet.Editor
 
             if (InRoundedRect(x, y, 10f, 3f, 29.5f, 29f, 2f))
             {
-                // Four bands, lighter towards the top, split by a column line.
                 if (x > 19.5f && x < 20.5f)
                 {
                     return ExcelDark;
@@ -3195,7 +3017,6 @@ namespace HolySheet.Editor
             return null;
         }
 
-        // The Google Sheets look: a green page with a folded corner and a white grid.
         private static Color? GoogleSheetsPixel(float x, float y)
         {
             const float left = 7f, top = 2f, right = 25f, bottom = 30f, fold = 7f;
@@ -3232,7 +3053,6 @@ namespace HolySheet.Editor
             return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= radius * radius;
         }
 
-        // Paints a 32 by 32 icon with 4 by 4 samples per pixel, so the diagonals and corners are smooth at 16 points.
         private static Texture2D DrawnIcon(string name, Func<float, float, Color?> paint)
         {
             if (DrawnIcons.TryGetValue(name, out Texture2D? cached) && cached != null)
@@ -3254,14 +3074,12 @@ namespace HolySheet.Editor
                             Color? color = paint(px + (sx + 0.5f) / samples, py + (sy + 0.5f) / samples);
                             if (color.HasValue)
                             {
-                                // Premultiplied, so edges blend towards transparent instead of towards black.
                                 sum += new Color(color.Value.r, color.Value.g, color.Value.b, 1f);
                             }
                         }
                     }
 
                     float alpha = sum.a / (samples * samples);
-                    // Texture rows run bottom to top.
                     pixels[(size - 1 - py) * size + px] = alpha <= 0f ? Color.clear : new Color(sum.r / sum.a, sum.g / sum.a, sum.b / sum.a, alpha);
                 }
             }
@@ -3276,7 +3094,6 @@ namespace HolySheet.Editor
 
         private static Texture2D Icon(string name)
         {
-            // IconContent picks the dark-skin variant itself when there is one.
             return name.Length == 0 ? null! : (Texture2D)EditorGUIUtility.IconContent(name).image;
         }
 
@@ -3384,8 +3201,6 @@ namespace HolySheet.Editor
             return empty;
         }
 
-        // ------------------------------------------------------------ helpers
-
         private static string Plural(int count, string noun) => HolySheetText.Count(count, noun);
 
         private static string? Optional(string value) => value.Length == 0 ? null : value;
@@ -3413,7 +3228,6 @@ namespace HolySheet.Editor
 
         private static string FormatTabs(List<GoogleSheetRef> tabs) => string.Join(", ", tabs.Select(tab => tab.Name + ":" + tab.Gid));
 
-        /// <summary>Null when any entry is not a Name:gid pair.</summary>
         private static List<GoogleSheetRef>? ParseTabs(string text)
         {
             var tabs = new List<GoogleSheetRef>();

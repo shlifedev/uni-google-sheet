@@ -11,7 +11,6 @@ import type {
   VerifyReport,
 } from "./types";
 
-/** An error from the engine (its JSON-RPC error) or from the link to it. */
 export class RpcError extends Error {
   constructor(
     public readonly code: number,
@@ -37,7 +36,6 @@ async function call<T>(method: string, params: Record<string, unknown> = {}): Pr
   }
 }
 
-/** One method per engine call. The names match RpcServer.DispatchAsync. */
 export const rpc = {
   info: () => call<AppInfo>("app.info"),
   open: (path: string) => call<ProjectState>("project.open", { path }),
@@ -64,7 +62,6 @@ export type HostEvent =
   | { method: "run.started"; params: { commit: boolean; offline: boolean; only: string[]; trigger: string } }
   | { method: "run.finished"; params: RunResult };
 
-/** Notifications from the engine, and the shell's word that the engine was started again. */
 export async function onHostEvents(handlers: {
   event: (event: HostEvent) => void;
   restarted: () => void;

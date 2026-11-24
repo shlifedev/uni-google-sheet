@@ -1,6 +1,3 @@
-# Builds the desktop app (desktop/) for macOS and Windows and keeps the installers as run artifacts.
-# The engine sidecar (dotnet/HolySheet.Desktop.Host) is published by desktop/scripts/build-host.mjs, which the Tauri build runs.
-# Unsigned: code signing and notarization need certificates this workflow does not have yet.
 name: desktop
 
 on:

@@ -7,7 +7,6 @@ import { MenuIcon } from "./Icons";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { RunResult } from "../types";
 
-/** "Built · 21 tables", "Failed · 3 errors", "Running": what the status says, as in the Unity window. */
 export function statusText(run: RunResult | null, running: boolean): { text: string; tone: "ok" | "bad" | "busy" | "idle" } {
   if (running) return { text: T("Running"), tone: "busy" };
   if (!run) return { text: T("Not read yet"), tone: "idle" };

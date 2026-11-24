@@ -4,13 +4,11 @@ use serde_json::Value;
 use sidecar::{Host, RpcError};
 use tauri::{AppHandle, Manager, RunEvent, State};
 
-/// The only command the web view has: one JSON-RPC call to the engine process.
 #[tauri::command]
 async fn rpc(app: AppHandle, host: State<'_, Host>, method: String, params: Option<Value>) -> Result<Value, RpcError> {
     host.call(&app, &method, params.unwrap_or(Value::Object(Default::default()))).await
 }
 
-/// A project given on the command line (`HolySheet path/to/holysheet.json` or a folder), opened instead of the most recent one.
 #[tauri::command]
 fn launch_path() -> Option<String> {
     std::env::args().skip(1).find(|arg| !arg.starts_with('-'))

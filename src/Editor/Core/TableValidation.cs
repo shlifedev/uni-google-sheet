@@ -68,7 +68,6 @@ namespace HolySheet.Core
         public T Get<T>(string field)
         {
             object value = _row.Values[_table.Index(field)];
-            // A rule cannot change the data another rule or the serializer sees.
             return (T)(value is Array array ? array.Clone() : value);
         }
 

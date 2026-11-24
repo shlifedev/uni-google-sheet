@@ -5,18 +5,12 @@ using System.Collections.Generic;
 
 namespace HolySheet
 {
-    /// <summary>
-    /// A read-only view over an array owned by a loaded table.
-    /// There is no way to write through it: no setter, no mutable span, and the array itself is never handed out.
-    /// It is a struct the size of one reference, so passing it around allocates nothing.
-    /// </summary>
     public readonly struct ReadOnlyArray<T> : IReadOnlyList<T>, IEquatable<ReadOnlyArray<T>>
     {
         private static readonly T[] EmptyArray = new T[0];
 
         private readonly T[]? _items;
 
-        /// <summary>Wraps an array without copying it. The caller must not keep writing to the array afterwards.</summary>
         public ReadOnlyArray(T[]? items)
         {
             _items = items;
@@ -44,7 +38,6 @@ namespace HolySheet
             }
         }
 
-        /// <summary>Returns a reference to the element that cannot be written through. Avoids copying large structs.</summary>
         public ref readonly T ItemRef(int index)
         {
             T[]? items = _items;
@@ -66,7 +59,6 @@ namespace HolySheet
             return new ReadOnlyMemory<T>(_items);
         }
 
-        /// <summary>Copies the elements into a new array the caller owns.</summary>
         public T[] ToArray()
         {
             T[]? items = _items;
@@ -105,7 +97,6 @@ namespace HolySheet
             return new Enumerator(_items);
         }
 
-        /// <summary>Two views are equal when they look at the same array.</summary>
         public bool Equals(ReadOnlyArray<T> other)
         {
             return ReferenceEquals(_items, other._items);

@@ -1,4 +1,3 @@
-// Small inline icons, drawn for this app so it needs no icon font. 16px grid, currentColor unless they carry meaning.
 import type { IconName } from "../lib/tree";
 
 type Props = { size?: number; className?: string };

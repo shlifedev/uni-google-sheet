@@ -12,21 +12,15 @@ using HolySheet.Core.Csv;
 
 namespace HolySheet.Core.Sources
 {
-    /// <summary>Where sheets come from. A source turns files or a remote spreadsheet into workbooks of plain text cells.</summary>
     public interface IWorkbookSource
     {
-        /// <summary>Short text for logs, such as the path or the spreadsheet id.</summary>
         string Description { get; }
 
-        /// <summary>Files or folders whose changes mean this source should be read again. Empty for remote sources.</summary>
         IReadOnlyList<string> WatchPaths { get; }
 
-        /// <summary>Reads everything. Problems that leave the rest readable are reported as diagnostics instead of thrown.</summary>
         Task<IReadOnlyList<Workbook>> LoadAsync(DiagnosticBag diagnostics, CancellationToken cancellationToken);
     }
 
-    /// <summary>A folder of .csv files. Each file is one sheet, named after the file; the folder is the workbook.</summary>
-    /// <remarks>With a selection, only the selected files are parsed.</remarks>
     public sealed class CsvDirectorySource : IWorkbookSource
     {
         private readonly string directory;
@@ -64,8 +58,6 @@ namespace HolySheet.Core.Sources
                 .Where(file => only == null || only.Includes(name, Path.GetFileNameWithoutExtension(file))).ToArray();
             Array.Sort(files, StringComparer.Ordinal);
 
-            // Files are independent, so they are read and parsed at the same time. Results and problems are then
-            // collected in file order, which keeps the outcome the same however the work was scheduled.
             var grids = new List<string[]>?[files.Length];
             var failures = new Exception?[files.Length];
             Parallel.For(0, files.Length, new ParallelOptions { CancellationToken = cancellationToken }, index =>
@@ -102,8 +94,6 @@ namespace HolySheet.Core.Sources
         }
     }
 
-    /// <summary>One .xlsx file, or every .xlsx file directly inside a folder. Each file is a workbook.</summary>
-    /// <remarks>With a selection, files with nothing selected are not opened.</remarks>
     public sealed class XlsxSource : IWorkbookSource
     {
         private readonly string path;
@@ -115,7 +105,6 @@ namespace HolySheet.Core.Sources
             this.only = only;
         }
 
-        // Excel writes "~$Book.xlsx" next to a workbook while it is open. It is a lock file, not a workbook.
         private const string LockFilePrefix = "~$";
 
         public string Description => path;
@@ -168,7 +157,6 @@ namespace HolySheet.Core.Sources
         }
     }
 
-    /// <summary>Workbooks that are already in memory.</summary>
     public sealed class MemoryWorkbookSource : IWorkbookSource
     {
         private readonly Workbook[] workbooks;
@@ -192,7 +180,6 @@ namespace HolySheet.Core.Sources
     {
         private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false);
 
-        // Opens with sharing so a file that an editor or a sync client still has open can be read.
         public static string ReadAllText(string path)
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
@@ -201,7 +188,6 @@ namespace HolySheet.Core.Sources
         }
     }
 
-    /// <summary>Creates the sources a config lists.</summary>
     public static class WorkbookSources
     {
         public static IReadOnlyList<IWorkbookSource> Create(HolySheetConfig config, ICsvParser parser, bool offline = false, HttpMessageHandler? httpHandler = null, GoogleEndpoints? endpoints = null, SheetSelection? only = null, IReadOnlyList<IGoogleCredentialProvider>? credentialProviders = null)
@@ -212,7 +198,6 @@ namespace HolySheet.Core.Sources
             bool offline = options.Offline;
             bool refreshGoogle = options.RefreshGoogle && !offline;
             var sources = new List<IWorkbookSource>(config.Sources.Count);
-            // Copies of Google files by Drive version, so unchanged files are not downloaded again.
             string remoteCache = Path.Combine(config.Resolve(config.CacheDirectory), "google");
             var copies = new GoogleLocalCopies(config.BaseDirectory);
             foreach (SourceConfig source in config.Sources)

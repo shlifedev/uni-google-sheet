@@ -7,23 +7,16 @@ using System.Threading.Tasks;
 
 namespace HolySheet
 {
-    /// <summary>
-    /// Where the manifest and data files come from. The loader only ever asks for a file by its name,
-    /// so the same generated code reads from disk on a server, from StreamingAssets in a player, or from a downloaded patch.
-    /// </summary>
     public abstract class TableSource
     {
-        /// <summary>Returns the file's bytes, or null when there is no such file.</summary>
         public abstract byte[]? Read(string fileName);
 
-        /// <summary>Asynchronous read. The default runs <see cref="Read"/> inline; override it where blocking I/O is not allowed.</summary>
         public virtual ValueTask<byte[]?> ReadAsync(string fileName, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return new ValueTask<byte[]?>(Read(fileName));
         }
 
-        /// <summary>A short description for error messages, such as the directory path.</summary>
         public virtual string Description => GetType().Name;
 
         public static TableSource FromDirectory(string directory)
@@ -41,12 +34,6 @@ namespace HolySheet
             return new MemoryTableSource(files);
         }
 
-        /// <summary>
-        /// Reads the manifest and every data file it lists into memory, and returns a source that serves them from there.
-        /// Use it to separate reading from decoding: read on the one thread a source allows (Unity's Resources must be read on
-        /// the main thread), then load from the result with <see cref="TableLoadOptions.Parallel"/>. Files that are missing are
-        /// simply absent from the result; the load that follows reports them.
-        /// </summary>
         public static MemoryTableSource Preload(TableSource source, string manifestFileName = TableManifest.DefaultFileName)
         {
             if (source == null)
@@ -69,7 +56,6 @@ namespace HolySheet
             }
             catch (TableLoadException)
             {
-                // The load that follows parses it again and reports the problem properly.
                 return new MemoryTableSource(files);
             }
 
@@ -87,7 +73,6 @@ namespace HolySheet
         }
     }
 
-    /// <summary>Reads files from a directory on disk.</summary>
     public sealed class DirectoryTableSource : TableSource
     {
         public string Directory { get; }
@@ -109,7 +94,6 @@ namespace HolySheet
             string path = Path.Combine(Directory, fileName);
             try
             {
-                // FileShare.ReadWrite: the build tool may be replacing files while a watcher reads them.
                 using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                 {
                     byte[] bytes = new byte[stream.Length];
@@ -182,7 +166,6 @@ namespace HolySheet
         }
     }
 
-    /// <summary>Reads files through a callback. Use it for asset bundles, Addressables, embedded resources or a patch cache.</summary>
     public sealed class DelegateTableSource : TableSource
     {
         private readonly Func<string, byte[]?> _read;
@@ -201,14 +184,12 @@ namespace HolySheet
         }
     }
 
-    /// <summary>Serves files that are already in memory.</summary>
     public sealed class MemoryTableSource : TableSource
     {
         private readonly IReadOnlyDictionary<string, byte[]> _files;
 
         public override string Description => "memory";
 
-        /// <summary>Names of the files held.</summary>
         public IEnumerable<string> FileNames => _files.Keys;
 
         public MemoryTableSource(IReadOnlyDictionary<string, byte[]> files)

@@ -13,20 +13,6 @@ using HolySheet.Core.Csv;
 
 namespace HolySheet.Core.Sources
 {
-    /// <summary>
-    /// A Google Drive folder. Every Google spreadsheet and every .xlsx file directly inside it is a workbook, named after the
-    /// file; files whose name starts with # or ~ are left out, as sheets are. Subfolders are not read: add them as sources of
-    /// their own.
-    /// <para>
-    /// Listing a folder goes through the Drive API, so it needs an API key (for a link-shared folder), a service account the
-    /// folder is shared with, or an access token. Spreadsheets are then read as <see cref="GoogleSheetsSource"/> reads one,
-    /// with the same credentials; .xlsx files are downloaded and read as they are.
-    /// </para>
-    /// <para>
-    /// The snapshot keeps one folder of CSV per workbook, plus an index of the workbook names, so an offline build sees the
-    /// same workbooks under the same names.
-    /// </para>
-    /// </summary>
     public sealed class GoogleFolderSource : IWorkbookSource
     {
         private readonly SourceConfig source;
@@ -75,7 +61,6 @@ namespace HolySheet.Core.Sources
 
             string folderId = source.FolderId ?? "";
             string location = source.Name ?? "Drive folder " + folderId;
-            // The single-spreadsheet source does the authentication and the HTTP work; this one only adds the folder listing.
             var helper = new GoogleSheetsSource(source, baseDirectory, parser, null, httpHandler, _endpoints, credentialProviders: credentialProviders);
             using HttpClient client = httpHandler == null ? new HttpClient() : new HttpClient(httpHandler, disposeHandler: false);
             client.Timeout = TimeSpan.FromSeconds(100);
@@ -84,7 +69,6 @@ namespace HolySheet.Core.Sources
                 GoogleSheetsSource.ResolvedAuth auth = await helper.ResolveAuthAsync(client, cancellationToken).ConfigureAwait(false);
                 (string? apiKey, string? bearer, _) = auth;
                 _account = auth.Account;
-                // Asked first because the listing cannot tell "empty" from "not shared with you": both come back as no files.
                 string folderName = await GetFolderNameAsync(helper, client, folderId, apiKey, bearer, cancellationToken).ConfigureAwait(false);
                 location = source.Name ?? folderName;
                 List<DriveFile> files = await ListAsync(helper, client, folderId, apiKey, bearer, cancellationToken).ConfigureAwait(false);
@@ -161,19 +145,16 @@ namespace HolySheet.Core.Sources
             return Array.Empty<Workbook>();
         }
 
-        // Version is Drive's change counter for the file: the same number means the same content.
         private sealed record DriveFile(string Id, string Name, string MimeType, long? Version);
 
         private static string Link(DriveFile file) => file.MimeType == SpreadsheetMimeType
             ? GoogleSheetsSource.SpreadsheetLink(file.Id)
             : "https://drive.google.com/file/d/" + Uri.EscapeDataString(file.Id) + "/view";
 
-        /// <summary>The address that opens a Drive folder in a browser.</summary>
         public static string FolderLink(string id) => "https://drive.google.com/drive/folders/" + Uri.EscapeDataString(id);
 
         internal const string FolderMimeType = "application/vnd.google-apps.folder";
 
-        // The account the credentials belong to, once known, for messages that say whom to share the folder with.
         private string? _account;
 
         private async Task<string> GetFolderNameAsync(GoogleSheetsSource helper, HttpClient client, string folderId, string? apiKey, string? bearer, CancellationToken cancellationToken)
@@ -227,7 +208,6 @@ namespace HolySheet.Core.Sources
                     JsonObject? file = item.AsObject;
                     if (file?.GetString("id") is { } id && file.GetString("name") is { } name && file.GetString("mimeType") is { } mimeType)
                     {
-                        // The same rule as for sheets: a name starting with # or ~ is a draft or a note, not data.
                         if (!name.StartsWith("#", StringComparison.Ordinal) && !name.StartsWith("~", StringComparison.Ordinal))
                         {
                             files.Add(new DriveFile(id, name, mimeType, GoogleSheetsSource.ParseVersion(file["version"])));
@@ -253,7 +233,6 @@ namespace HolySheet.Core.Sources
                 {
                     PresetAuth = auth,
                     RefreshGoogle = RefreshGoogle,
-                    // The listing already said which version this is; no need to ask Drive again.
                     KnownVersion = file.Version
                 };
                 return await reader.LoadAsync(diagnostics, cancellationToken).ConfigureAwait(false);
@@ -262,7 +241,6 @@ namespace HolySheet.Core.Sources
             var origin = new WorkbookOrigin(SourceType.GoogleFolder, source.FolderId ?? "", Link(file));
             if (!RefreshGoogle && file.Version is { } known && RemoteCopy.TryLoad(remoteCacheDirectory, file.Id, known) is { } copy)
             {
-                // Unchanged since the last download: read the copy instead of downloading the file again.
                 if (workbookSnapshot != null)
                 {
                     GoogleSheetsSource.WriteSnapshot(workbookSnapshot, file.Name, copy.Tabs.Select(tab => tab.Name).ToList(), copy.Tabs.Select(tab => tab.Text).ToList(), complete: true);
@@ -287,11 +265,9 @@ namespace HolySheet.Core.Sources
                     workbook = XlsxReader.Read(stream, file.Name);
                 }
 
-                // Kept as CSV text, like every Google tab, so cached and offline builds read the same thing.
                 List<(string Name, string Text)> tabs = workbook.Sheets.Select(sheet => (sheet.Name, CsvWriter.Write(sheet.ToGrid()))).ToList();
                 if (workbookSnapshot != null)
                 {
-                    // The whole file was downloaded, so its snapshot is complete even in a partial build.
                     GoogleSheetsSource.WriteSnapshot(workbookSnapshot, file.Name, tabs.Select(tab => tab.Name).ToList(), tabs.Select(tab => tab.Text).ToList(), complete: true);
                 }
 
@@ -309,8 +285,6 @@ namespace HolySheet.Core.Sources
             }
         }
 
-        // The index maps snapshot folders to workbook names (folder names lose the characters a file name cannot hold),
-        // and keeps each file's link, so an offline build can still open the file.
         private void WriteIndex(IEnumerable<(string Name, string? Link)> files, bool complete)
         {
             if (snapshotDirectory == null)
@@ -328,8 +302,6 @@ namespace HolySheet.Core.Sources
 
             if (complete)
             {
-                // Files that left the Drive folder leave the snapshot too. Only folders the previous index lists were made
-                // by this tool; any other folder that shares the snapshot location is not ours to delete.
                 foreach (string folder in previous.Keys)
                 {
                     string gone = Path.Combine(snapshotDirectory, folder);
@@ -340,7 +312,6 @@ namespace HolySheet.Core.Sources
                 }
             }
 
-            // A file that could not be read has no folder; an offline build should not look for one.
             foreach (string folder in index.Keys.ToList())
             {
                 if (!Directory.Exists(Path.Combine(snapshotDirectory, folder)))
@@ -369,7 +340,6 @@ namespace HolySheet.Core.Sources
             }
         }
 
-        // A plain folder name inside the snapshot. A hand-edited index must never point the tool at a folder elsewhere.
         private static bool IsOwnFolderName(string folder) =>
             folder.Length > 0 && folder == Path.GetFileName(folder) && folder != "." && folder != "..";
 

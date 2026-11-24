@@ -5,7 +5,6 @@ using System.Text;
 
 namespace HolySheet
 {
-    /// <summary>SHA-256 as lowercase hex. The tool and the runtime must agree on this, so it lives in one place.</summary>
     public static class TableHash
     {
         private const string HexDigits = "0123456789abcdef";

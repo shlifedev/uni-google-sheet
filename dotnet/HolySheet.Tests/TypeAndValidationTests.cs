@@ -103,7 +103,6 @@ public class ScalarTests
         var previous = System.Globalization.CultureInfo.CurrentCulture;
         try
         {
-            // German uses a comma as the decimal separator; the sheet text must not be read by the machine's rules.
             System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
             Assert.True(Scalars.TryParse(ScalarKind.Double, "1.5", out object value, out _));
             Assert.Equal(1.5, value);
@@ -137,7 +136,6 @@ public class EnumSheetTests
         Assert.Equal(ScalarKind.Byte, kind.Underlying);
         Assert.False(kind.IsFlags);
         Assert.Equal("kinds", kind.Comment);
-        // A member without a value follows the previous one; the row starting with # is left out.
         Assert.Equal(["None=0", "Sword=1", "Bow=10", "Staff=11"], kind.Members.Select(member => member.Name + "=" + member.Value));
 
         EnumDefinition access = result.Enums.Single(definition => definition.Name == "EAccess");
@@ -188,7 +186,6 @@ public class EnumSheetTests
         EnumDefinition mapping = Assert.Single(result.Enums);
         Assert.Equal(ScalarKind.Short, mapping.Underlying);
         Assert.Equal(["Slime=10", "Goblin=30"], mapping.Members.Select(member => member.Name + "=" + member.Value));
-        // The Mapping column itself is not stored.
         Assert.Equal(["Id", "Name"], result.Tables.Single().Schema.Columns.Select(column => column.Field));
     }
 
@@ -304,8 +301,6 @@ public class ValidationTests
     [Fact]
     public void Generated_type_names_must_not_collide()
     {
-        // The table "Item" produces ItemRow; a table named "ItemRow" would produce ItemRowRow and ItemRowTable, which is fine,
-        // but an enum named ItemRow collides.
         BuildResult result = Sheets.Build(Sheets.Of("Enums", "int\nItemRow\n\nA\n"), Sheets.Of("Item", "Key<int>\nId\n\n1\n"));
         Assert.Contains("The generated name 'ItemRow' is also used by", Sheets.Errors(result));
     }
@@ -386,7 +381,6 @@ public class ValidationTests
     [Fact]
     public void A_number_shown_with_thousands_separators_is_warned_about()
     {
-        // Google Sheets hands over what a cell shows, so 1000 formatted as "1,000" arrives as two elements.
         BuildResult result = Sheets.Build(Sheets.Of("T", "Key<int>,int[],float[],int[],int[]\nId,A,B,C,D\n,,,,\n1,\"1,000\",\"-12,345.5\",\"[1,000]\",\"1,20\"\n"));
         Assert.True(result.Success, Sheets.Errors(result));
         Assert.Equal([1, 0], ((object[])result.Tables.Single().Rows[0].Values[1]).Cast<int>());
@@ -474,10 +468,10 @@ public class SchemaHashTests
     }
 
     [Theory]
-    [InlineData("Key<int>,int\nId,Name\n,\n1,1\n")]        // a type changed
-    [InlineData("Key<int>,string\nId,Title\n,\n1,A\n")]    // a field was renamed
-    [InlineData("Key<int>,string,int\nId,Name,X\n,,\n1,A,1\n")] // a column was added
-    [InlineData("Key<int>,Index<string>\nId,Name\n,\n1,A\n")] // a role changed
+    [InlineData("Key<int>,int\nId,Name\n,\n1,1\n")]
+    [InlineData("Key<int>,string\nId,Title\n,\n1,A\n")]
+    [InlineData("Key<int>,string,int\nId,Name,X\n,,\n1,A,1\n")]
+    [InlineData("Key<int>,Index<string>\nId,Name\n,\n1,A\n")]
     public void Layout_changes_change_the_schema_hash_of_that_table_only(string changed)
     {
         BuildResult first = Build("Key<int>,string\nId,Name\n,\n1,A\n");

@@ -12,9 +12,6 @@ import { showMenuBelow } from "./Menu";
 
 type Browse = "file" | "folder" | "workbookOrFolder" | "keyFile";
 
-// ---- Fields. Text saves when it loses focus or on Enter, so typing does not rewrite holysheet.json on every key. ----
-
-// What a field is for is its tooltip, as in the Unity window: the page stays a list of fields.
 function Row({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
   return (
     <div className="form-row" title={help}>
@@ -24,7 +21,6 @@ function Row({ label, help, children }: { label: string; help?: string; children
   );
 }
 
-// Which sections are open, for as long as the app runs.
 const openSections = new Map<string, boolean>();
 
 function Section({ id, title, state, open: initially, children }: { id: string; title: string; state?: string; open: boolean; children: React.ReactNode }) {
@@ -100,7 +96,6 @@ function Select({ value, options, onChange }: { value: string; options: { value:
   );
 }
 
-/** A path field with a browse button; what is picked is written relative to the project when it is inside it. */
 function PathField({ value, onCommit, browse }: { value: string; onCommit: (value: string) => void; browse: Browse }) {
   const pick = async (directory: boolean) => {
     const filters =
@@ -140,8 +135,6 @@ function Check({ checked, onChange, label }: { checked: boolean; onChange: (chec
   );
 }
 
-// ---- Page ----
-
 export function SettingsPage() {
   const { project, info, saveConfig, preferences, setPreferences, setLanguage, applyState, notify } = useApp();
   const [report, setReport] = useState<VerifyReport | null>(null);
@@ -160,7 +153,6 @@ export function SettingsPage() {
       { label: T("Excel workbook"), action: () => save((next) => next.sources.push({ type: "xlsx", path: "Sheets" })) },
       { label: T("CSV folder"), action: () => save((next) => next.sources.push({ type: "csv", path: "Sheets/Csv" })) },
       { label: "Google Sheets", action: () => save((next) => next.sources.push({ type: "google", spreadsheetId: "", auth: { type: "public" } })) },
-      // A folder can only be listed with credentials, so it starts on an API key rather than on "public".
       { label: T("Google Drive folder"), action: () => save((next) => next.sources.push({ type: "googleFolder", folderId: "", auth: { type: "apiKey" } })) },
     ]);
 
@@ -392,7 +384,6 @@ export function SettingsPage() {
 }
 
 function VerifyResult({ report }: { report: VerifyReport }) {
-  // The same sentences as the Unity window's report.
   const lines = report.success
     ? [F(report.signature === "valid" ? "{0} files match the manifest; the signature is valid." : "{0} files match the manifest.", report.tables)]
     : report.problems;
@@ -574,7 +565,6 @@ function SourceCard({
                 onCommit={(value) => {
                   const parsed = parseTabs(value);
                   if (parsed === null) {
-                    // Keep what was there rather than silently dropping the entries that did not parse.
                     notify(T("Tabs must be Name:gid pairs separated by commas, e.g. Item:0, Monster:123456."));
                     return;
                   }

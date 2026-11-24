@@ -6,7 +6,6 @@ using System.Text;
 
 namespace HolySheet
 {
-    /// <summary>A JSON number, kept as the text it was written with so it is written back unchanged.</summary>
     internal sealed class ManifestJsonNumber
     {
         public string Text { get; }
@@ -17,24 +16,15 @@ namespace HolySheet
         }
     }
 
-    /// <summary>A JSON object with its members in the order they were written.</summary>
     internal sealed class ManifestJsonObject
     {
         public List<KeyValuePair<string, object?>> Members { get; } = new List<KeyValuePair<string, object?>>();
     }
 
-    /// <summary>
-    /// The small, strict JSON reader and writer the manifest needs. The runtime has no dependencies, so it cannot use a JSON
-    /// package, and Unity's JsonUtility cannot keep members it does not know.
-    /// Values are <see cref="ManifestJsonObject"/>, <see cref="List{T}"/> of values, <see cref="string"/>,
-    /// <see cref="ManifestJsonNumber"/>, <see cref="bool"/> or null.
-    /// </summary>
     internal static class ManifestJson
     {
-        /// <summary>Deep enough for any real manifest; stops a hostile file from exhausting the stack.</summary>
         private const int MaxDepth = 64;
 
-        /// <exception cref="FormatException">The text is not JSON. The message names the line and column.</exception>
         public static object? Parse(string text)
         {
             var reader = new Reader(text);
@@ -54,7 +44,6 @@ namespace HolySheet
             return value;
         }
 
-        /// <summary>Writes a JSON string literal: quotes, backslashes and control characters escaped, everything else as is.</summary>
         public static void WriteString(StringBuilder builder, string value)
         {
             builder.Append('"');
@@ -108,7 +97,6 @@ namespace HolySheet
             return builder.ToString();
         }
 
-        /// <summary>Writes a value with no whitespace, members in their original order. Two equal documents give equal text.</summary>
         public static void WriteMinified(StringBuilder builder, object? value)
         {
             switch (value)
@@ -167,7 +155,6 @@ namespace HolySheet
             return builder.ToString();
         }
 
-        /// <summary>The value a caller sees for a member this runtime does not know: the string itself, or the JSON of anything else.</summary>
         public static string Describe(string rawJson)
         {
             if (rawJson.Length > 0 && rawJson[0] == '"')

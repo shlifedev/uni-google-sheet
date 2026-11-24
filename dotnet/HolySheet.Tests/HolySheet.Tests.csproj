@@ -3,10 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <IsPackable>false</IsPackable>
-    <!-- Real cultures are needed to prove that parsing ignores the machine culture. -->
     <InvariantGlobalization>false</InvariantGlobalization>
     <RootNamespace>HolySheet.Tests</RootNamespace>
-    <!-- Row classes are private-field types filled by the serializer; reading them through reflection in tests is intended. -->
     <NoWarn>$(NoWarn);xUnit1031</NoWarn>
   </PropertyGroup>
   <ItemGroup>

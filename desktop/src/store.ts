@@ -1,5 +1,3 @@
-// The app's state: the open project, the last run and the table model.
-// The engine is the source of truth; this store only mirrors what it last said.
 import { create } from "zustand";
 import { rpc, RpcError, type HostEvent } from "./rpc";
 import { setLanguage, T, type Language } from "./i18n";
@@ -8,7 +6,6 @@ import type { AppInfo, ProjectState, RunResult, TableModel, HolySheetConfig } fr
 
 export type Page = "tables" | "settings";
 
-/** A thing the user should know about that is not a sheet problem: the engine refused something, a file did not open. */
 export interface Notice {
   id: number;
   kind: "error" | "info";
@@ -23,7 +20,6 @@ interface AppState {
   running: boolean;
   run: RunResult | null;
   model: TableModel;
-  /** Bumped on every finished run, so views that load from the engine (the preview) load again. */
   revision: number;
   problemsOpen: boolean;
   notices: Notice[];
@@ -62,7 +58,6 @@ export const useApp = create<AppState>((set, get) => {
     }
   };
 
-  // The initial preview uses local files and snapshots. An online read needs an explicit refresh or build.
   const afterOpen = async (state: ProjectState) => {
     set({ project: state, run: state.lastRun, running: state.running, model: emptyModel, problemsOpen: false });
     if (state.configPath) {
@@ -164,7 +159,6 @@ export const useApp = create<AppState>((set, get) => {
 
     startRun: async (commit, only = [], options = {}) => {
       try {
-        // The result arrives through the run.finished notification as well; both lead to the same state.
         const result = options.copy
           ? await rpc.localCopy(options.copy)
           : await rpc.run(commit, options.offline ?? false, only, options.refreshGoogle);
@@ -193,14 +187,12 @@ export const useApp = create<AppState>((set, get) => {
         running: false,
         run: result,
         revision: get().revision + 1,
-        // The problems open by themselves when the run failed or the sheets have errors.
         problemsOpen: get().problemsOpen || result.status === "failed" || result.status === "errors",
       });
       void refreshModel();
     },
 
     hostRestarted: async () => {
-      // A new engine process has nothing open: open the project again, and say why the view reset.
       const path = get().project?.configPath;
       set({ running: false });
       if (path) {

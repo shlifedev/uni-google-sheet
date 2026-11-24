@@ -5,7 +5,6 @@ using System.IO;
 
 namespace HolySheet.Core.Output
 {
-    /// <summary>Checks the complete set of destinations before a caller applies any writes or deletions.</summary>
     internal sealed class FileChangeSet
     {
         private readonly List<Change> changes = new();
@@ -34,14 +33,12 @@ namespace HolySheet.Core.Output
                             throw new IOException($"'{change.Path}' changed before it could be written.");
                         }
 
-                        // Replacements and deletions can fail after changing the original.
                         applied++;
                     }
 
                     if (change.Content == null)
                     {
                         File.Delete(change.Path);
-                        // Unity keeps a .meta file beside every asset; a deleted asset's .meta would otherwise linger and warn.
                         if (File.Exists(change.Path + ".meta"))
                         {
                             change.OriginalMeta = File.ReadAllBytes(change.Path + ".meta");
@@ -56,7 +53,6 @@ namespace HolySheet.Core.Output
                         WriteAtomically(change.Path, change.Content, replace: change.Original != null);
                         if (change.Original == null)
                         {
-                            // Only undo a creation once the move succeeds. A competing creator keeps its file.
                             applied++;
                         }
 
@@ -87,7 +83,6 @@ namespace HolySheet.Core.Output
                     }
                     catch (Exception rollback) when (rollback is IOException or UnauthorizedAccessException)
                     {
-                        // Keep restoring the rest; the original failure is what gets reported.
                     }
                 }
 
@@ -149,8 +144,6 @@ namespace HolySheet.Core.Output
             return path;
         }
 
-        // Write to a temporary file in the same folder, then rename over the target: a reader sees the old file or the new one, never half of one.
-        // The temporary name is unique, so two writers can never take each other's temporary file.
         private static void WriteAtomically(string path, byte[] content, bool replace)
         {
             string temporary = path + "." + Guid.NewGuid().ToString("N").Substring(0, 12) + ".holysheet-tmp";
@@ -171,8 +164,6 @@ namespace HolySheet.Core.Output
                     }
                     catch (Exception exception) when (exception is PlatformNotSupportedException or IOException)
                     {
-                        // Some file systems cannot replace in one step. Fall back to delete and rename;
-                        // readers that land in the gap retry (the table watcher does).
                         if (!File.Exists(temporary))
                         {
                             throw;
@@ -205,7 +196,6 @@ namespace HolySheet.Core.Output
 
             public string Name { get; }
 
-            /// <summary>Null means delete.</summary>
             public byte[]? Content { get; }
 
             public byte[]? Original { get; }

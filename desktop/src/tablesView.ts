@@ -1,12 +1,8 @@
-// What the Tables page shows: the tree's selection, open nodes and search, the panel sizes, the find bar.
-// Kept apart from the app store so a run (which replaces the model) keeps it, and switching pages does too.
 import { create } from "zustand";
 
 interface TablesView {
   selected: string[];
-  /** The node the preview shows: the one clicked last. */
   focus: string | null;
-  /** The end of a Shift+click range. */
   anchor: string | null;
   expanded: Set<string> | null;
   search: string;

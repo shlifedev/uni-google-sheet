@@ -11,30 +11,21 @@ namespace HolySheet.Core.Transform
 {
     public enum SheetKind
     {
-        /// <summary>The name starts with # or ~. Not read.</summary>
         Ignored,
 
-        /// <summary>"Item": defines the table Item.</summary>
         Table,
 
-        /// <summary>"Game.Config": the table Game, written with one field per row instead of per column.</summary>
         Config,
 
-        /// <summary>"Item.Weapons": more rows for the table Item, with the same columns.</summary>
         ChildRows,
 
-        /// <summary>"Item.Col.Balance": more columns for the table Item, matched to its rows by key.</summary>
         ColumnExtension,
 
-        /// <summary>"Enums" or "Battle.Enums": enum definitions.</summary>
         Enums,
 
-        /// <summary>The name does not follow any of the forms above.</summary>
         Invalid
     }
 
-    /// <summary>What a sheet is for, decided by its name alone. The naming rules live here and nowhere else.</summary>
-    // A record struct by intent; written out by hand because Unity compiles C# 9. Equality, ToString and Deconstruct match what the compiler would generate.
     public readonly struct SheetRole : IEquatable<SheetRole>
     {
         public SheetRole(SheetKind Kind, string TableName)
@@ -101,10 +92,6 @@ namespace HolySheet.Core.Transform
             };
         }
 
-        /// <summary>
-        /// Does the text start with an ignore mark (# or ~)? The same rule applies to a sheet name,
-        /// to any header cell of a column, and to the first cell of a row.
-        /// </summary>
         public static bool IsIgnoreMark(string text)
         {
             ReadOnlySpan<char> trimmed = text.AsSpan().TrimStart();
@@ -112,7 +99,6 @@ namespace HolySheet.Core.Transform
         }
     }
 
-    /// <summary>A column as written: its three header cells, still text.</summary>
     public sealed class RawColumn
     {
         public RawColumn(Cell typeCell, Cell nameCell, Cell commentCell)
@@ -135,10 +121,6 @@ namespace HolySheet.Core.Transform
         public string Comment => CommentCell.Trimmed;
     }
 
-    /// <summary>
-    /// A table after the transform rules and before types are resolved: the columns that will be read and the rows that hold data.
-    /// Ignored columns, ignored rows and blank rows are already gone; child sheets and column extensions are already merged in.
-    /// </summary>
     public sealed class RawTable
     {
         public RawTable(string name, TableKind kind, string location)
@@ -156,10 +138,8 @@ namespace HolySheet.Core.Transform
 
         public List<RawColumn> Columns { get; } = new();
 
-        /// <summary>Each row has one cell per entry of <see cref="Columns"/>.</summary>
         public List<Cell[]> Rows { get; } = new();
 
-        /// <summary>Index of the first column whose type is Key&lt;...&gt;, or -1.</summary>
         public int FindKeyColumn()
         {
             for (int index = 0; index < Columns.Count; index++)
@@ -173,7 +153,6 @@ namespace HolySheet.Core.Transform
             return -1;
         }
 
-        /// <summary>The table as rows of text in the configured header layout, for writing it out as CSV.</summary>
         public List<string[]> ToGrid(SheetConfig layout)
         {
             var grid = new List<string[]>(layout.FirstDataRow + Rows.Count);
@@ -207,7 +186,6 @@ namespace HolySheet.Core.Transform
         public string ToCsv(SheetConfig layout) => CsvWriter.Write(ToGrid(layout));
     }
 
-    /// <summary>What the transform steps work on. Each step reads what earlier steps left and adds its own results.</summary>
     public sealed class TransformContext
     {
         public TransformContext(IReadOnlyList<Workbook> workbooks, SheetConfig layout, DiagnosticBag diagnostics)
@@ -223,10 +201,8 @@ namespace HolySheet.Core.Transform
 
         public DiagnosticBag Diagnostics { get; }
 
-        /// <summary>Every sheet that will be read, with its role. Filled by the classify step.</summary>
         public List<(Sheet Sheet, SheetRole Role)> Sheets { get; } = new();
 
-        /// <summary>The tables found so far, in the order their sheets appear.</summary>
         public List<RawTable> Tables { get; } = new();
 
         public List<Sheet> EnumSheets { get; } = new();
@@ -234,27 +210,13 @@ namespace HolySheet.Core.Transform
         public RawTable? FindTable(string name) => Tables.FirstOrDefault(table => table.Name == name);
     }
 
-    /// <summary>One rule that reshapes sheets before they are read as typed tables.</summary>
     public interface ITransformStep
     {
-        /// <summary>A stable name, used to insert, replace or remove steps.</summary>
         string Name { get; }
 
         void Run(TransformContext context);
     }
 
-    /// <summary>
-    /// The ordered rules that turn sheets as written into tables ready to be typed. The default order is:
-    /// <list type="number">
-    /// <item><c>classify</c>: decide each sheet's role from its name; drop ignored sheets.</item>
-    /// <item><c>transpose-config</c>: flip "Table.Config" sheets so they read like any other table.</item>
-    /// <item><c>read-tables</c>: read headers and rows; drop ignored columns, ignored rows and blank rows.</item>
-    /// <item><c>merge-child-rows</c>: append the rows of "Table.Child" sheets to their table.</item>
-    /// <item><c>join-column-extensions</c>: add the columns of "Table.Col.Group" sheets, matched by key.</item>
-    /// </list>
-    /// Repeated field names are merged into one array column later, when types are known.
-    /// Steps can be added, replaced or removed to support project-specific sheet conventions.
-    /// </summary>
     public sealed class TransformPipeline
     {
         public List<ITransformStep> Steps { get; } = new();
@@ -395,10 +357,6 @@ namespace HolySheet.Core.Transform
             }
         }
 
-        /// <summary>
-        /// Reads one sheet with the configured header rows. A column is skipped when any of its header cells starts with # or ~.
-        /// A row is skipped when its first cell (column A, read or not) starts with # or ~, or when every read cell is blank.
-        /// </summary>
         public static RawTable Read(Sheet sheet, string tableName, TableKind kind, TransformContext context)
         {
             SheetConfig layout = context.Layout;
@@ -454,7 +412,6 @@ namespace HolySheet.Core.Transform
 
                 if (!warned)
                 {
-                    // Values under a column with no header usually mean the header was forgotten. Say so once per sheet.
                     foreach (int column in headerlessIndexes)
                     {
                         Cell cell = sheet.GetCell(rowIndex, column);
@@ -494,9 +451,6 @@ namespace HolySheet.Core.Transform
 
         public void Run(TransformContext context)
         {
-            // Child sheets are merged in name order, not in the order the source lists them. An xlsx file lists its tabs in the
-            // order the author arranged them, a CSV folder in file name order, and a Google spreadsheet in tab order online but
-            // in file name order from its offline snapshot. Name order gives the same rows, and the same bytes, from all of them.
             foreach ((Sheet sheet, SheetRole role) in OrderedByName(context.Sheets, SheetKind.ChildRows))
             {
                 RawTable? parent = context.FindTable(role.TableName);
@@ -518,8 +472,6 @@ namespace HolySheet.Core.Transform
                 .ThenBy(entry => entry.Sheet.Workbook, StringComparer.Ordinal);
         }
 
-        // A child sheet must have the parent's columns, by field name and type. Their order may differ.
-        // When a field name repeats, the repeats are paired in the order they appear.
         private static void Append(RawTable parent, RawTable child, Sheet childSheet, DiagnosticBag diagnostics)
         {
             if (child.Columns.Count == 0)
@@ -588,7 +540,6 @@ namespace HolySheet.Core.Transform
 
         public void Run(TransformContext context)
         {
-            // Name order, for the same reason as child sheets: the added columns, and so the layout, must not depend on the source.
             foreach ((Sheet sheet, SheetRole role) in MergeChildRowsStep.OrderedByName(context.Sheets, SheetKind.ColumnExtension))
             {
                 RawTable? parent = context.FindTable(role.TableName);
@@ -603,8 +554,6 @@ namespace HolySheet.Core.Transform
             }
         }
 
-        // Left join on the first Key column of each side. The extension may list only some of the parent's keys;
-        // rows it does not list get blank cells in the added columns. A key the parent does not have is an error.
         private static void Join(RawTable parent, RawTable extension, Sheet extensionSheet, DiagnosticBag diagnostics)
         {
             if (extension.Columns.Count == 0)
@@ -692,8 +641,6 @@ namespace HolySheet.Core.Transform
                 extensionRows.TryGetValue(NormalizeKey(row[parentKey].Text, numeric), out Cell[]? match);
                 for (int index = 0; index < added.Count; index++)
                 {
-                    // A blank cell for a row the extension does not list is attributed to the parent's key cell,
-                    // so a problem with it still points at the row concerned.
                     cells[row.Length + index] = match != null ? match[added[index]] : new Cell("", row[parentKey].Origin);
                 }
 
@@ -707,7 +654,6 @@ namespace HolySheet.Core.Transform
                 && Scalars.TryFind(expression.Name, out ScalarKind kind) && Scalars.IsInteger(kind);
         }
 
-        // Keys are compared as values, not as text: 1 and 01 are the same integer.
         private static string NormalizeKey(string text, bool numeric)
         {
             string trimmed = text.Trim();

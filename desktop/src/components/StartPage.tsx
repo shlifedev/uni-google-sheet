@@ -4,7 +4,6 @@ import { useApp } from "../store";
 import { T } from "../i18n";
 import { openTarget, reveal } from "../lib/actions";
 
-/** No project open: open a folder or a config file, or pick a recent one. */
 export function StartPage() {
   const { preferences, openProject, info } = useApp();
 
@@ -61,7 +60,6 @@ export function StartPage() {
   );
 }
 
-/** A project folder without a holysheet.json, or with one that does not parse. */
 export function NoConfigPage() {
   const { project, initProject, reload, closeProject } = useApp();
   const [sample, setSample] = useState(false);

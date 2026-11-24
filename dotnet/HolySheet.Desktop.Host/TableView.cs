@@ -6,10 +6,6 @@ using HolySheet.Core.Transform;
 
 namespace HolySheet.Desktop.Host;
 
-/// <summary>
-/// The tables as read by the last run, shaped for the app's tree and data view. The rules follow the Unity window
-/// (HolySheetWindow: SheetRefsOf, DescribeSheet, ShowPreview, TypeClass) so both tools show a sheet the same way.
-/// </summary>
 public static class TableView
 {
     public static JsonObject Empty() => new()
@@ -19,7 +15,6 @@ public static class TableView
         ["enums"] = new JsonArray()
     };
 
-    /// <summary>Workbooks with where they came from, tables with the sheets they were built from, and every enum.</summary>
     public static JsonObject Model(BuildResult build)
     {
         var workbookNames = new List<string>();
@@ -105,10 +100,6 @@ public static class TableView
         };
     }
 
-    /// <summary>
-    /// A table, or the part of it that came from one sheet: that sheet's rows, and its own columns when it is a column
-    /// extension (plus the key they are matched by). Rows carry the sheet's own row number, so they match the problems.
-    /// </summary>
     public static JsonObject Preview(BuildResult build, string tableName, string? sheet)
     {
         RawTable table = build.RawTables.FirstOrDefault(candidate => candidate.Name == tableName)
@@ -136,7 +127,6 @@ public static class TableView
                 rows = fromSheet;
                 if (ownColumns.Count > 0 && ownColumns.Count < columns.Count && fromSheet.Count > 0)
                 {
-                    // The defining sheet: hide the columns that other sheets added.
                     columns = ownColumns;
                 }
             }
@@ -144,7 +134,6 @@ public static class TableView
             location = WorkbookOf(table.Location) + " / " + sheet;
         }
 
-        // Rows another sheet added (Item.Rare) carry that sheet's short name, so "Rare 4" is not mistaken for row 4 of Item.
         string definingSheet = table.Columns.Count > 0 ? table.Columns[0].NameCell.Origin.Sheet : "";
         string RowLabel(Cell[] row)
         {
@@ -218,7 +207,6 @@ public static class TableView
         };
     }
 
-    /// <summary>The sheets a table was assembled from, in order: its columns' sheets, then its rows' sheets.</summary>
     public static List<(string Workbook, string Sheet)> SheetRefsOf(RawTable table)
     {
         var found = new List<(string Workbook, string Sheet)>();
@@ -230,7 +218,6 @@ public static class TableView
             }
         }
 
-        // Extra columns come from Table.Col.* sheets, extra rows from Table.Child sheets.
         foreach (RawColumn column in table.Columns)
         {
             Add(column.NameCell.Origin);
@@ -247,7 +234,6 @@ public static class TableView
         return found;
     }
 
-    /// <summary>"defines", "rows" or "columns": what a sheet adds to the table it belongs to.</summary>
     public static string SheetRole(RawTable table, string sheet)
     {
         bool addsColumns = table.Columns.Any(column => column.NameCell.Origin.Sheet == sheet) && table.Rows.Count > 0 && table.Rows[0].Length > 0 && table.Rows[0][0].Origin.Sheet != sheet
@@ -262,7 +248,6 @@ public static class TableView
             : "rows";
     }
 
-    /// <summary>The color group of a column type: int, float, bool, date, enum, ref, mapping, or "" for text.</summary>
     public static string TypeClass(string typeText)
     {
         if (!TypeExpression.TryParse(typeText, out TypeExpression? expression, out _) || expression == null)
@@ -282,7 +267,6 @@ public static class TableView
 
         if (!Scalars.TryFind(expression.Name, out ScalarKind kind))
         {
-            // A bare name that is not a value type is an enum.
             return "enum";
         }
 
@@ -298,7 +282,6 @@ public static class TableView
 
     private static bool IsArray(string typeText) => TypeExpression.TryParse(typeText, out TypeExpression? expression, out _) && expression != null && expression.IsArray;
 
-    // Flags read better as bits: "8  (1 << 3)".
     private static string FormatEnumValue(EnumDefinition definition, long value)
     {
         if (definition.IsFlags && value > 0 && (value & (value - 1)) == 0)
@@ -315,14 +298,12 @@ public static class TableView
         return value.ToString();
     }
 
-    // A sheet's location is "Workbook / Sheet". A workbook is a file or a spreadsheet title, which cannot contain '/'.
     public static string WorkbookOf(string location)
     {
         int separator = location.IndexOf(" / ", StringComparison.Ordinal);
         return separator < 0 ? location : location[..separator];
     }
 
-    // "Book / Sheet!B2" or "Book / Sheet" into its workbook and sheet.
     public static (string Workbook, string Sheet) SplitLocation(string location)
     {
         int separator = location.IndexOf(" / ", StringComparison.Ordinal);
@@ -336,7 +317,6 @@ public static class TableView
         return (location[..separator], cell >= 0 ? sheet[..cell] : sheet);
     }
 
-    // The sheet rule: "Enums", or a name ending in ".Enums" (Battle.Enums).
     public static bool IsEnumsSheet(string sheet) => sheet == "Enums" || sheet.EndsWith(".Enums", StringComparison.Ordinal);
 
     private static string ColumnLetters(int column)

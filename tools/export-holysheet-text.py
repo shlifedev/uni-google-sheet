@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Exports the Unity window's Korean texts (src/Editor/HolySheetText.cs) for the desktop app.
-
-The window keys its translations by the English text, and the desktop app does the same, so both tools use one
-set of translations. Writes desktop/src/i18n/ko.unity.json:
-  {"counts": {"table": "테이블 {0}개", ...}, "texts": {"Tables": "테이블", ...}}
-Texts only the desktop app has live in desktop/src/i18n/ko.app.json and win over these.
-
-Run from anywhere: python3 tools/export-holysheet-text.py  (or: npm run i18n, in desktop/)
-"""
 import json
 import re
 import sys
@@ -17,7 +8,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "src" / "Editor" / "HolySheetText.cs"
 TARGET = ROOT / "desktop" / "src" / "i18n" / "ko.unity.json"
 
-# ["key"] = "value", with C# escapes in either string.
 ENTRY = re.compile(r'\["((?:[^"\\]|\\.)*)"\]\s*=\s*"((?:[^"\\]|\\.)*)"')
 
 

@@ -1,23 +1,4 @@
 #!/usr/bin/env python3
-"""Writes the demo data set: the tables of a mid-sized online RPG, split the way a team would split them.
-
-    python3 tools/make-demo-workbooks.py src/Samples~/Demo/Sheets
-
-Needs openpyxl (pip install openpyxl). The output is checked in; run this only to change it. Output is deterministic.
-
-  Common.xlsx      Enums, Game.Config, #ReadMe
-  Character.xlsx   Job (+ Job.Advanced), Level, Skill
-  Item.xlsx        Item (+ Item.Material, Item.Equipment), Equipment (+ Equipment.Col.Upgrade), SetBonus, Enhance
-  World.xlsx       Region, Map (+ Map.Dungeon), Portal, Npc
-  Monster.xlsx     Battle.Enums, Monster (+ Monster.Boss), Spawn, Drop
-  Quest.xlsx       Quest (+ Quest.Daily), QuestObjective
-  Shop.xlsx        Shop, ShopGoods, Gacha
-  Localization/Text.csv
-
-Every rule HolySheet supports appears somewhere: two Enums sheets, a Flags enum with a value column, a Config sheet, child sheets
-that add rows, a .Col sheet that adds columns, Mapping columns, keys, indexes, references across workbooks (required,
-optional and arrays), arrays of every kind, ignored sheets, columns and rows. All names are made up for this demo.
-"""
 import csv
 import datetime
 import os
@@ -47,7 +28,6 @@ def sheet(workbook, name, header, rows, header_rows=3, widths=14):
 
 
 def table(workbook, name, columns, rows):
-    """columns: list of (type, name, comment)."""
     header = [[c[0] for c in columns], [c[1] for c in columns], [c[2] for c in columns]]
     return sheet(workbook, name, header, rows)
 
@@ -66,7 +46,6 @@ def save(workbook, folder, name):
 
 def common(folder):
     wb = book()
-    # One column per enum; a column right of an enum with no name in the name row holds that enum's values.
     enums = [
         ("byte", "EStat", "능력치", ["Str", "Dex", "Int", "Luk", "MaxHp", "MaxMp", "Atk", "MAtk", "Def", "MDef", "Crit", "Speed"]),
         ("byte", "EElement", "속성", ["None", "Fire", "Water", "Earth", "Wind", "Light", "Dark"]),
@@ -215,7 +194,7 @@ ITEM_COLUMNS = [
     ("string", "Description", "설명"),
 ]
 
-WEAPONS = [  # id, code, name, weapon type, job, level, atk, matk
+WEAPONS = [
     (20001, "wood_sword", "나무 검", "Sword", 100, 1, 12, 0),
     (20002, "iron_sword", "강철 검", "Sword", 100, 15, 38, 0),
     (20003, "knight_blade", "기사의 검", "Sword", 110, 35, 96, 0),
@@ -230,7 +209,7 @@ WEAPONS = [  # id, code, name, weapon type, job, level, atk, matk
     (20032, "night_claw", "밤의 손톱", "Claw", 410, 35, 99, 0),
     (20033, "shade_dagger", "그림자 단검", "Dagger", 420, 35, 97, 0),
 ]
-ARMORS = [  # id, code, name, slot, level, def
+ARMORS = [
     (21001, "cloth_cap", "천 모자", "Head", 1, 3), (21002, "cloth_shirt", "천 옷", "Body", 1, 6),
     (21003, "leather_boots", "가죽 장화", "Feet", 5, 4), (21004, "leather_gloves", "가죽 장갑", "Hands", 5, 3),
     (21011, "guardian_helm", "수호자의 투구", "Head", 40, 28), (21012, "guardian_armor", "수호자의 갑옷", "Body", 40, 52),
@@ -300,7 +279,6 @@ def item(folder):
         equipment.append([iid, iid, slot, "None", None, level, 0, 0, defense, stats, values])
     table(wb, "Equipment", equipment_columns, equipment)
 
-    # Added columns for some of the equipment only; the others get empty cells.
     upgrade_rows = []
     for (iid, _, _, _, _, level, _, _) in WEAPONS:
         if level >= 15:
@@ -350,7 +328,7 @@ REGIONS = [
     (3, "Frostmere", "서리호수", 40),
     (4, "SunkenRuins", "가라앉은 유적", 60),
 ]
-MAPS = [  # id, code, name, region, type, min, max, element, bgm
+MAPS = [
     (1000, "elder_village", "엘더 마을", 1, "Town", 1, 100, "None", "bgm_village"),
     (1001, "green_meadow", "초록 들판", 1, "Field", 1, 10, "None", "bgm_meadow"),
     (1002, "whisper_forest", "속삭이는 숲", 1, "Field", 8, 20, "Earth", "bgm_forest"),
@@ -423,7 +401,7 @@ def world(folder):
     save(wb, folder, "World.xlsx")
 
 
-MONSTERS = [  # id, code, name, rank, level, ai, element, map
+MONSTERS = [
     (1, "GreenSlime", "초록 슬라임", "Normal", 2, "Passive", "None"),
     (2, "Mushroom", "버섯돌이", "Normal", 5, "Passive", "Earth"),
     (3, "Wolf", "들늑대", "Normal", 9, "Aggressive", "None"),

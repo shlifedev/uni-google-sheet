@@ -70,7 +70,7 @@ public class GoogleLocalCopyTests
         var config = new HolySheetConfig { BaseDirectory = temp.Path, CsvBackend = "builtin", Sources = { source } };
         BuildResult preview = TableBuild.Run(config, options);
         Assert.True(preview.Success, Sheets.Errors(preview));
-        preview.ReleaseBuildData(); // The window usually starts with a check, before anything has been committed.
+        preview.ReleaseBuildData();
         google.Requests.Clear();
         google.Value = 150;
         preview = await GoogleTabCopies.ChangeAsync(config, preview, Book, "Gear", true, options);

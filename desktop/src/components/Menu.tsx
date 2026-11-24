@@ -1,4 +1,3 @@
-// A small popup menu: right-click menus and the View menu. One open at a time; Esc or a click outside closes it.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { create } from "zustand";
 
@@ -19,14 +18,12 @@ export const useMenu = create<MenuState>((set) => ({
   close: () => set({ open: null }),
 }));
 
-/** Shows a menu at the mouse. For onContextMenu handlers. */
 export function showMenu(event: React.MouseEvent, items: MenuItem[]) {
   event.preventDefault();
   event.stopPropagation();
   useMenu.getState().show(event.clientX, event.clientY, items);
 }
 
-/** Shows a menu under an element. For buttons. */
 export function showMenuBelow(element: HTMLElement, items: MenuItem[]) {
   const box = element.getBoundingClientRect();
   useMenu.getState().show(box.left, box.bottom + 4, items);
@@ -39,7 +36,6 @@ export function MenuHost() {
 
   useLayoutEffect(() => {
     if (!open || !ref.current) return;
-    // Keep the menu inside the window.
     const { width, height } = ref.current.getBoundingClientRect();
     setPosition({
       left: Math.max(4, Math.min(open.x, window.innerWidth - width - 4)),

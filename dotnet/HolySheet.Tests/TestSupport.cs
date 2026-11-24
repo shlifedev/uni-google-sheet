@@ -26,7 +26,6 @@ internal static class Repo
     public static string Fixture(string name) => Path.Combine(AppContext.BaseDirectory, "Fixtures", name);
 }
 
-/// <summary>A folder under the system temp directory that is removed when the test ends.</summary>
 internal sealed class TempDir : IDisposable
 {
     public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "holysheet-tests", Guid.NewGuid().ToString("N"));
@@ -52,7 +51,6 @@ internal sealed class TempDir : IDisposable
 
 internal static class Sheets
 {
-    /// <summary>A sheet written as CSV text, which is the shortest way to spell one in a test.</summary>
     public static Sheet Of(string name, string csv, string workbook = "Book") =>
         Sheet.FromGrid(workbook, name, BuiltinCsvParser.Instance.Parse(csv.Replace("\r\n", "\n")));
 
@@ -63,7 +61,6 @@ internal static class Sheets
         Parallel = false
     };
 
-    /// <summary>Builds the given sheets with the default rules, without touching the disk.</summary>
     public static BuildResult Build(params Sheet[] sheets) => Build(Config(), sheets);
 
     public static BuildResult Build(HolySheetConfig config, params Sheet[] sheets)
@@ -75,7 +72,6 @@ internal static class Sheets
     public static string Errors(BuildResult result) => string.Join("\n", result.Diagnostics.Items.Select(item => item.ToString()));
 }
 
-/// <summary>The sample workbook, built into a temp folder with the given serializer.</summary>
 internal sealed class SampleBuild : IDisposable
 {
     private readonly TempDir _temp = new();
@@ -109,7 +105,6 @@ internal sealed class SampleBuild : IDisposable
         return config;
     }
 
-    /// <summary>Builds again into the same folders, as the watch command would after a sheet edit.</summary>
     public CommitReport Rebuild(Action<HolySheetConfig>? configure = null, TableBuildOptions? options = null)
     {
         configure?.Invoke(Config);

@@ -1,5 +1,3 @@
-// What the tree's selection means for a build: which sheets are read again, which tables come out of it, and the
-// words for it. The toolbar's "Build selection" and the line under the tree both show this.
 import { useMemo } from "react";
 import { useApp } from "./store";
 import { useTablesView } from "./tablesView";
@@ -16,7 +14,6 @@ export function useSelectionBuild() {
     const selection = selectionOf(nodes);
     const impact = selectionImpact(model, selection);
 
-    // "2", "enum 1", or "2 · enum 1": what is built again.
     const count =
       impact.enums.length === 0
         ? String(impact.tables.length)
@@ -31,7 +28,6 @@ export function useSelectionBuild() {
       only: onlyArguments(selection),
       label: describeSelection(nodes, selection),
       count,
-      /** The sheets read again, one per line. */
       sheetsTooltip: T("Reads these again; every other sheet comes from the last build on this machine.\n") + sheets.join("\n"),
       buildTooltip:
         T("Read only the selected sheets again and write the result.") +

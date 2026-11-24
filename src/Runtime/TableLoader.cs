@@ -6,13 +6,8 @@ using System.Threading.Tasks;
 
 namespace HolySheet
 {
-    /// <summary>
-    /// Loads a table set: reads the manifest, checks it against the generated code, verifies every data file and decodes it.
-    /// Either every table loads or an exception is thrown; a half-loaded set is never returned.
-    /// </summary>
     public static class TableLoader
     {
-        /// <param name="previous">A snapshot already in memory. Tables whose data hash is unchanged are carried over instead of decoded again.</param>
         public static TableSetData Load(TableSetDefinition definition, TableSource source, TableLoadOptions? options = null, ITableSet? previous = null)
         {
             if (definition == null)
@@ -70,7 +65,6 @@ namespace HolySheet
             return new TableSetData(manifest, plan.Tables!, plan.Reused);
         }
 
-        /// <summary>The same as <see cref="Load"/> without blocking on I/O. With <see cref="TableLoadOptions.Parallel"/>, decoding runs on the thread pool.</summary>
         public static async ValueTask<TableSetData> LoadAsync(TableSetDefinition definition, TableSource source, TableLoadOptions? options = null, ITableSet? previous = null, CancellationToken cancellationToken = default)
         {
             if (definition == null)
@@ -142,7 +136,6 @@ namespace HolySheet
             return new TableSetData(manifest, plan.Tables!, plan.Reused);
         }
 
-        /// <summary>Reads only the manifest. Use it to decide whether a reload or a patch download is needed at all.</summary>
         public static TableManifest ReadManifest(TableSetDefinition definition, TableSource source, TableLoadOptions? options = null)
         {
             TableLoadOptions effective = options ?? TableLoadOptions.Default;
@@ -199,7 +192,6 @@ namespace HolySheet
 
             if (options.VerifyHashes)
             {
-                // The size check is free and catches truncation before the more expensive hash.
                 if (entry.Bytes >= 0 && bytes.Length != entry.Bytes)
                 {
                     throw new TableLoadException(TableLoadError.HashMismatch,
@@ -283,7 +275,6 @@ namespace HolySheet
 
         private static string DecodeUtf8(byte[] bytes)
         {
-            // Skip a byte order mark if some editor added one.
             int offset = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
             return Encoding.UTF8.GetString(bytes, offset, bytes.Length - offset);
         }
@@ -302,7 +293,6 @@ namespace HolySheet
             return flat.InnerExceptions.Count > 0 ? flat.InnerExceptions[0] : exception;
         }
 
-        // Decides, before any data file is touched, which tables must be decoded and which can be carried over.
         private sealed class Plan
         {
             public readonly ITable?[] Tables;
@@ -319,7 +309,6 @@ namespace HolySheet
                 int pending = 0;
                 for (int index = 0; index < tables.Length; index++)
                 {
-                    // The set-level schema already matched, so a missing or different table here means a corrupt manifest.
                     TableManifestEntry? entry = manifest.FindTable(tables[index].Name);
                     if (entry == null || entry.Schema != tables[index].SchemaHash)
                     {

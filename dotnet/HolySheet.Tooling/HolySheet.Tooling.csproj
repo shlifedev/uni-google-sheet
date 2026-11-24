@@ -1,11 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!--
-      Tool-side tasks that sit next to a build rather than inside it: checking a data folder against its manifest,
-      creating a signing key, starting a project, describing a run in one line.
-      They need the runtime's manifest types as well as the engine, which is why they are not in HolySheet.Core.
-      Used by the desktop host and the CLI.
-    -->
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <RootNamespace>HolySheet.Tooling</RootNamespace>

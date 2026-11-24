@@ -6,33 +6,20 @@ using UnityEngine;
 
 namespace HolySheet.Editor
 {
-    /// <summary>The language of the HolySheet window.</summary>
     public enum HolySheetLanguage
     {
-        /// <summary>Korean when the operating system is in Korean, otherwise English.</summary>
         System,
         English,
         Korean
     }
 
-    /// <summary>
-    /// The window's text in English or Korean. English is written in the code and doubles as the lookup key; Korean comes
-    /// from the table below, and a string missing from it shows in English. Messages from the engine (problems, hints)
-    /// stay in English.
-    /// <para>
-    /// The choice is personal, not part of the project: it is kept in UserSettings/HolySheetEditor.txt, the folder Unity keeps
-    /// for per-user settings and that version control ignores.
-    /// </para>
-    /// </summary>
     public static class HolySheetText
     {
         private const string SettingsFileName = "HolySheetEditor.txt";
         private static HolySheetLanguage? _language;
 
-        /// <summary>Forces a language without saving it, for tests and screenshots. Null uses <see cref="Language"/>.</summary>
         public static HolySheetLanguage? Override { get; set; }
 
-        /// <summary>The chosen language, saved for this user and project.</summary>
         public static HolySheetLanguage Language
         {
             get
@@ -51,7 +38,6 @@ namespace HolySheet.Editor
             }
         }
 
-        /// <summary>The language text is shown in: <see cref="Language"/>, with System resolved.</summary>
         public static HolySheetLanguage Effective
         {
             get
@@ -68,19 +54,16 @@ namespace HolySheet.Editor
 
         public static bool IsKorean => Effective == HolySheetLanguage.Korean;
 
-        /// <summary>The text in the current language.</summary>
         public static string T(string english)
         {
             return IsKorean && Korean.TryGetValue(english, out string? korean) ? korean : english;
         }
 
-        /// <summary>A format string in the current language, filled in.</summary>
         public static string F(string englishFormat, params object[] args)
         {
             return string.Format(T(englishFormat), args);
         }
 
-        /// <summary>"21 tables" / "테이블 21개".</summary>
         public static string Count(int count, string noun)
         {
             if (IsKorean && KoreanCounts.TryGetValue(noun, out string? format))
@@ -105,17 +88,12 @@ namespace HolySheet.Editor
 
         private static Dictionary<string, string>? _settings;
 
-        /// <summary>
-        /// A personal setting of the window (the language, how the data view looks), from UserSettings/HolySheetEditor.txt.
-        /// Empty when it was never set.
-        /// </summary>
         public static string GetSetting(string key)
         {
             _settings ??= ReadSettings();
             return _settings.TryGetValue(key, out string? value) ? value : "";
         }
 
-        /// <summary>Saves a personal setting; the other settings in the file are kept.</summary>
         public static void SetSetting(string key, string value)
         {
             _settings ??= ReadSettings();
@@ -177,7 +155,6 @@ namespace HolySheet.Editor
 
         private static readonly Dictionary<string, string> Korean = new Dictionary<string, string>
         {
-            // Pages and toolbar
             ["Tables"] = "테이블",
             ["Problems"] = "문제",
             ["Settings"] = "설정",
@@ -198,14 +175,12 @@ namespace HolySheet.Editor
             ["Up to date"] = "최신 상태",
             ["{0} is not in this project. The generated code will not compile until it is added."] = "이 프로젝트에 {0} 패키지가 없습니다. 추가하기 전에는 생성된 코드가 컴파일되지 않습니다.",
 
-            // No config
             ["This project has no holysheet.json yet. It holds the sources and output folders; the holysheet command line reads the same file."] = "이 프로젝트에는 아직 holysheet.json이 없습니다. 소스와 출력 폴더를 담는 파일이며, holysheet 명령줄 도구도 같은 파일을 읽습니다.",
             ["Create holysheet.json"] = "holysheet.json 만들기",
             ["holysheet.json could not be read: "] = "holysheet.json을 읽을 수 없습니다: ",
             ["Open"] = "열기",
             ["Reload"] = "새로고침",
 
-            // Problems
             ["Reading the sheets…"] = "시트를 읽는 중…",
             ["Nothing has run yet."] = "아직 실행한 적이 없습니다.",
             ["No problems."] = "문제가 없습니다.",
@@ -219,7 +194,6 @@ namespace HolySheet.Editor
             ["[HolySheet] The file of '{0}' was not found among the sources."] = "[HolySheet] 소스에서 '{0}' 파일을 찾지 못했습니다.",
             ["Click to show or hide the problems of the last run."] = "클릭하면 마지막 실행의 문제 목록을 열거나 닫습니다.",
 
-            // Tree and selection
             ["Other"] = "기타",
             ["Run Check to see the tables as the build reads them."] = "검사를 실행하면 빌드가 읽은 그대로 테이블을 볼 수 있습니다.",
             ["Read only the selected sheets again and write the result."] = "선택한 시트만 다시 읽어 결과를 씁니다.",
@@ -235,7 +209,6 @@ namespace HolySheet.Editor
             ["Defines {0}."] = "{0}을(를) 정의합니다.",
             ["Adds rows to {0}."] = "{0}에 행을 추가합니다.",
 
-            // Table preview and find
             ["{0}  ·  part of {1}"] = "{0}  ·  {1}의 일부",
             ["⌘F to find"] = "⌘F로 찾기",
             ["Ctrl+F to find"] = "Ctrl+F로 찾기",
@@ -269,7 +242,6 @@ namespace HolySheet.Editor
             ["Comment"] = "설명",
             ["{0} of {1}"] = "{1}개 중 {0}개",
 
-            // Settings: sources
             ["Sources"] = "소스",
             ["Add source"] = "소스 추가",
             ["Excel workbook"] = "엑셀 워크북",
@@ -314,7 +286,6 @@ namespace HolySheet.Editor
             ["File…"] = "파일…",
             ["Folder…"] = "폴더…",
 
-            // Settings: output and options
             ["Output"] = "출력",
             ["Folders"] = "폴더",
             ["Code"] = "코드",
@@ -346,7 +317,6 @@ namespace HolySheet.Editor
             ["Open holysheet.json"] = "holysheet.json 열기",
             ["Reveal"] = "파일 위치 열기",
 
-            // Settings: signing
             ["Signing (signed builds)"] = "서명 (서명된 빌드)",
             ["Signing (unsigned builds)"] = "서명 (서명 없는 빌드)",
             ["Public key"] = "공개 키",
@@ -367,7 +337,6 @@ namespace HolySheet.Editor
             ["{0} files match the manifest; the signature is valid."] = "파일 {0}개가 매니페스트와 일치하고, 서명도 유효합니다.",
             ["{0} files match the manifest."] = "파일 {0}개가 매니페스트와 일치합니다.",
 
-            // Settings: this window
             ["Editor"] = "에디터",
             ["Language"] = "언어",
             ["The language of this window. Kept for you only, in UserSettings."] = "이 창의 언어. UserSettings에 저장되며 나에게만 적용됩니다.",

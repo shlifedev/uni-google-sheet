@@ -66,7 +66,6 @@ public class CommitTests
 
         string code = config.Resolve(config.Output.Code);
         string data = config.Resolve(config.Output.Data);
-        // Things a person or Unity put next to the generated files.
         File.WriteAllText(Path.Combine(code, "ItemTable.Custom.cs"), "// hand written partial class");
         File.WriteAllText(Path.Combine(code, "Mine.g.cs"), "// a .g.cs file from some other generator");
         File.WriteAllText(Path.Combine(code, "OldRow.g.cs.meta"), "guid: 1");
@@ -78,7 +77,7 @@ public class CommitTests
 
         Assert.Equal(["OldRow.g.cs", "OldTable.g.cs", "Old.bytes"], report.Deleted);
         Assert.False(File.Exists(Path.Combine(code, "OldRow.g.cs")));
-        Assert.False(File.Exists(Path.Combine(code, "OldRow.g.cs.meta")));   // Unity's .meta goes with its asset
+        Assert.False(File.Exists(Path.Combine(code, "OldRow.g.cs.meta")));
         Assert.False(File.Exists(Path.Combine(data, "Old.bytes")));
         Assert.False(File.Exists(Path.Combine(data, "Old.bytes.meta")));
         Assert.True(File.Exists(Path.Combine(code, "ItemTable.Custom.cs")));
@@ -116,7 +115,6 @@ public class CommitTests
         Directory.CreateDirectory(data);
         File.WriteAllText(Path.Combine(data, "tables.manifest.json"),
             "{ \"holysheet\": 1, \"serializer\": \"memorypack\", \"schema\": \"s\", \"tables\": [ { \"name\": \"Evil\", \"file\": \"../victim.txt\", \"rows\": 0, \"hash\": \"h\" } ] }");
-        // The old text manifest is read once to clean up after it, with the same rule.
         File.WriteAllText(Path.Combine(data, "tables.manifest.txt"), "holysheet-manifest 1\nserializer memorypack\nschema s\ntable Evil file=../victim.txt rows=0 bytes=0 hash=h schema=s\n");
 
         var output = new GeneratedOutput { ManifestText = "{ \"holysheet\": 1, \"serializer\": \"memorypack\", \"schema\": \"s\", \"tables\": [] }\n" };
@@ -134,7 +132,6 @@ public class CommitTests
         File.WriteAllBytes(Path.Combine(data, "Kept.bytes"), [1]);
         File.WriteAllText(Path.Combine(data, "tables.manifest.txt"),
             "holysheet-manifest 1\nserializer memorypack\nschema s\ntable Kept file=Kept.bytes rows=0 bytes=1 hash=h schema=s\ntable Old file=Old.bytes rows=0 bytes=3 hash=h schema=s\n");
-        // A file of the same name that this tool did not write is someone else's.
         string other = temp.Combine("other");
         Directory.CreateDirectory(other);
         File.WriteAllText(Path.Combine(other, "tables.manifest.txt"), "my notes\n");
@@ -157,9 +154,7 @@ public class CommitTests
         using var temp = new TempDir();
         using var build = new SampleBuild("memorypack", config => config.Output.Csv = temp.Combine("csv"));
         string[] files = Directory.GetFiles(temp.Combine("csv")).Select(path => Path.GetFileName(path)!).OrderBy(name => name, StringComparer.Ordinal).ToArray();
-        // Beside the tables, the list of what the tool wrote: the only files a later build may remove.
         Assert.Equal([OutputCommitter.CsvListFileName, "Game.csv", "Item.csv", "Limits.csv", "Monster.csv", "Text.csv"], files);
-        // What was written reads back as the same table.
         List<string[]> rows = BuiltinCsvParser.Instance.Parse(File.ReadAllText(temp.Combine("csv", "Item.csv")));
         Assert.Equal(9, rows.Count);
         Assert.Equal("Ore \"raw\", heavy\nsecond line", rows[6][2]);
@@ -288,7 +283,6 @@ public class ConfigTests
     }
 }
 
-/// <summary>The Google source against a stand-in for Google's servers. No network is used.</summary>
 public class GoogleSourceTests
 {
     private const string ItemCsv = "Key<int>,string\r\nId,Name\r\n,\r\n1,\"Sword, long\"\r\n2,포션\r\n";
@@ -331,7 +325,6 @@ public class GoogleSourceTests
 
         if (url.StartsWith("https://sheets.test/v4/spreadsheets/sheet-id/values:batchGet?"))
         {
-            // The same tabs as the CSV exports below, as the Sheets API returns them: trailing blanks left out.
             return Text("""
                 { "valueRanges": [
                   { "range": "Item!A1:B5", "values": [ ["Key<int>", "string"], ["Id", "Name"], [], ["1", "Sword, long"], ["2", "포션"] ] },
@@ -363,7 +356,6 @@ public class GoogleSourceTests
         Assert.Equal("Sword, long", result.Tables[0].Rows[0].Values[1]);
         Assert.Equal("포션", result.Tables[0].Rows[1].Values[1]);
         Assert.Contains(handler.Requests, request => request.Contains("key=KEY"));
-        // The Drive version check (unknown here), the tab list, and one values:batchGet for both tabs. No per-tab exports.
         Assert.Equal(3, handler.Requests.Count);
         Assert.Single(handler.Requests, request => request.Contains("values:batchGet") && request.Contains("ranges=%27Item%27") && request.Contains("ranges=%27Monster%27"));
         Assert.DoesNotContain(handler.Requests, request => request.Contains("/export?"));
@@ -427,7 +419,6 @@ public class GoogleSourceTests
         Assert.Equal(3, authorized.Count);
         Assert.All(authorized, Assert.True);
 
-        // The assertion is a JWT that the account's public key verifies, with the claims Google requires.
         string[] parts = assertion!.Split('.');
         Assert.Equal(3, parts.Length);
         static byte[] FromBase64Url(string text) => Convert.FromBase64String(text.Replace('-', '+').Replace('_', '/').PadRight(text.Length + (4 - text.Length % 4) % 4, '='));
@@ -479,7 +470,6 @@ public class GoogleSourceTests
         Assert.True(online.Success, Sheets.Errors(online));
         Assert.Equal(["Item.csv", "Monster.csv"], Directory.GetFiles(temp.Combine("Snapshot"), "*.csv").Select(Path.GetFileName).OrderBy(name => name));
         Assert.True(File.Exists(temp.Combine("Snapshot", SnapshotIndex.FileName)));
-        // The snapshot uses LF line endings so it diffs the same on every machine.
         Assert.DoesNotContain("\r", File.ReadAllText(temp.Combine("Snapshot", "Item.csv")));
 
         (BuildResult offline, StubHandler handler) = Build(source, _ => throw new InvalidOperationException("offline builds must not use the network"), temp.Path, offline: true);
@@ -500,7 +490,6 @@ public class GoogleSourceTests
         TableBuild.Commit(config, online);
         string item = Path.Combine(config.Resolve(config.Output.Data), "Item.bytes");
 
-        // Without a configured name the workbook is the spreadsheet's title, and the offline build must use the same one.
         var offline = new StubHandler(_ => throw new InvalidOperationException("offline builds must not use the network"));
         BuildResult partial = TableBuild.Run(config, new TableBuildOptions { HttpHandler = offline, GoogleEndpoints = Endpoints, Offline = true, Only = SheetSelection.Parse(["Live Data/Item"]) });
         Assert.True(partial.Success, Sheets.Errors(partial));
@@ -508,7 +497,6 @@ public class GoogleSourceTests
         TableBuild.Commit(config, partial);
         Assert.True(File.Exists(item));
 
-        // A snapshot from before the name was recorded cannot be matched: the build stops instead of deleting the table.
         File.Delete(temp.Combine("Snapshot", SnapshotIndex.FileName));
         BuildResult unmatched = TableBuild.Run(config, new TableBuildOptions { HttpHandler = offline, GoogleEndpoints = Endpoints, Offline = true, Only = SheetSelection.Parse(["Live Data/Item"]) });
         Assert.False(unmatched.Success);
@@ -517,7 +505,6 @@ public class GoogleSourceTests
     }
 }
 
-/// <summary>The command line, run in process. Console output is captured, so these tests must not run in parallel with each other.</summary>
 [Collection("console")]
 public class CliTests
 {
@@ -572,7 +559,6 @@ public class CliTests
         Assert.Equal(0, exitCode);
         Assert.Contains("ok: 3 tables match the manifest", output);
 
-        // Keep the first build, change a price, build again and compare the two.
         Directory.CreateDirectory(temp.Combine("v1"));
         File.Copy(temp.Combine("Generated", "Data", "tables.manifest.json"), temp.Combine("v1", "tables.manifest.json"));
         string itemPath = temp.Combine("Sheets", "Item.csv");
@@ -623,7 +609,7 @@ public class CliTests
         Assert.Equal(0, exitCode);
         Assert.Contains("public key:  rsa:", output);
         Assert.True(File.Exists(temp.Combine("holysheet.private.key")));
-        Assert.Equal(3, Run(temp.Path, "keygen").ExitCode);      // refuses to replace a key without --force
+        Assert.Equal(3, Run(temp.Path, "keygen").ExitCode);
 
         Assert.Equal(0, Run(temp.Path, "build").ExitCode);
         Assert.Contains("\"signature\": { \"algorithm\": \"rsa-sha256\", \"value\": ", File.ReadAllText(temp.Combine("Generated", "Data", "tables.manifest.json")));

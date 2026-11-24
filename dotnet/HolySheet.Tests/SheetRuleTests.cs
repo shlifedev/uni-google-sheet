@@ -18,23 +18,22 @@ public class XlsxReaderTests
 
         Sheet item = Find(workbook, "Item");
         Assert.Equal("Key<int>", item.GetCell(0, 0).Text);
-        Assert.Equal("1001", item.GetCell(3, 0).Text);          // a number cell holding 1001, not "1001.0"
+        Assert.Equal("1001", item.GetCell(3, 0).Text);
         Assert.Equal("2.5", item.GetCell(3, 7).Text);
-        Assert.Equal("4", item.GetCell(4, 7).Text);             // 4 typed into a decimal column
-        Assert.Equal("true", item.GetCell(3, 9).Text);          // a boolean cell
-        Assert.Equal("2026-01-31", item.GetCell(3, 10).Text);   // a date cell without a time
+        Assert.Equal("4", item.GetCell(4, 7).Text);
+        Assert.Equal("true", item.GetCell(3, 9).Text);
+        Assert.Equal("2026-01-31", item.GetCell(3, 10).Text);
         Assert.Equal("2026-01-31 13:30:00", item.GetCell(4, 10).Text);
         Assert.Equal("포션 Potion", item.GetCell(5, 2).Text);
         Assert.Equal("Ore \"raw\", heavy\nsecond line", item.GetCell(8, 2).Text);
         Assert.Equal("9007199254740991", item.GetCell(8, 13).Text);
-        Assert.True(item.GetCell(7, 0).IsBlank);                // the blank row keeps its place
+        Assert.True(item.GetCell(7, 0).IsBlank);
         Assert.Equal("B4", item.GetCell(3, 1).Origin.A1);
     }
 
     [Fact]
     public void A_workbook_saved_by_another_program_reads_the_same()
     {
-        // The same workbook written by openpyxl and re-saved by LibreOffice: different string storage, styles and date formats.
         Workbook original = XlsxReader.Read(Path.Combine(Repo.SampleData, "Sheets", "Game.xlsx"));
         Workbook resaved = XlsxReader.Read(Repo.Fixture("Game.libreoffice.xlsx"));
         Assert.Equal(original.Sheets.Select(sheet => sheet.Name), resaved.Sheets.Select(sheet => sheet.Name));
@@ -153,7 +152,6 @@ public class TransformRuleTests
         Assert.Equal(TableKind.Config, game.Kind);
         Assert.Equal(["MaxLevel", "Title"], game.Columns.Select(column => column.Name));
         Assert.Equal(["60", "Hello"], game.Rows.Single().Select(cell => cell.Text));
-        // A problem in a config value still points at the cell the author typed into.
         Assert.Equal("D1", game.Rows[0][0].Origin.A1);
     }
 
@@ -184,7 +182,6 @@ public class TransformRuleTests
         Sheet colB = Sheets.Of("Item.Col.B", "Key<int>,int\nId,B\n,\n1,20\n");
         Sheet colA = Sheets.Of("Item.Col.A", "Key<int>,int\nId,A\n,\n1,10\n");
 
-        // The order an xlsx author might arrange the tabs in, and the reverse.
         BuildResult first = Sheets.Build(item, zeta, alpha, colB, colA);
         BuildResult second = Sheets.Build(colA, colB, alpha, zeta, item);
         Assert.True(first.Success, Sheets.Errors(first));
@@ -223,7 +220,6 @@ public class TransformRuleTests
         Assert.True(result.Success, Sheets.Errors(result));
         RawTable item = Table(result, "Item");
         Assert.Equal(["Id", "Name", "Attack"], item.Columns.Select(column => column.Name));
-        // Keys match as numbers: "03" on the extension sheet is row 3.
         Assert.Equal(["5", "", "9"], item.Rows.Select(row => row[2].Text));
         Assert.Equal([5, 0, 9], result.Tables.Single().Rows.Select(row => (int)row.Values[2]));
     }
@@ -263,7 +259,6 @@ public class TransformRuleTests
     [Fact]
     public void The_header_layout_is_configurable()
     {
-        // The comment, name, type order used by another convention.
         HolySheetConfig config = Sheets.Config();
         config.Sheet.Header = ["comment", "name", "type"];
         BuildResult result = Sheets.Build(config, Sheets.Of("Item", "item id,display name\nId,Name\nKey<int>,string\n1,Sword\n"));

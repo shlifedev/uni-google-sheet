@@ -12,15 +12,6 @@ using UnityEngine;
 
 namespace HolySheet.Demo
 {
-    /// <summary>
-    /// A test bench for the generated tables. It loads them, shows every table, and lets you try the things that matter:
-    /// reloading while the game runs, loading in parallel, and what happens when a data file was tampered with.
-    /// <para>
-    /// In the editor it watches the data folder: leave Play Mode running, edit Sheets/Game.xlsx, build the tables
-    /// (Tools &gt; HolySheet &gt; Build Tables) and the new values appear here without restarting.
-    /// In a player it reads the same files through Resources.
-    /// </para>
-    /// </summary>
     public sealed class HolySheetDemo : MonoBehaviour
     {
         [Tooltip("Folder under a Resources folder that holds the built tables.")]
@@ -48,13 +39,10 @@ namespace HolySheet.Demo
         private Texture2D? _panelTexture;
         private Texture2D? _rowTexture;
 
-        /// <summary>The tables currently in use, or null when loading failed.</summary>
         public DemoTables? Tables { get; private set; }
 
-        /// <summary>Why the last load failed, or null.</summary>
         public string? LastError { get; private set; }
 
-        /// <summary>How many times a reload replaced the tables since this component started.</summary>
         public int ReloadCount { get; private set; }
 
         public bool IsWatching => _watcher != null;
@@ -80,7 +68,6 @@ namespace HolySheet.Demo
             }
         }
 
-        /// <summary>Loads the tables, replacing the current ones only if the load succeeds.</summary>
         public void Load()
         {
             StopWatching();
@@ -91,7 +78,6 @@ namespace HolySheet.Demo
                 string? directory = watchInEditor ? FindDataDirectory() : null;
                 if (directory != null)
                 {
-                    // Watch loads once, then keeps Current up to date. Its events arrive on the main thread.
                     _watcher = DemoTables.Watch(directory, new TableWatchOptions { LoadOptions = options });
                     _watcher.Reloaded += OnReloaded;
                     _watcher.ReloadFailed += OnReloadFailed;
@@ -99,8 +85,6 @@ namespace HolySheet.Demo
                 }
                 else
                 {
-                    // Resources can only be read on the main thread. Preload reads every file here;
-                    // the decoding that follows is then free to run on other threads.
                     TableSource source = TableSource.Preload(new ResourcesTableSource(resourcesFolder), DemoTables.ManifestFileName);
                     Tables = DemoTables.Load(source, options);
                 }
@@ -112,16 +96,11 @@ namespace HolySheet.Demo
             }
             catch (TableLoadException exception)
             {
-                // The tables that were in use stay in use: a failed load never leaves a half-loaded set behind.
                 LastError = exception.Error + ": " + exception.Message;
                 Log("Load failed. " + LastError);
             }
         }
 
-        /// <summary>
-        /// Shows tamper detection without touching any file: takes the real data, changes one byte of one table in memory
-        /// and tries to load it. Returns the error the loader reported, or null if (wrongly) nothing was detected.
-        /// </summary>
         public string? RunTamperTest()
         {
             MemoryTableSource original = TableSource.Preload(CurrentSource(), DemoTables.ManifestFileName);
@@ -162,7 +141,6 @@ namespace HolySheet.Demo
         {
             Tables = change.Current;
             ReloadCount++;
-            // Tables that are not listed are the same objects as before: only what changed was decoded again.
             Log("Reloaded: " + string.Join(", ", change.ChangedTables) + " changed. Content " + change.Current.Manifest.Content.Substring(0, 12));
         }
 
@@ -182,7 +160,6 @@ namespace HolySheet.Demo
             }
         }
 
-        // In the editor the Resources folder is a real folder on disk, which is what a watcher needs.
         private string? FindDataDirectory()
         {
 #if UNITY_EDITOR
@@ -211,12 +188,9 @@ namespace HolySheet.Demo
             UnityEngine.Debug.Log("[HolySheet Demo] " + message);
         }
 
-        // ------------------------------------------------------------------ drawing
-
         private void OnGUI()
         {
             EnsureStyles();
-            // Lay out for a 1280x720 canvas and scale it to the real screen.
             float scale = Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
             float width = Screen.width / scale;
@@ -274,7 +248,6 @@ namespace HolySheet.Demo
 
             IReadOnlyList<ITable> tables = Tables.Tables;
             _selected = Mathf.Clamp(_selected, 0, tables.Count - 1);
-            // A real project has dozens of tables, so the list scrolls.
             var view = new Rect(rect.x + 4f, rect.y + 6f, rect.width - 8f, rect.height - 12f);
             var content = new Rect(0f, 0f, view.width - 16f, tables.Count * 46f);
             _tablesScroll = GUI.BeginScrollView(view, _tablesScroll, content);
@@ -314,7 +287,6 @@ namespace HolySheet.Demo
             var view = new Rect(rect.x + 8f, header.yMax, rect.width - 16f, rect.height - 16f - 26f);
             var content = new Rect(0f, 0f, Mathf.Max(totalWidth, view.width - 16f), rows.Count * 26f);
 
-            // The header scrolls sideways with the rows but stays at the top.
             GUI.BeginGroup(header);
             float x = -_rowsScroll.x;
             for (int column = 0; column < columns.Length; column++)
@@ -358,9 +330,6 @@ namespace HolySheet.Demo
             GUI.EndScrollView();
         }
 
-        /// <summary>
-        /// A line built the way game code reads tables: typed fields, and references followed through the table they point at.
-        /// </summary>
         public static string Summary(DemoTables tables)
         {
             GameRow game = tables.Game.Value;
@@ -370,10 +339,6 @@ namespace HolySheet.Demo
             return "v" + game.Version + "  ·  max level " + game.MaxLevel + "  ·  start: " + start.Name + " (" + region + ")  ·  " + starter;
         }
 
-        /// <summary>
-        /// The rows of any table as text: one column per property of the generated row class, in declaration order.
-        /// Arrays are joined with " | ", references show as Table(key), enums by name.
-        /// </summary>
         public static (string[] Columns, float[] Widths, List<string[]> Rows) Describe(DemoTables tables, string tableName)
         {
             ITable table = tables.Tables.First(candidate => candidate.Name == tableName);

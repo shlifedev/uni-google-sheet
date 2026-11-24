@@ -24,11 +24,6 @@ using UnityEngine.UIElements;
 
 namespace HolySheet.Dev.Tests
 {
-    /// <summary>
-    /// What only a real Unity editor can prove: that the engine DLL loads and builds inside it, that the generated code
-    /// compiles with Unity's compiler and reads its data through the serializer, and that the runtime works on Unity's runtime.
-    /// The same tests run on Unity 6 (Mono) and Unity 7 (CoreCLR).
-    /// </summary>
     public class EditorTests
     {
         private string _temp;
@@ -36,7 +31,6 @@ namespace HolySheet.Dev.Tests
         [SetUp]
         public void SetUp()
         {
-            // The window's text is checked in English, whatever language the person running the tests chose.
             HolySheetText.Override = HolySheetLanguage.English;
             _temp = Path.Combine(Path.GetTempPath(), "holysheet-unity-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_temp);
@@ -61,7 +55,6 @@ namespace HolySheet.Dev.Tests
 
         private static string Errors(BuildResult result) => string.Join("\n", result.Diagnostics.Items.Select(item => item.ToString()));
 
-        // The demo workbook written out as CSV, one file per sheet: the same tables through the CSV path.
         private HolySheetConfig WriteDemoAsCsv(string name, Func<string, string, string> edit = null)
         {
             BuildResult source = TableBuild.Run(HolySheetProject.LoadConfig(), new TableBuildOptions { Offline = true });
@@ -96,16 +89,13 @@ namespace HolySheet.Dev.Tests
         {
             string runtime = RuntimeInformation.FrameworkDescription;
             Debug.Log("[HolySheet.Dev.Tests] Unity " + Application.unityVersion + " on " + runtime + ", sep available: " + (CsvBackends.Fast != null));
-            // "auto" is the built-in parser on every editor.
             Assert.AreEqual("builtin", CsvBackends.Resolve("auto").Name);
 #if UNITY_7000_0_OR_NEWER
-            // Unity 7 runs the editor on CoreCLR, where the Sep backend loads and can be asked for by name.
             StringAssert.StartsWith(".NET", runtime);
             Assert.IsNotNull(CsvBackends.Fast, CsvBackends.FastUnavailableReason);
             Assert.AreEqual("sep", CsvBackends.Resolve("sep").Name);
             Assert.IsTrue(HolySheetProject.IsSepAvailable);
 #else
-            // Unity 6 runs on Mono. The Sep DLLs are excluded by their define constraint, so asking for Sep is an error.
             StringAssert.StartsWith("Mono", runtime);
             Assert.IsNull(CsvBackends.Fast);
             Assert.Throws<NotSupportedException>(() => CsvBackends.Resolve("sep"));
@@ -117,7 +107,6 @@ namespace HolySheet.Dev.Tests
         [Test]
         public void Building_in_this_editor_gives_the_checked_in_files_byte_for_byte()
         {
-            // The checked-in demo output was written by the .NET CLI. The engine inside this editor must produce exactly the same.
             BuildResult result = TableBuild.Run(HolySheetProject.LoadConfig(), new TableBuildOptions { Offline = true });
             Assert.IsTrue(result.Success, Errors(result));
             Assert.AreEqual(DemoTables.Definition.Tables.Length, result.Tables.Count);
@@ -147,7 +136,6 @@ namespace HolySheet.Dev.Tests
             Assert.AreEqual(DemoTables.Load(DataDirectory).Manifest.Content, builtin.Output.ContentHash);
 
 #if UNITY_7000_0_OR_NEWER
-            // On CoreCLR the Sep backend reads the same files and must give exactly the same data.
             config.CsvBackend = "sep";
             BuildResult sep = TableBuild.Run(config);
             Assert.IsTrue(sep.Success, Errors(sep));
@@ -169,8 +157,6 @@ namespace HolySheet.Dev.Tests
                 DemoTables tables = DemoTables.Load(DataDirectory, options);
                 Assert.AreEqual(DemoTables.Definition.Tables.Length, tables.Tables.Count);
 
-                // Items: three sheets make one table, Item first and then the child sheets in name order (Item.Equipment, Item.Material).
-                // The row starting with ~ is left out.
                 Assert.AreEqual(44, tables.Item.Count);
                 ItemRow potion = tables.Item.Get(10001);
                 Assert.AreEqual("작은 회복 물약", potion.Name);
@@ -183,7 +169,6 @@ namespace HolySheet.Dev.Tests
                 Assert.AreEqual(EItemType.Equipment, tables.Item.Get(20003).Type);
                 CollectionAssert.AreEqual(new[] { 10005, 10007, 10102, 21011, 21012, 21013, 21014, 30103, 30106, 30107 }, tables.Item.ListByTier(3).Select(row => row.Id).ToArray());
 
-                // Equipment: references across workbooks, and columns added by Equipment.Col.Upgrade for some rows only.
                 EquipmentRow blade = tables.Equipment.Get(20003);
                 Assert.AreSame(tables.Item.Get(20003), tables.Item.Get(blade.Item));
                 Assert.AreEqual(EEquipSlot.Weapon, blade.Slot);
@@ -199,7 +184,6 @@ namespace HolySheet.Dev.Tests
                 CollectionAssert.AreEqual(new[] { 240, 20 }, tables.Equipment.Get(21012).BonusValues.ToArray());
                 CollectionAssert.AreEqual(new[] { 21011, 21012, 21013, 21014 }, tables.SetBonus.Get(2).Pieces.ToArray());
 
-                // Jobs: Job.Advanced adds the second tier, which points back at the first; the Mapping column made EJobId.
                 JobRow knight = tables.Job.Get((int)EJobId.Knight);
                 Assert.AreEqual("기사", knight.Name);
                 Assert.AreEqual(2, knight.Tier);
@@ -211,7 +195,6 @@ namespace HolySheet.Dev.Tests
                 Assert.AreEqual(tables.Job.Get(210), tables.Job.Get(tables.Skill.GetByCode("meteor").Job));
                 CollectionAssert.AreEqual(new[] { 2.0f, 2.15f, 2.3f, 2.45f, 2.6f }, tables.Skill.GetByCode("meteor").Damage.ToArray());
 
-                // Monsters: Monster.Boss adds bosses; a monster's drop table lists items from another workbook.
                 MonsterRow lord = tables.Monster.Get((int)EMonsterId.AbyssLord);
                 Assert.AreEqual(EMonsterRank.RaidBoss, lord.Rank);
                 Assert.AreEqual(EAiType.Caster, lord.Ai);
@@ -221,7 +204,6 @@ namespace HolySheet.Dev.Tests
                 CollectionAssert.AreEqual(new[] { 1f, 0.3f, 1f, 0.2f, 0.2f }, drop.Chances.ToArray());
                 Assert.AreEqual("심연의 왕좌", tables.Map.Get(tables.Spawn.Get(20).Map).Name);
 
-                // World: dungeons come from Map.Dungeon; maps point at regions.
                 MapRow raid = tables.Map.GetByCode("abyss_throne");
                 Assert.AreEqual(EMapType.Raid, raid.Type);
                 Assert.AreEqual("가라앉은 유적", tables.Region.Get(raid.Region).Name);
@@ -229,14 +211,12 @@ namespace HolySheet.Dev.Tests
                 Assert.AreEqual("미라의 잡화점", tables.Shop.Get(tables.Npc.Get(2).Shop).Name);
                 Assert.IsFalse(tables.Npc.Get(1).Shop.HasValue);
 
-                // Quests: a chain through Previous, objectives found by index, dailies from Quest.Daily.
                 Assert.AreEqual("고블린 소굴", tables.Quest.Get(tables.Quest.Get(5).Previous).Name);
                 CollectionAssert.AreEqual(new[] { 6, 7 }, tables.QuestObjective.ListByQuestId(4).Select(objective => objective.Id).ToArray());
                 Assert.AreEqual(EQuestType.Weekly, tables.Quest.Get(201).Type);
                 Assert.AreEqual(6, tables.ShopGoods.ListByShopId(2).Length);
                 Assert.AreEqual(new DateTime(2027, 2, 28, 23, 59, 59, DateTimeKind.Utc), tables.Gacha.Get(2).EndsAt);
 
-                // The config sheet, read sideways, and the localization CSV.
                 GameRow game = tables.Game.Value;
                 Assert.AreEqual(100, game.MaxLevel);
                 Assert.AreEqual("엘더 마을", tables.Map.Get(game.StartMap).Name);
@@ -254,7 +234,6 @@ namespace HolySheet.Dev.Tests
             DemoTables tables = DemoTables.Load(new ResourcesTableSource("HolySheetDemo"));
             Assert.AreEqual(16, tables.Monster.Count);
 
-            // Resources is main-thread only; preloading makes a parallel decode possible.
             MemoryTableSource preloaded = TableSource.Preload(new ResourcesTableSource("HolySheetDemo"), DemoTables.ManifestFileName);
             Assert.AreEqual(tables.Manifest.Tables.Count + 1, preloaded.FileNames.Count());
             Assert.AreEqual(tables.Manifest.Content, DemoTables.Load(preloaded, new TableLoadOptions { Parallel = true }).Manifest.Content);
@@ -288,7 +267,6 @@ namespace HolySheet.Dev.Tests
             Assert.AreEqual(44, DemoTables.Load(data, options).Item.Count);
             Assert.IsTrue(TableSignature.Verify(TableManifest.Parse(File.ReadAllText(Path.Combine(data, "tables.manifest.json"))), publicKey));
 
-            // Any edit to the manifest, even to a member the loader does not otherwise use, breaks the signature.
             string manifestPath = Path.Combine(data, "tables.manifest.json");
             File.WriteAllText(manifestPath, File.ReadAllText(manifestPath).Replace("\"tool\": \"holysheet/", "\"tool\": \"xyz/"));
             TableLoadException exception = Assert.Throws<TableLoadException>(() => DemoTables.Load(data, options));
@@ -316,7 +294,6 @@ namespace HolySheet.Dev.Tests
                 DemoTables before = watcher.Current;
                 Assert.AreEqual("초록 슬라임", before.Monster.Get(1).Name);
 
-                // A designer renames a monster and the tables are built again.
                 string monsterPath = Path.Combine(config.BaseDirectory, "Sheets", "Monster.csv");
                 string text = File.ReadAllText(monsterPath);
                 StringAssert.Contains(",초록 슬라임,", text);
@@ -343,7 +320,6 @@ namespace HolySheet.Dev.Tests
         [Test]
         public void The_editor_runner_builds_and_reports()
         {
-            // The dev project's holysheet.json builds the demo, which is already up to date: nothing should be rewritten.
             var baseline = TableManifest.Parse(File.ReadAllText(Path.Combine(DataDirectory, DemoTables.ManifestFileName)));
             HolySheetRunResult result = HolySheetProject.RunBlocking(commit: true, offline: true);
             Assert.IsNull(result.Failure, result.Failure);
@@ -353,7 +329,6 @@ namespace HolySheet.Dev.Tests
             StringAssert.StartsWith($"Up to date: {baseline.Tables.Count} tables, {baseline.Tables.Sum(t => t.Rows)} rows, 16 enums", HolySheetProject.Summarize(result));
 
             Assert.AreSame(result, HolySheetProject.LastResult);
-            // A partial build reads only the selection again and takes the rest from the build above: still nothing to write.
             HolySheetRunResult partial = HolySheetProject.RunBlocking(commit: true, offline: true, only: SheetSelection.Parse(new[] { "Item.xlsx", "Monster.xlsx/Monster.Boss" }));
             Assert.IsNull(partial.Failure, partial.Failure);
             Assert.IsTrue(partial.Build.Success, Errors(partial.Build));
@@ -370,7 +345,6 @@ namespace HolySheet.Dev.Tests
             HolySheetWindow window = UnityEditor.EditorWindow.GetWindow<HolySheetWindow>();
             try
             {
-                // The window builds its UI and binds list rows on its first frames.
                 for (int frame = 0; frame < 3; frame++)
                 {
                     yield return null;
@@ -383,7 +357,6 @@ namespace HolySheet.Dev.Tests
                 CollectionAssert.AreEqual(HolySheetWindow.PageNames.ToArray(), tabs.Select(tab => tab.text).ToArray());
                 StringAssert.StartsWith($"Checked · {DemoTables.Definition.Tables.Length} tables", root.Q<Label>(className: "holysheet-status").text);
 
-                // Every page puts something on screen and marks its own tab, and only that one.
                 foreach (string page in HolySheetWindow.PageNames)
                 {
                     window.SelectPage(page);
@@ -391,22 +364,16 @@ namespace HolySheet.Dev.Tests
                     Assert.Greater(root.Q(className: "holysheet-fill").childCount, 0, "The " + page + " page is empty.");
                 }
 
-                // Tables: a tree of workbook > tables, a search box that finds in it, and a preview of the selected table.
                 window.SelectPage("Tables");
                 yield return null;
                 yield return null;
-                // Workbooks are open, tables built from several sheets are closed. The top of the tree:
                 CollectionAssert.AreEqual(new[] { "Excel", "Character.xlsx", "Job", "Level", "Skill" }, TreeNames(root).Take(5).ToArray());
-                // The demo connects several sources, so the tree starts with one node per source.
-                // Searching does not filter: the tree keeps every node, scrolls to the match and marks it in yellow.
                 TreeView tree = root.Q<TreeView>();
                 int rootCount = tree.GetRootIds().Count();
-                // Each connected source (xlsx, CSV, and the Google Drive folder once it has been read) is a node; its workbooks are under it.
                 Assert.That(rootCount, Is.InRange(2, 3), "One root per connected source.");
                 Assert.AreEqual("holysheet:excel", root.Query(className: "holysheet-tree-row").ToList().First(row => Plain(row.Q<Label>(className: "holysheet-tree-row__name").text) == "Excel").Q<Image>().image.name, "A source node carries its kind's icon.");
                 Label matchCount = root.Q<Label>(className: "holysheet-search__count");
                 ScrollView treeScroll = tree.Q<ScrollView>();
-                // A match already in view does not move the tree; one out of sight is scrolled to.
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-search").value = "Skill";
                 yield return null;
                 yield return null;
@@ -432,8 +399,6 @@ namespace HolySheet.Dev.Tests
                 Assert.AreEqual("Row", grid.columns[0].title);
                 Assert.Greater(grid.columns.Count, 1);
 
-                // Type colors: the type under each heading is classed by kind, and numbers line up on the right.
-                // Enter in the search box selects the match, so its table shows.
                 window.SelectPage("Tables");
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-search").value = "game";
                 PressEnterInSearch(root);
@@ -446,7 +411,6 @@ namespace HolySheet.Dev.Tests
                 Assert.IsNotNull(root.Q<Label>(className: "holysheet-type--date"));
                 Assert.IsNotNull(root.Q<Label>(className: "holysheet-type--ref"));
 
-                // A name typed in full is the first match: "Item" goes to the Item table, not to Item.xlsx or EItemTag.
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-search").value = "Item";
                 PressEnterInSearch(root);
                 yield return null;
@@ -454,16 +418,13 @@ namespace HolySheet.Dev.Tests
                 StringAssert.StartsWith("Item.xlsx / Item  ·  44 rows", root.Q(className: "holysheet-caption").Q<Label>().text);
                 Assert.IsNotNull(root.Q<Label>(className: "holysheet-type--enum"));
                 Assert.IsNotNull(root.Q<Label>(className: "holysheet-cell--number"));
-                // Values keep the default text color: the type classes are on the headings only.
                 Assert.IsTrue(root.Query<Label>(className: "holysheet-cell").ToList().All(cell => !cell.ClassListContains("holysheet-type--int") && !cell.ClassListContains("holysheet-type--enum")));
 
-                // View style: grid lines, alignment and stripes are per user and apply to the grid on screen at once.
                 HolySheetWindow.GridLines savedLines = HolySheetWindow.ViewGridLines;
                 HolySheetWindow.CellAlignment savedAlignment = HolySheetWindow.ViewAlignment;
                 bool savedStripes = HolySheetWindow.ViewStripes;
                 try
                 {
-                    // Nothing saved: lines between every cell, text in the middle, striped rows.
                     HolySheetText.SetSetting("view.gridLines", "");
                     HolySheetText.SetSetting("view.alignment", "");
                     HolySheetText.SetSetting("view.stripes", "");
@@ -496,7 +457,6 @@ namespace HolySheet.Dev.Tests
                     window.SetViewStyle(savedLines, savedAlignment, savedStripes);
                 }
 
-                // Find in the table: Edit > Find (Ctrl+F / Cmd+F) opens the bar on the key column; Esc closes it.
                 VisualElement findBar = root.Q(className: "holysheet-find");
                 Assert.AreEqual(DisplayStyle.None, findBar.resolvedStyle.display);
                 using (ExecuteCommandEvent find = ExecuteCommandEvent.GetPooled("Find"))
@@ -514,7 +474,6 @@ namespace HolySheet.Dev.Tests
                 MultiColumnListView itemGrid = root.Q<MultiColumnListView>();
                 Assert.AreEqual(44, itemGrid.itemsSource.Count);
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-find__field").value = "1000";
-                // The filter is applied within a frame or two; on a busy editor allow a few more.
                 for (int frame = 0; frame < 30 && itemGrid.itemsSource.Count != 7; frame++)
                 {
                     yield return null;
@@ -523,7 +482,6 @@ namespace HolySheet.Dev.Tests
                 yield return null;
                 Assert.AreEqual(7, itemGrid.itemsSource.Count, "10001 to 10007");
                 Assert.AreEqual("7 of 44", root.Q<Label>(className: "holysheet-find__count").text);
-                // The matched text is highlighted in the key cells.
                 List<Label> marked = root.Query<Label>(className: "holysheet-cell").ToList().Where(cell => cell.enableRichText && cell.text.Contains("<mark=")).ToList();
                 Assert.Greater(marked.Count, 0);
                 StringAssert.Contains("<mark=#F2C94CE6><color=#1E1E1E><noparse>1000</noparse></color></mark>", marked[0].text);
@@ -534,7 +492,6 @@ namespace HolySheet.Dev.Tests
                 yield return null;
                 Assert.AreEqual(2, itemGrid.itemsSource.Count, "강화석 and 축복받은 강화석");
                 yield return null;
-                // Rows that Item.Material added carry that sheet's name, so they are not mistaken for rows of Item.
                 CollectionAssert.AreEqual(new[] { "Material 13", "Material 14" },
                     root.Query<Label>(className: "holysheet-cell--row").ToList().Where(label => label.resolvedStyle.display == DisplayStyle.Flex && label.text.Length > 0 && label.parent.resolvedStyle.display == DisplayStyle.Flex).Select(label => label.text).Take(2).ToArray());
                 using (KeyDownEvent escape = KeyDownEvent.GetPooled('\0', KeyCode.Escape, EventModifiers.None))
@@ -547,7 +504,6 @@ namespace HolySheet.Dev.Tests
                 Assert.AreEqual(DisplayStyle.None, findBar.resolvedStyle.display);
                 Assert.AreEqual(44, itemGrid.itemsSource.Count);
 
-                // Sorting: a heading sorts the rows. Numbers sort by value, ties keep sheet order, and find keeps the order.
                 List<string> ItemColumn(int index) => itemGrid.itemsSource.Cast<Cell[]>().Select(row => row[index].Text).ToList();
                 List<string> sheetOrder = ItemColumn(0);
                 Assert.AreEqual(ColumnSortingMode.Custom, itemGrid.sortingMode);
@@ -558,10 +514,8 @@ namespace HolySheet.Dev.Tests
                 Assert.AreEqual(2500d, sellPrices[0], "SellPrice by value: 2500 before 900.");
                 CollectionAssert.AreEqual(sellPrices.OrderByDescending(price => price).ToList(), sellPrices);
                 Assert.IsNotNull(root.Q(className: "unity-multi-column-header__column__sort-indicator"), "The heading shows the sort arrow.");
-                // Ties keep sheet order: the items that sell for 0 come in the order of their ids.
                 List<string> free = itemGrid.itemsSource.Cast<Cell[]>().Where(row => row[8].Text == "0").Select(row => row[0].Text).ToList();
                 CollectionAssert.AreEqual(sheetOrder.Where(free.Contains).ToList(), free);
-                // A heading click describes the column by its index rather than its name.
                 itemGrid.sortColumnDescriptions.Clear();
                 itemGrid.sortColumnDescriptions.Add(new SortColumnDescription(itemGrid.columns.IndexOf(itemGrid.columns["c8"]), SortDirection.Ascending));
                 yield return null;
@@ -584,7 +538,6 @@ namespace HolySheet.Dev.Tests
                 Assert.AreEqual(44, itemGrid.itemsSource.Count);
                 Assert.AreEqual("30111", ItemColumn(0)[0], "Clearing find keeps the sort.");
 
-                // The Row column is sheet order.
                 itemGrid.sortColumnDescriptions.Clear();
                 itemGrid.sortColumnDescriptions.Add(new SortColumnDescription("row", SortDirection.Ascending));
                 yield return null;
@@ -593,13 +546,11 @@ namespace HolySheet.Dev.Tests
                 yield return null;
                 CollectionAssert.AreEqual(sheetOrder, ItemColumn(0), "No sort is sheet order.");
 
-                // Text sorts the way people read it: case ignored, digits by value, Hangul in 가나다 order.
                 Assert.Less(HolySheetWindow.CompareNatural("Item2", "item10"), 0);
                 Assert.Less(HolySheetWindow.CompareNatural("가방", "나무"), 0);
                 Assert.Greater(HolySheetWindow.CompareNatural("b", "A"), 0);
                 Assert.AreEqual(0, HolySheetWindow.CompareNatural("x", "x"));
 
-                // A table built from several sheets lists them under it. Searching for one opens the table and shows only that sheet's rows.
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-search").value = "advanced";
                 PressEnterInSearch(root);
                 yield return null;
@@ -611,19 +562,15 @@ namespace HolySheet.Dev.Tests
                 PressEnterInSearch(root);
                 yield return null;
                 yield return null;
-                // The workbook is selected; its tables follow it (Drop, Monster, Spawn), which the selections below rely on.
                 string[] names = TreeNames(root);
                 int monsterBook = Array.IndexOf(names, "Monster.xlsx");
                 Assert.GreaterOrEqual(monsterBook, 0, string.Join(", ", names));
                 Assert.AreEqual("Drop", names.ElementAtOrDefault(monsterBook + 1), string.Join(", ", names));
-                // xlsx workbooks carry the Excel icon.
                 Assert.AreEqual("holysheet:excel", root.Query(className: "holysheet-tree-row").ToList().First(row => Plain(row.Q<Label>(className: "holysheet-tree-row__name").text) == "Monster.xlsx").Q<Image>().image.name);
 
-                // Several nodes can be selected; the bar under the tree names them and the toolbar builds just those.
                 tree = root.Q<TreeView>();
                 int at = tree.selectedIndex;
                 Label selectionLabel = root.Q<Label>(className: "holysheet-selection__label");
-                // The build button counts the tables the selection builds again.
                 var selectionBuild = root.Q<UnityEditor.UIElements.ToolbarButton>(className: "holysheet-selection__build");
                 tree.SetSelection(new[] { at + 1, at + 3 });
                 yield return null;
@@ -645,11 +592,9 @@ namespace HolySheet.Dev.Tests
                 StringAssert.IsMatch(@"^Excel · \d+ workbooks$", selectionLabel.text, "A source node covers the workbooks under it.");
                 tree.SetSelection(new[] { at + 2 });
                 yield return null;
-                // Monster is built from Monster and Monster.Boss.
                 Assert.AreEqual("Monster · 2 sheets", selectionLabel.text);
                 Assert.AreEqual("Build selection (1)", selectionBuild.text, "Two sheets, one table.");
 
-                // Enums are in the tree too: those of an Enums sheet under its workbook, Mapping enums under their table.
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-search").value = "EStat";
                 PressEnterInSearch(root);
                 yield return null;
@@ -658,7 +603,6 @@ namespace HolySheet.Dev.Tests
                 StringAssert.StartsWith("Common.xlsx / Enums  ·  EStat  ·  byte  ·  12 members", root.Q(className: "holysheet-caption").Q<Label>().text);
                 Assert.AreEqual(12, root.Q<MultiColumnListView>().itemsSource.Count);
                 Assert.AreEqual(new[] { "Member", "Value", "Comment" }, root.Q<MultiColumnListView>().columns.Select(column => column.title).ToArray());
-                // An Enums sheet builds no table, but its enums are read again: the whole sheet, so all 12 of them.
                 Assert.AreEqual("Build selection (enum 12)", root.Q<UnityEditor.UIElements.ToolbarButton>(className: "holysheet-selection__build").text);
 
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-search").value = "EItemTag";
@@ -667,7 +611,6 @@ namespace HolySheet.Dev.Tests
                 yield return null;
                 StringAssert.Contains("Flags", root.Q(className: "holysheet-caption").Q<Label>().text);
                 CollectionAssert.Contains(((List<string[]>)root.Q<MultiColumnListView>().itemsSource).Select(row => row[2]).ToList(), "8  (1 << 3)");
-                // Enum members sort too; Value by its number, so 16 comes before 8.
                 MultiColumnListView enumGrid = root.Q<MultiColumnListView>();
                 enumGrid.sortColumnDescriptions.Add(new SortColumnDescription("f2", SortDirection.Descending));
                 yield return null;
@@ -682,7 +625,6 @@ namespace HolySheet.Dev.Tests
                 StringAssert.Contains("Mapping", root.Q(className: "holysheet-caption").Q<Label>().text);
                 Assert.AreEqual(Enum.GetValues(typeof(EJobId)).Length, root.Q<MultiColumnListView>().itemsSource.Count);
 
-                // An Enums sheet lists every enum it defines.
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-search").value = "battle";
                 PressEnterInSearch(root);
                 yield return null;
@@ -695,7 +637,6 @@ namespace HolySheet.Dev.Tests
                 root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-search").value = "";
                 yield return null;
 
-                // Problems open in a panel under the tables, behind a bar that counts them.
                 window.SelectPage("Tables");
                 Assert.AreEqual("No problems.", root.Q<Label>(className: "holysheet-problems-bar__text").text);
                 window.SelectPage("Problems");
@@ -703,12 +644,10 @@ namespace HolySheet.Dev.Tests
                 Assert.AreEqual("No problems.", root.Q(className: "holysheet-problems").Q<Label>(className: "holysheet-empty").text);
 
                 window.SelectPage("Settings");
-                // Sources, Output, Sheet and build options, Signing, Editor (the language of this window).
                 Assert.AreEqual(5, root.Query<Foldout>(className: "holysheet-section").ToList().Count);
                 Assert.AreEqual(HolySheetProject.LoadConfig().Sources.Count, root.Query(className: "holysheet-card").ToList().Count);
                 Assert.IsNotNull(root.Query<DropdownField>().ToList().FirstOrDefault(field => field.label == "Language"));
 
-                // In Korean: page content, the status, counts. Page names stay the same for code that selects pages.
                 HolySheetText.Override = HolySheetLanguage.Korean;
                 window.SelectPage("Settings");
                 Assert.AreEqual("소스", root.Query<Foldout>(className: "holysheet-section").First().text);
@@ -731,7 +670,6 @@ namespace HolySheet.Dev.Tests
             string item = HolySheetWindow.FindSourceFile("Item.xlsx");
             Assert.IsTrue(File.Exists(item), item);
             StringAssert.EndsWith("Demo/Sheets/Item.xlsx", item.Replace('\\', '/'));
-            // A CSV workbook opens at the sheet's own file.
             StringAssert.EndsWith("Sheets/Localization/Text.csv", HolySheetWindow.FindSourceFile("Localization", "Text").Replace('\\', '/'));
             Assert.IsNull(HolySheetWindow.FindSourceFile("Nope.xlsx"));
         }
@@ -739,7 +677,6 @@ namespace HolySheet.Dev.Tests
         [UnityTest]
         public IEnumerator The_window_reads_the_sheets_by_itself_after_a_restart()
         {
-            // An editor restart or a script reload leaves no result in memory.
             foreach (HolySheetWindow open in Resources.FindObjectsOfTypeAll<HolySheetWindow>())
             {
                 open.Close();
@@ -751,7 +688,6 @@ namespace HolySheet.Dev.Tests
             try
             {
                 window.SelectPage("Tables");
-                // The window builds its UI on the first frame it is shown (on Unity 7 a frame later than on 6), and the check starts there.
                 DateTime deadline = DateTime.UtcNow.AddSeconds(60);
                 while ((HolySheetProject.LastResult == null || HolySheetProject.IsRunning) && DateTime.UtcNow < deadline)
                 {
@@ -856,7 +792,6 @@ namespace HolySheet.Dev.Tests
                 yield return null;
                 yield return null;
                 var root = window.rootVisualElement;
-                // Exercise the window's actual keyboard routing without contacting a developer's Google account.
                 typeof(HolySheetWindow).GetField("_refreshProject", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                     .SetValue(window, (Action)(() => HolySheetProject.RunAsync(commit: false, offline: true)));
                 window.Focus();
@@ -898,10 +833,8 @@ namespace HolySheet.Dev.Tests
                 .Select(label => Plain(label.text)).ToArray();
         }
 
-        // A tree name without the rich text that marks a search match.
         private static string Plain(string text) => System.Text.RegularExpressions.Regex.Replace(text, "<[^>]*>", "");
 
-        // Enter in the tree's search box: selects the next match.
         private static void PressEnterInSearch(VisualElement root)
         {
             var search = root.Q<UnityEditor.UIElements.ToolbarSearchField>(className: "holysheet-search");

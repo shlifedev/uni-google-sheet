@@ -5,19 +5,13 @@ using System.Linq;
 
 namespace HolySheet.Core
 {
-    /// <summary>
-    /// The workbooks and sheets a partial build reads again. Everything else comes from the sheet cache, as it was at the last
-    /// build on this machine. Written as "Workbook" (every sheet in it) or "Workbook/Sheet".
-    /// </summary>
     public sealed class SheetSelection
     {
         private readonly HashSet<string> _workbooks = new(StringComparer.Ordinal);
         private readonly HashSet<(string Workbook, string Sheet)> _sheets = new();
 
-        /// <summary>Workbooks selected as a whole.</summary>
         public IReadOnlyCollection<string> Workbooks => _workbooks;
 
-        /// <summary>Single sheets, outside the workbooks selected as a whole.</summary>
         public IReadOnlyCollection<(string Workbook, string Sheet)> Sheets => _sheets;
 
         public bool IsEmpty => _workbooks.Count == 0 && _sheets.Count == 0;
@@ -39,7 +33,6 @@ namespace HolySheet.Core
             return this;
         }
 
-        /// <summary>Parses "Workbook" and "Workbook/Sheet" entries. The first '/' separates the two; a workbook name has none.</summary>
         public static SheetSelection Parse(IEnumerable<string> entries)
         {
             var selection = new SheetSelection();
@@ -68,14 +61,12 @@ namespace HolySheet.Core
             return selection;
         }
 
-        /// <summary>True when anything in the workbook is selected, so its source has to be read.</summary>
         public bool Touches(string workbook) => _workbooks.Contains(workbook) || _sheets.Any(entry => entry.Workbook == workbook);
 
         public bool IsWholeWorkbook(string workbook) => _workbooks.Contains(workbook);
 
         public bool Includes(string workbook, string sheet) => _workbooks.Contains(workbook) || _sheets.Contains((workbook, sheet));
 
-        /// <summary>The number of entries: whole workbooks plus single sheets.</summary>
         public int Count => _workbooks.Count + _sheets.Count;
 
         public override string ToString()

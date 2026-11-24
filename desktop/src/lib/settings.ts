@@ -1,5 +1,3 @@
-// Per-user preferences, kept in the app's own settings file (not in the project): language, view options,
-// and recent projects. Read once at start; every change is saved at once.
 import { load, type Store } from "@tauri-apps/plugin-store";
 import type { Language } from "../i18n";
 
@@ -19,7 +17,6 @@ export interface Preferences {
 
 export const defaults: Preferences = {
   language: "system",
-  // Dark by default, like the editors this sits next to (Unity, an IDE).
   theme: "dark",
   gridLines: "both",
   alignment: "auto",
@@ -36,7 +33,6 @@ export async function loadPreferences(): Promise<Preferences> {
     const saved = await store.get<Partial<Preferences>>("preferences");
     return { ...defaults, ...(saved ?? {}) };
   } catch {
-    // Outside the app shell (a plain browser, tests) there is no store: the defaults hold for the session.
     return { ...defaults };
   }
 }
@@ -45,11 +41,9 @@ export async function savePreferences(preferences: Preferences): Promise<void> {
   try {
     await store?.set("preferences", preferences);
   } catch {
-    // Not fatal: preferences are a convenience.
   }
 }
 
-/** The most recent first, at most ten, without duplicates. */
 export function withRecent(recent: string[], path: string): string[] {
   return [path, ...recent.filter((entry) => entry !== path)].slice(0, 10);
 }

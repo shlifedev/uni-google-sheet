@@ -5,14 +5,8 @@ using System.Text;
 
 namespace HolySheet
 {
-    /// <summary>
-    /// Verifies that a manifest was produced by whoever holds the private key.
-    /// The data files are covered indirectly: the manifest lists their hashes and the signature covers the manifest.
-    /// The public key is safe to ship in the client; only the build machine needs the private key.
-    /// </summary>
     public static class TableSignature
     {
-        /// <summary>Prefix of the text form of a public key: <c>rsa:{base64 modulus}:{base64 exponent}</c>.</summary>
         public const string PublicKeyPrefix = "rsa:";
 
         public static bool Verify(TableManifest manifest, string publicKey)

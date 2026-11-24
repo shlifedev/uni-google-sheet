@@ -4,7 +4,6 @@ using HolySheet.Core;
 
 namespace HolySheet.Tooling;
 
-/// <summary>Loads each project's rules for one run, so the desktop app and CLI watch see a rebuilt DLL immediately.</summary>
 public sealed class ValidatorAssemblies : IDisposable
 {
     private sealed class RuleContext(string directory) : AssemblyLoadContext(isCollectible: true)

@@ -4,17 +4,11 @@ using HolySheet.Core.Output;
 
 namespace HolySheet.Tooling;
 
-/// <summary>Starts a project: a holysheet.json with one local source and, optionally, a small sample workbook that builds.</summary>
 public static class ProjectInit
 {
-    /// <summary>Whether <paramref name="directory"/> looks like the root of a Unity project.</summary>
     public static bool IsUnityProject(string directory) =>
         Directory.Exists(Path.Combine(directory, "Assets")) && Directory.Exists(Path.Combine(directory, "ProjectSettings"));
 
-    /// <summary>
-    /// Writes holysheet.json in <paramref name="directory"/> and creates its Sheets folder. Returns the config path.
-    /// With <paramref name="unity"/> null, a Unity project is detected by its Assets and ProjectSettings folders.
-    /// </summary>
     public static string Create(string directory, bool sample, bool? unity = null, bool force = false)
     {
         directory = Path.GetFullPath(directory);
@@ -24,7 +18,6 @@ public static class ProjectInit
         config.Sources.Add(new SourceConfig { Type = sample ? SourceType.Csv : SourceType.Xlsx, Path = "Sheets" });
         if (unity ?? IsUnityProject(directory))
         {
-            // Generated code is compiled by Unity; data goes to StreamingAssets so it is a plain file the watcher can follow.
             config.Output.Code = "Assets/Game/Generated/Tables";
             config.Output.Data = "Assets/StreamingAssets/Tables";
         }
@@ -44,7 +37,6 @@ public static class ProjectInit
         return path;
     }
 
-    /// <summary>The same small workbook as 'holysheet init --sample': enums, a table with a key, references and a config table.</summary>
     public static readonly (string Name, string Content)[] SampleFiles =
     [
         ("Enums.csv", "byte,,Flags<int>,\nEItemKind,,EItemTag,\nKind of item,,Tags an item can carry,\nNone,,None,0\nWeapon,,Tradable,1 << 0\nArmor,,Stackable,1 << 1\nConsumable,,Quest,1 << 2\n"),

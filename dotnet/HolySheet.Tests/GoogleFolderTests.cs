@@ -7,7 +7,6 @@ using Xunit;
 
 namespace HolySheet.Tests;
 
-/// <summary>The Google Drive folder source against a stand-in for Google's servers. No network is used.</summary>
 public class GoogleFolderTests
 {
     private static readonly GoogleEndpoints Endpoints = new() { SheetsApi = "https://sheets.test", Docs = "https://docs.test", DriveApi = "https://drive.test" };
@@ -35,8 +34,6 @@ public class GoogleFolderTests
         Type = SourceType.GoogleFolder, FolderId = "folder-id", Snapshot = snapshot, Auth = { Type = GoogleAuthType.ApiKey, ApiKey = "KEY" }
     };
 
-    // A folder with a spreadsheet (Quests: tabs Quest and Reward), an uploaded workbook (Game.xlsx) and a draft (#Draft),
-    // listed over two pages, as the Drive API does for big folders.
     private static Func<HttpRequestMessage, HttpResponseMessage> Drive(bool removeWorkbook = false) => request =>
     {
         string url = Uri.UnescapeDataString(request.RequestUri!.ToString());
@@ -64,7 +61,6 @@ public class GoogleFolderTests
 
         if (url.StartsWith("https://sheets.test/v4/spreadsheets/sheet-1/values:batchGet?", StringComparison.Ordinal))
         {
-            // Only the tabs asked for, in the order asked: a partial build asks for fewer.
             var ranges = new List<string>();
             if (url.Contains("ranges='Quest'"))
             {
@@ -100,14 +96,12 @@ public class GoogleFolderTests
         (BuildResult result, StubHandler handler) = Build(Folder(), Drive());
         Assert.True(result.Success, Sheets.Errors(result));
         Assert.Equal(["Game.xlsx", "Quests"], result.Workbooks.Select(workbook => workbook.Name));
-        // Each file keeps its own address, so the window can open it.
         Assert.Equal(new WorkbookOrigin(SourceType.GoogleFolder, "folder-id", "https://docs.google.com/spreadsheets/d/sheet-1/edit"), result.WorkbookOrigins["Quests"]);
         Assert.Equal("https://drive.google.com/file/d/xlsx-1/view", result.WorkbookOrigins["Game.xlsx"].Link);
         Assert.Contains(result.Tables, table => table.Schema.Name == "Quest");
         Assert.Contains(result.Tables, table => table.Schema.Name == "Reward");
         Assert.Contains(result.Tables, table => table.Schema.Name == "Item");
         Assert.Equal("Goblins, again", result.Tables.Single(table => table.Schema.Name == "Quest").Rows[1].Values[1]);
-        // The draft is not even downloaded.
         Assert.DoesNotContain(handler.Requests, request => request.Contains("draft-1"));
         Assert.Equal(2, handler.Requests.Count(request => request.StartsWith("https://drive.test/drive/v3/files?", StringComparison.Ordinal)));
     }
@@ -158,14 +152,12 @@ public class GoogleFolderTests
     public void A_folder_that_is_not_shared_names_the_account_to_share_it_with()
     {
         using var temp = new TempDir();
-        // A key file is needed for the e-mail; the token request itself is answered by the stub below.
         File.WriteAllText(temp.Combine("sa.json"), "{ \"client_email\": \"reader@project.iam.gserviceaccount.com\" }");
         var source = Folder();
         source.Auth = new GoogleAuthConfig { Type = GoogleAuthType.ServiceAccount, KeyFile = "sa.json" };
         var helper = new GoogleSheetsSource(source, temp.Path, HolySheet.Core.Csv.BuiltinCsvParser.Instance);
         Assert.Equal("reader@project.iam.gserviceaccount.com", helper.ServiceAccountEmail());
 
-        // Drive answers 404 for a folder the caller cannot see (and an empty list for its children).
         source.Auth = new GoogleAuthConfig { Type = GoogleAuthType.ApiKey, ApiKey = "KEY" };
         (BuildResult result, StubHandler handler) = Build(source, _ => new HttpResponseMessage(HttpStatusCode.NotFound), temp.Path);
         Assert.False(result.Success);
@@ -216,7 +208,6 @@ public class GoogleFolderTests
         Diagnostic warning = Assert.Single(result.Diagnostics.Items, item => item.Severity == Severity.Warning);
         Assert.Contains("The Google Sheets API is not enabled in Google Cloud project 42", warning.Message);
         Assert.Contains("https://console.developers.google.com/apis/api/sheets.googleapis.com/overview?project=42", warning.Hint);
-        // The Drive version check, the refused tab list, and the xlsx export.
         Assert.Equal(3, handler.Requests.Count);
     }
 
@@ -267,7 +258,6 @@ public class GoogleFolderTests
         Assert.Equal(["Game.xlsx", "Quests"], offline.Workbooks.Select(workbook => workbook.Name));
         Assert.Equal("https://docs.google.com/spreadsheets/d/sheet-1/edit", offline.WorkbookOrigins["Quests"].Link);
 
-        // A file that leaves the folder leaves the snapshot at the next online build.
         (BuildResult after, _) = Build(Folder("Snapshot"), Drive(removeWorkbook: true), temp.Path);
         Assert.True(after.Success, Sheets.Errors(after));
         Assert.False(Directory.Exists(temp.Combine("Snapshot", "Game.xlsx")));

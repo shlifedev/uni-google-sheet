@@ -1,10 +1,8 @@
-# .NET build output
 bin/
 obj/
 *.user
 TestResults/
 
-# Unity project folders that are regenerated
 unity/*/Library/
 unity/*/Temp/
 unity/*/Logs/
@@ -17,18 +15,15 @@ unity/*/dev-report.txt
 unity/*/Captures/
 unity/*/test-results*.xml
 
-# Signing keys must never be committed
 holysheet.private.key
 *.private.key
 
-# OS and editor noise
 .DS_Store
 .idea/
 .vs/
 .vscode/
 *.holysheet-tmp
 
-# Spreadsheet editor lock files and their Unity metadata
 .~lock.*#
 ~$*.xlsx
 ~$*.xlsx.meta

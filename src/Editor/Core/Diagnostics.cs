@@ -12,8 +12,6 @@ namespace HolySheet.Core
         Error
     }
 
-    /// <summary>Where a cell came from: zero-based row and column in the sheet as the author sees it.</summary>
-    // A record struct by intent; written out by hand because Unity compiles C# 9. Equality and Deconstruct match what the compiler would generate.
     public readonly struct CellOrigin : IEquatable<CellOrigin>
     {
         public CellOrigin(string Workbook, string Sheet, int Row, int Column)
@@ -51,7 +49,6 @@ namespace HolySheet.Core
             Column = this.Column;
         }
 
-        /// <summary>Spreadsheet notation for the cell, such as "B4".</summary>
         public string A1 => ColumnName(Column) + (Row + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         public override string ToString() => $"{Workbook} / {Sheet}!{A1}";
@@ -68,7 +65,6 @@ namespace HolySheet.Core
         }
     }
 
-    /// <summary>One problem found while building. Every problem says where it is, what is wrong and how to fix it.</summary>
     public sealed record Diagnostic(Severity Severity, string Location, CellOrigin? Origin, string Message, string Hint)
     {
         public override string ToString()
@@ -78,7 +74,6 @@ namespace HolySheet.Core
         }
     }
 
-    /// <summary>Collects diagnostics. Safe to add to from several threads; the order of items added by one thread is kept.</summary>
     public sealed class DiagnosticBag
     {
         private readonly List<Diagnostic> _items = new();

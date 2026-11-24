@@ -4,11 +4,8 @@ using HolySheet.Core.Output;
 
 namespace HolySheet.Tooling;
 
-/// <summary>One line describing a run, the same sentence the Unity window shows in its status tooltip.</summary>
 public static class RunSummary
 {
-    /// <param name="commit">The commit report, or null when the run only checked or the build had errors.</param>
-    /// <param name="failure">Set when the run itself failed (unreadable config, cannot write).</param>
     public static string Describe(BuildResult build, CommitReport? commit, string? failure)
     {
         if (failure != null)

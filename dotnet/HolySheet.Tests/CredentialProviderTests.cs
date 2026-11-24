@@ -7,7 +7,6 @@ using HolySheet.Core.Sources;
 
 namespace HolySheet.Tests;
 
-/// <summary>Credentials from the project's own code (auth type "custom") and from a command (auth type "command"). No network is used.</summary>
 public class CredentialProviderTests
 {
     private static readonly GoogleEndpoints Endpoints = new() { SheetsApi = "https://sheets.test", Docs = "https://docs.test", DriveApi = "https://drive.test", Wait = (_, _) => Task.CompletedTask };
@@ -29,7 +28,6 @@ public class CredentialProviderTests
 
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
-    // One spreadsheet with one tab, as the Sheets API serves it. The Drive version check gets a 404, which only means "unknown".
     private static HttpResponseMessage Serve(HttpRequestMessage request)
     {
         string url = request.RequestUri!.ToString();
@@ -118,9 +116,7 @@ public class CredentialProviderTests
         IReadOnlyList<IGoogleCredentialProvider> providers = GoogleCredentialProviders.Create(
             [typeof(VaultProvider), typeof(TokenProvider), typeof(TokenProvider), typeof(AbstractProvider), typeof(NotAProvider), typeof(KeyJsonProvider), typeof(string)], problems);
 
-        // Each class once; the one without a parameterless constructor and the abstract one are skipped.
         Assert.Equal([typeof(TokenProvider), typeof(VaultProvider)], providers.Select(provider => provider.GetType()).OrderBy(type => type.Name));
-        // Only classes marked with the attribute are reported: an unmarked class may implement the interface for other reasons.
         Assert.Equal(2, problems.Count);
         Assert.Contains(problems, problem => problem.Contains(nameof(AbstractProvider)));
         Assert.Contains(problems, problem => problem.Contains(nameof(NotAProvider)));
@@ -163,7 +159,6 @@ public class CredentialProviderTests
     [Fact]
     public void A_host_without_providers_points_at_the_command_auth()
     {
-        // The CLI: it cannot load the editor's classes.
         (BuildResult result, _) = Build(Custom("vault"), providers: null);
         Assert.False(result.Success);
         Assert.Contains("only the Unity editor can use them", Sheets.Errors(result));

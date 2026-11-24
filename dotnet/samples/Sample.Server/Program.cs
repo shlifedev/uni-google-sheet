@@ -2,13 +2,6 @@ using System.Diagnostics;
 using Sample.MemoryPackData;
 using HolySheet;
 
-// Usage: Sample.Server <dataDirectory> [--parallel] [--watch]
-//
-//   dotnet run --project dotnet/samples/Sample.Server -- dotnet/samples/GameData/Data/MemoryPack --watch
-//
-// With --watch it keeps running and reloads when the data changes: edit the sheet, run `holysheet build` (or leave `holysheet watch` running)
-// and the new values appear here without a restart.
-
 if (args.Length == 0 || args[0].StartsWith('-'))
 {
     Console.Error.WriteLine("usage: Sample.Server <dataDirectory> [--parallel] [--watch]");
@@ -30,7 +23,6 @@ try
         return 0;
     }
 
-    // RaiseEventsInline: a console app has no main-thread context to post to, so events run on the thread that noticed the change.
     using TableWatcher<GameTables> watcher = GameTables.Watch(directory, new TableWatchOptions { LoadOptions = options, RaiseEventsInline = true });
     Print(watcher.Current);
     watcher.Reloaded += change =>
@@ -55,7 +47,6 @@ static void Print(GameTables tables)
     Console.WriteLine($"{tables.Game.Value.Title}: max level {tables.Game.Value.MaxLevel}, gold rate {tables.Game.Value.GoldRate}");
     foreach (MonsterRow monster in tables.Monster.Rows)
     {
-        // A reference holds a key; the table it points at resolves it.
         ItemRow weapon = tables.Item.Get(monster.Weapon);
         string drops = string.Join(", ", monster.Drops.Select(id => tables.Item.Get(id).Name.Replace('\n', ' ')));
         string rare = tables.Item.Find(monster.Rare)?.Name ?? "-";

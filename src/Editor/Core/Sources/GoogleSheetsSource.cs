@@ -17,7 +17,6 @@ using HolySheet.Core.Csv;
 
 namespace HolySheet.Core.Sources
 {
-    /// <summary>How the Google services are reached: their addresses and the retry policy. Replaceable so tests can point the sources at a stand-in.</summary>
     public sealed class GoogleEndpoints
     {
         public string SheetsApi { get; set; } = "https://sheets.googleapis.com";
@@ -26,10 +25,8 @@ namespace HolySheet.Core.Sources
 
         public string DriveApi { get; set; } = "https://www.googleapis.com";
 
-        /// <summary>How many times a request is tried when Google answers "too many requests" or with a server error.</summary>
         public int MaxAttempts { get; set; } = 5;
 
-        /// <summary>How to wait between those tries. Replaceable so tests do not wait.</summary>
         public Func<TimeSpan, CancellationToken, Task> Wait { get; set; } = Task.Delay;
     }
 
@@ -43,7 +40,6 @@ namespace HolySheet.Core.Sources
         public string Hint { get; }
     }
 
-    /// <summary>Google refused because an API (Sheets or Drive) is not enabled in the Cloud project of the credentials.</summary>
     internal sealed class GoogleApiDisabledException : GoogleSourceException
     {
         public GoogleApiDisabledException(string api, string? project, string? enableUrl) : base($"The {api} is not enabled in Google Cloud project {project ?? "of these credentials"}.",
@@ -55,21 +51,6 @@ namespace HolySheet.Core.Sources
         public string Api { get; }
     }
 
-    /// <summary>
-    /// Reads a Google spreadsheet, as the text the author sees in each cell.
-    /// <list type="bullet">
-    /// <item>With credentials: one Sheets API request lists the tabs, one more (values:batchGet) brings all of them. Before that,
-    /// one Drive request asks for the file's version; if it is the version downloaded last time, nothing else is requested
-    /// and the tabs come from the local copy.</item>
-    /// <item>Without credentials: the tabs listed in the config are fetched as CSV exports; with no list, the whole spreadsheet
-    /// comes as one xlsx export.</item>
-    /// <item>If the Sheets API is disabled for the credentials' project, the xlsx export is used, with a warning.</item>
-    /// </list>
-    /// Requests Google answers with "too many requests" or a server error are retried, waiting longer each time.
-    /// </summary>
-    /// <remarks>
-    /// With a selection, only the selected tabs are downloaded, and the snapshot gets those tabs without losing the others.
-    /// </remarks>
     public sealed class GoogleSheetsSource : IWorkbookSource
     {
         private readonly SourceConfig source;
@@ -103,15 +84,12 @@ namespace HolySheet.Core.Sources
 
         public string Description => "google:" + source.SpreadsheetId;
 
-        /// <summary>Credentials already obtained by the caller (a Drive folder reading its spreadsheets), so they are not fetched again per spreadsheet.</summary>
         internal ResolvedAuth? PresetAuth { get; set; }
 
-        // The account the credentials belong to, once known, for messages that say whom to share a file with.
         private string? _account;
 
         public IReadOnlyList<string> WatchPaths => Array.Empty<string>();
 
-        /// <summary>The Drive version of the file when the caller already knows it (a folder listing reports it), to skip asking.</summary>
         internal long? KnownVersion { get; set; }
 
         internal bool RefreshGoogle { get; init; }
@@ -134,8 +112,6 @@ namespace HolySheet.Core.Sources
 
                 bool hasCredentials = apiKey != null || bearer != null;
 
-                // 1. Unchanged since the last download? Drive reports the file's version for one cheap request (Drive quota,
-                //    not Sheets quota); the same version means the tabs can come from the local copy.
                 long? version = KnownVersion ?? (hasCredentials && remoteCacheDirectory != null ? await TryGetVersionAsync(client, id, apiKey, bearer, cancellationToken).ConfigureAwait(false) : null);
                 // A manual refresh reads the cells themselves: Drive can still report the previous version after an edit.
                 if (!RefreshGoogle && version != null && RemoteCopy.TryLoad(remoteCacheDirectory, id, version.Value) is { } copy)
@@ -151,7 +127,6 @@ namespace HolySheet.Core.Sources
                     return new[] { Linked(ToWorkbook(name, kept, diagnostics)) };
                 }
 
-                // 2. Download.
                 string workbookName;
                 List<(string Name, string Text)> fetched;
                 bool complete = only == null;
@@ -201,7 +176,6 @@ namespace HolySheet.Core.Sources
                             return Array.Empty<Workbook>();
                         }
 
-                        // Every tab in one Sheets API request (values:batchGet), instead of one export request per tab.
                         fetched = await ReadTabsAsync(client, id, wanted, apiKey, bearer, cancellationToken).ConfigureAwait(false);
                     }
                     catch (GoogleApiDisabledException disabled) when (disabled.Api.Contains("Sheets"))
@@ -221,7 +195,6 @@ namespace HolySheet.Core.Sources
                     }
                 }
 
-                // A partial fetch saves the tabs it fetched and leaves the others as they were.
                 WriteSnapshot(workbookName, fetched.Select(tab => tab.Name).ToList(), fetched.Select(tab => tab.Text).ToList(), complete);
                 if (version != null)
                 {
@@ -254,7 +227,6 @@ namespace HolySheet.Core.Sources
             return Array.Empty<Workbook>();
         }
 
-        // Every path ends in CSV text per tab, the same text the snapshot keeps, so online, cached and offline builds agree.
         private Workbook ToWorkbook(string workbookName, IReadOnlyList<(string Name, string Text)> tabs, DiagnosticBag diagnostics)
         {
             var sheets = new List<Sheet>(tabs.Count);
@@ -278,7 +250,6 @@ namespace HolySheet.Core.Sources
             return new Workbook(workbookName, sheets);
         }
 
-        /// <summary>The file's Drive version, or null when Drive cannot tell (no access, API disabled): then the file is simply downloaded.</summary>
         internal async Task<long?> TryGetVersionAsync(HttpClient client, string fileId, string? apiKey, string? bearer, CancellationToken cancellationToken)
         {
             try
@@ -293,7 +264,6 @@ namespace HolySheet.Core.Sources
             }
         }
 
-        /// <summary>Drive writes the version as a string (it is a 64-bit number).</summary>
         internal static long? ParseVersion(JsonValue? value)
         {
             if (value?.AsString is { } text && long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed))
@@ -304,7 +274,6 @@ namespace HolySheet.Core.Sources
             return value?.AsNumber is { } number ? (long)number : null;
         }
 
-        // Ranges are sent in groups so the request line stays short even for spreadsheets with hundreds of tabs.
         private const int RangesPerRequest = 50;
 
         private async Task<List<(string Name, string Text)>> FetchBatchAsync(HttpClient client, string id, List<string> tabs, string? apiKey, string? bearer, CancellationToken cancellationToken)
@@ -316,7 +285,6 @@ namespace HolySheet.Core.Sources
                 var url = new StringBuilder($"{_endpoints.SheetsApi}/v4/spreadsheets/{Uri.EscapeDataString(id)}/values:batchGet?valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS");
                 foreach (string tab in group)
                 {
-                    // A range that is only a sheet name means the whole sheet; quotes keep names with spaces or digits intact.
                     url.Append("&ranges=").Append(Uri.EscapeDataString("'" + tab.Replace("'", "''") + "'"));
                 }
 
@@ -343,7 +311,6 @@ namespace HolySheet.Core.Sources
 
                 for (int index = 0; index < group.Count; index++)
                 {
-                    // Rows and cells at the end that are empty are left out by Google; reading past them gives blanks anyway.
                     var rows = new List<IReadOnlyList<string>>();
                     foreach (JsonValue row in ranges[index].AsObject?.GetArray("values") ?? Array.Empty<JsonValue>())
                     {
@@ -386,7 +353,6 @@ namespace HolySheet.Core.Sources
             return names.Select(name => (name, local[name])).ToList();
         }
 
-        // A right-click download never enumerates a Drive folder, asks for a version or downloads an entire workbook.
         internal async Task<string> DownloadTabAsync(string id, string name, CancellationToken cancellationToken)
         {
             using HttpClient client = httpHandler == null ? new HttpClient() : new HttpClient(httpHandler, disposeHandler: false);
@@ -402,8 +368,6 @@ namespace HolySheet.Core.Sources
             return (await FetchCsvExportAsync(client, id, names, bearer, cancellationToken).ConfigureAwait(false))[0].Text;
         }
 
-        // The HTML viewer lists tab titles and gids separately from its cell pages. Use only this index:
-        // the raw CSV export requires a gid, and a visualization query can change mixed-type columns.
         private static readonly Regex ViewerTab = new Regex(
             @"items\.push\(\{\s*name:\s*""(?<name>(?:\\.|[^""\\])*)""\s*,\s*pageUrl:\s*""(?:\\.|[^""\\])*""\s*,\s*gid:\s*""(?<gid>[0-9]+)""",
             RegexOptions.CultureInvariant);
@@ -472,7 +436,6 @@ namespace HolySheet.Core.Sources
             return workbook.Sheets.Select(sheet => (sheet.Name, CsvWriter.Write(sheet.ToGrid()))).ToList();
         }
 
-        /// <summary>The address that opens a spreadsheet in a browser.</summary>
         public static string SpreadsheetLink(string id) => "https://docs.google.com/spreadsheets/d/" + Uri.EscapeDataString(id) + "/edit";
 
         private Workbook Linked(Workbook workbook) => workbook.WithOrigin(new WorkbookOrigin(SourceType.Google, source.SpreadsheetId ?? "", SpreadsheetLink(source.SpreadsheetId ?? "")));
@@ -543,7 +506,6 @@ namespace HolySheet.Core.Sources
                 using HttpResponseMessage response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
                 if (response.IsSuccessStatusCode)
                 {
-                    // A spreadsheet that is not shared answers the export URL with a sign-in page and status 200.
                     if (!expectHtml && response.Content.Headers.ContentType?.MediaType == "text/html")
                     {
                         throw describe(HttpStatusCode.Unauthorized);
@@ -558,7 +520,6 @@ namespace HolySheet.Core.Sources
                     throw disabled;
                 }
 
-                // Drive reports its rate limits as 403 with a reason; the Sheets API uses 429.
                 bool rateLimited = response.StatusCode == (HttpStatusCode)429 || (response.StatusCode == HttpStatusCode.Forbidden && IsRateLimitReason(reason));
                 bool transient = rateLimited || response.StatusCode is HttpStatusCode.InternalServerError or HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;
                 if (!transient || attempt >= Math.Max(1, _endpoints.MaxAttempts))
@@ -575,8 +536,6 @@ namespace HolySheet.Core.Sources
 
         private static readonly Random Jitter = new();
 
-        // Google's advice: wait 1, 2, 4, 8 … seconds plus up to one second at random, at most 32 seconds; or as long as
-        // the answer's Retry-After header says.
         internal static TimeSpan RetryDelay(HttpResponseMessage response, int attempt)
         {
             TimeSpan cap = TimeSpan.FromSeconds(60);
@@ -625,7 +584,6 @@ namespace HolySheet.Core.Sources
             }
         }
 
-        /// <summary>The credentials to send: an API key or a bearer token (or neither, for a public link), and the account they belong to when known.</summary>
         internal sealed record ResolvedAuth(string? ApiKey, string? Bearer, string? Account);
 
         internal async Task<ResolvedAuth> ResolveAuthAsync(HttpClient client, CancellationToken cancellationToken)
@@ -688,9 +646,6 @@ namespace HolySheet.Core.Sources
             return new ResolvedAuth(credential.ApiKey, credential.AccessToken, credential.Account);
         }
 
-        // Google explains a 403 in the body. "SERVICE_DISABLED" means the API is off in the credentials' Cloud project,
-        // which no amount of sharing fixes, so it gets its own message with the link Google gives to turn it on.
-        // The reason Google gives for a refusal (error.errors[].reason or error.details[].reason), and the disabled API if that was it.
         private static async Task<(string? Reason, GoogleApiDisabledException? Disabled)> ReadErrorAsync(HttpResponseMessage response)
         {
             try
@@ -729,7 +684,6 @@ namespace HolySheet.Core.Sources
             }
         }
 
-        /// <summary>The service account's e-mail address from its key file, for messages that say whom to share with. Null when it cannot be read.</summary>
         internal string? ServiceAccountEmail()
         {
             try
@@ -769,7 +723,6 @@ namespace HolySheet.Core.Sources
             return File.ReadAllText(keyPath);
         }
 
-        // keyDescription names where the key came from, for the message when it cannot be read.
         private static async Task<ResolvedAuth> ExchangeServiceAccountKeyAsync(HttpClient client, string keyJson, string keyDescription, CancellationToken cancellationToken)
         {
             string email;
@@ -787,7 +740,6 @@ namespace HolySheet.Core.Sources
                 throw new GoogleSourceException($"{keyDescription} could not be read as a service account key: {exception.Message}", "Download a new JSON key for the service account from Google Cloud.");
             }
 
-            // A self-signed JWT is exchanged for a short-lived access token (OAuth 2.0 JWT bearer flow).
             long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             string header = Base64Url(Encoding.UTF8.GetBytes("{\"alg\":\"RS256\",\"typ\":\"JWT\"}"));
             string claims = Base64Url(Encoding.UTF8.GetBytes(JsonValue.Object()
@@ -838,12 +790,6 @@ namespace HolySheet.Core.Sources
             }
         }
 
-        /// <summary>
-        /// Saves what was fetched, one CSV per tab, and, when the fetch was complete, removes the CSV files of tabs that no longer exist.
-        /// Only files an earlier snapshot wrote are ever removed: they are listed in <see cref="SnapshotIndex"/>, so other files that
-        /// share the folder are left alone. The index also keeps the workbook name, so an offline build names the workbook exactly
-        /// as the online build did (the spreadsheet's title, not its id).
-        /// </summary>
         internal static void WriteSnapshot(string snapshotDirectory, string workbookName, IReadOnlyList<string> names, IReadOnlyList<string> texts, bool complete)
         {
             Directory.CreateDirectory(snapshotDirectory);
@@ -887,7 +833,6 @@ namespace HolySheet.Core.Sources
 
         internal static string SafeFileName(string name)
         {
-            // "." and ".." would name the folder itself or its parent.
             if (name.Length == 0 || name == "." || name == "..")
             {
                 return "_" + name;
@@ -903,10 +848,6 @@ namespace HolySheet.Core.Sources
         }
     }
 
-    /// <summary>
-    /// Reads an RSA private key from PKCS#8 PEM text, the form Google puts in service account key files.
-    /// Written out here because the platform import methods are missing on some Unity runtimes.
-    /// </summary>
     internal static class Pkcs8
     {
         public static RSAParameters ReadRsaPrivateKey(string pem)
@@ -924,11 +865,9 @@ namespace HolySheet.Core.Sources
             byte[] der = Convert.FromBase64String(base64.ToString());
             try
             {
-                // PrivateKeyInfo ::= SEQUENCE { version, algorithm SEQUENCE, privateKey OCTET STRING }
                 var outer = new DerReader(der).ReadSequence();
                 outer.ReadInteger();
                 outer.ReadSequence();
-                // RSAPrivateKey ::= SEQUENCE { version, n, e, d, p, q, dP, dQ, qInv }
                 var key = new DerReader(outer.ReadOctetString()).ReadSequence();
                 key.ReadInteger();
                 byte[] modulus = key.ReadInteger();
@@ -992,7 +931,6 @@ namespace HolySheet.Core.Sources
                 return data.AsSpan(start, length).ToArray();
             }
 
-            // Returns the magnitude without the sign byte.
             public byte[] ReadInteger()
             {
                 (int start, int length) = ReadHeader(0x02);
@@ -1035,13 +973,8 @@ namespace HolySheet.Core.Sources
         }
     }
 
-    /// <summary>
-    /// What a snapshot folder records about itself: the workbook it holds and the CSV files the snapshot wrote. Only those files
-    /// are ever deleted from the folder, and an offline build takes the workbook name from here.
-    /// </summary>
     internal sealed class SnapshotIndex
     {
-        /// <summary>Starts with a dot so Unity does not import it when the snapshot is under Assets.</summary>
         public const string FileName = ".holysheet-snapshot";
 
         private const string Header = "holysheet-snapshot 1";
@@ -1123,7 +1056,6 @@ namespace HolySheet.Core.Sources
             }
         }
 
-        // A plain .csv name in this folder. A hand-edited index must never point the tool at a file elsewhere.
         private static bool IsOwnFileName(string name) =>
             name.Length > 0 && name == Path.GetFileName(name) && name != "." && name != ".." && name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
 

@@ -8,7 +8,6 @@ using Xunit;
 
 namespace HolySheet.Tests;
 
-/// <summary>How the Google sources spare the quota: one batch request per spreadsheet, nothing for unchanged files, retries when limited.</summary>
 public class GoogleQuotaTests
 {
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
@@ -30,7 +29,6 @@ public class GoogleQuotaTests
 
     private static HttpResponseMessage Status(HttpStatusCode status, string body = "") => new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
-    // "Gear" is a table; "#Hero's Notes" is an ignored sheet whose name needs quoting in a range.
     private const string Tabs = """{ "properties": { "title": "Live" }, "sheets": [ { "properties": { "sheetId": 0, "title": "Gear" } }, { "properties": { "sheetId": 9, "title": "#Hero's Notes" } } ] }""";
 
     private const string Values = """
@@ -100,7 +98,6 @@ public class GoogleQuotaTests
         (BuildResult result, StubHandler handler, _) = Build(temp.Path, new Google());
         Assert.True(result.Success, Sheets.Errors(result));
         string batch = Assert.Single(handler.Requests, request => request.Contains("values:batchGet"));
-        // Sheet names are quoted, with their own quotes doubled.
         Assert.Contains("ranges='Gear'", batch);
         Assert.Contains("ranges='#Hero''s Notes'", batch);
         Assert.Contains("valueRenderOption=FORMATTED_VALUE", batch);
@@ -184,7 +181,6 @@ public class GoogleQuotaTests
         Assert.Equal(["https://drive.test/drive/v3/files/sheet-id?fields=version&supportsAllDrives=true&key=KEY"], handler.Requests);
         Assert.Equal(first.Output!.ContentHash, second.Output!.ContentHash);
 
-        // Someone edits the spreadsheet: Drive reports a new version and the tabs are downloaded again.
         google.Version = "42";
         (BuildResult third, StubHandler after, _) = Build(temp.Path, google);
         Assert.True(third.Success, Sheets.Errors(third));
@@ -200,7 +196,6 @@ public class GoogleQuotaTests
         google.Version = "42";
         Build(temp.Path, google, SheetSelection.Parse(["Live/Gear"]));
 
-        // The copy no longer matches one version, so the next full build downloads everything.
         (BuildResult full, StubHandler handler, _) = Build(temp.Path, google);
         Assert.True(full.Success, Sheets.Errors(full));
         Assert.Contains(handler.Requests, request => request.Contains("values:batchGet"));
@@ -223,7 +218,6 @@ public class GoogleQuotaTests
         (BuildResult result, _, List<TimeSpan> waits) = Build(temp.Path, new Google { FailFirst = 3, FailWith = HttpStatusCode.ServiceUnavailable });
         Assert.True(result.Success, Sheets.Errors(result));
         Assert.Equal(3, waits.Count);
-        // 1, 2 and 4 seconds, each plus up to one second at random.
         Assert.InRange(waits[0].TotalSeconds, 1, 2);
         Assert.InRange(waits[1].TotalSeconds, 2, 3);
         Assert.InRange(waits[2].TotalSeconds, 4, 5);
@@ -241,7 +235,6 @@ public class GoogleQuotaTests
         (BuildResult result, StubHandler handler, List<TimeSpan> waits) = Build(temp.Path, new Google { FailFirst = 100 });
         Assert.False(result.Success);
         Assert.Contains("rate limiting", Sheets.Errors(result));
-        // The version check is optional and gives up quietly; the tab list is tried five times.
         Assert.Equal(8, waits.Count);
 
         (BuildResult refused, StubHandler refusedHandler, List<TimeSpan> noWaits) = Build(temp.Path, new Google { FailFirst = 100, FailWith = HttpStatusCode.Forbidden });
@@ -287,7 +280,6 @@ public class GoogleQuotaTests
         handler.Requests.Clear();
         BuildResult second = TableBuild.Run(config, new TableBuildOptions { HttpHandler = handler, GoogleEndpoints = endpoints });
         Assert.True(second.Success, Sheets.Errors(second));
-        // Only the folder and its listing: the versions are the same, so neither file is downloaded.
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal(first.Output!.ContentHash, second.Output!.ContentHash);
 

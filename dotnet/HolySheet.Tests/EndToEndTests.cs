@@ -10,10 +10,6 @@ using Msg = Sample.MessagePackData;
 
 namespace HolySheet.Tests;
 
-/// <summary>
-/// The tool writes data files from the schema alone. These tests read those files back with the real serializer libraries
-/// through the generated classes, which is the only proof that the hand-written encoders match.
-/// </summary>
 public class EndToEndTests
 {
     private static readonly DateTime Released = new(2026, 1, 31, 13, 30, 0, DateTimeKind.Utc);
@@ -56,9 +52,9 @@ public class EndToEndTests
         Assert.Equal([3f, 1.5f], sword.Stats.ToArray());
         Assert.Equal(["sword", "blade"], sword.Aliases.ToArray());
         Assert.Equal(10L, sword.Exp);
-        Assert.Equal([1, 2], sword.Sockets.ToArray());          // two "Sockets" columns merged
+        Assert.Equal([1, 2], sword.Sockets.ToArray());
         Assert.Equal(Mem.ERarity.Common, sword.Rarity);
-        Assert.Equal(12, sword.Attack);                          // from the Item.Col.Balance sheet
+        Assert.Equal(12, sword.Attack);
         Assert.Equal(0, sword.Defense);
 
         Mem.ItemRow armor = tables.Item.Get(1002);
@@ -71,9 +67,9 @@ public class EndToEndTests
         Mem.ItemRow potion = tables.Item.Get(2001);
         Assert.Equal("포션 Potion", potion.Name);
         Assert.Equal(Mem.EItemTag.Tradable | Mem.EItemTag.Stackable, potion.Tags);
-        Assert.Equal(["heal", "hp"], potion.Aliases.ToArray()); // written as [heal, hp]
+        Assert.Equal(["heal", "hp"], potion.Aliases.ToArray());
         Assert.True(potion.Stats.IsEmpty);
-        Assert.Equal(0, potion.Attack);                          // not listed on the extension sheet
+        Assert.Equal(0, potion.Attack);
 
         Mem.ItemRow ore = tables.Item.Get(3001);
         Assert.Equal("Ore \"raw\", heavy\nsecond line", ore.Name);
@@ -83,12 +79,11 @@ public class EndToEndTests
         Assert.Equal(9007199254740991L, ore.Exp);
         Assert.Equal(default, ore.ReleasedAt);
 
-        Assert.False(tables.Item.Contains(2002));                // the row that starts with ~
-        Assert.Equal("Dragon Blade", tables.Item.Get(9001).Name); // from the Item.Rare sheet
+        Assert.False(tables.Item.Contains(2002));
+        Assert.Equal("Dragon Blade", tables.Item.Get(9001).Name);
         Assert.Equal(250, tables.Item.Get(9001).Attack);
         Assert.Equal([1001, 1002, 2001, 3001, 9001, 9002], tables.Item.Rows.Select(row => row.Id));
 
-        // Lookups: primary key, secondary key, index.
         Assert.Same(potion, tables.Item[2001]);
         Assert.Same(potion, tables.Item.GetByCode("potion"));
         Assert.Null(tables.Item.Find(42));
@@ -101,7 +96,6 @@ public class EndToEndTests
         Assert.Equal([9001, 9002], tables.Item.ListByTier(3).Select(row => row.Id));
         Assert.True(tables.Item.ListByTier(99).IsEmpty);
 
-        // References.
         Mem.MonsterRow slime = tables.Monster.Get(1);
         Mem.MonsterRow goblin = tables.Monster.Get(2);
         Mem.MonsterRow dragon = tables.Monster.Get(3);
@@ -116,10 +110,9 @@ public class EndToEndTests
         Assert.True(slime.Weak.IsEmpty);
         Assert.Equal([Mem.EItemKind.Weapon, Mem.EItemKind.Consumable], dragon.Weak.ToArray());
         Assert.Equal([1, 2], tables.Monster.ListByZone("meadow").Select(row => row.Id));
-        Assert.Equal(2, (int)Mem.EMonsterId.Goblin);            // from the Mapping column
+        Assert.Equal(2, (int)Mem.EMonsterId.Goblin);
         Assert.Same(dragon, tables.Monster.Get((int)Mem.EMonsterId.Dragon));
 
-        // A table keyed by text; a config table.
         Assert.Equal("시작", tables.Text.Get("ui.start").Ko);
         Assert.Equal("", tables.Text.Get("ui.empty").En);
         Assert.Equal(60, tables.Game.Value.MaxLevel);
@@ -149,7 +142,6 @@ public class EndToEndTests
         Assert.Equal([new DateTime(2026, 1, 31, 0, 0, 0, DateTimeKind.Utc), new DateTime(1969, 12, 31, 23, 59, 59, DateTimeKind.Utc), new DateTime(2500, 1, 1, 0, 0, 0, DateTimeKind.Utc)], high.Dates.ToArray());
         Assert.Equal([0.1, 1e-7], high.Doubles.ToArray());
 
-        // Values on both sides of every integer encoding boundary.
         Assert.Equal(((sbyte)-33, (byte)128, (short)-129, (ushort)256), (odd.I8, odd.U8, odd.I16, odd.U16));
         Assert.Equal((-32769, 65536u, -2147483649L, 4294967296ul), (odd.I32, odd.U32, odd.I64, odd.U64));
         Assert.Equal((0.1f, 0.30000000000000004, true), (odd.F32, odd.F64, odd.Flag));
@@ -164,7 +156,6 @@ public class EndToEndTests
         string expected = Dump(Mem.GameTables.Load(memoryPack.DataDirectory));
         string actual = Dump(Msg.GameTables.Load(messagePack.DataDirectory));
         Assert.Equal(expected, actual);
-        // The dump is only convincing if it is not trivially empty.
         Assert.Contains("포션 Potion", expected);
         Assert.Contains("9223372036854775807", expected);
         Assert.Contains("18446744073709551615", expected);
@@ -198,7 +189,6 @@ public class EndToEndTests
     [Fact]
     public void An_empty_table_loads_as_an_empty_table()
     {
-        // Only the header rows: the table exists and has no rows.
         using var temp = new TempDir();
         Directory.CreateDirectory(temp.Combine("Sheets", "Csv"));
         File.Copy(Path.Combine(Repo.SampleData, "Sheets", "Game.xlsx"), temp.Combine("Sheets", "Game.xlsx"));
@@ -228,7 +218,6 @@ public class EndToEndTests
                 foreach (PropertyInfo property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
                 {
                     Assert.True(property.SetMethod == null, $"{type.Name}.{property.Name} has a setter");
-                    // No property hands out an array, a list or a dictionary that the caller could write into.
                     Type propertyType = property.PropertyType;
                     Assert.False(propertyType.IsArray, $"{type.Name}.{property.Name} exposes an array");
                     Assert.False(typeof(IList).IsAssignableFrom(propertyType) || typeof(IDictionary).IsAssignableFrom(propertyType), $"{type.Name}.{property.Name} exposes a mutable collection");
@@ -244,7 +233,6 @@ public class EndToEndTests
         Mem.GameTables tables = Mem.GameTables.Load(build.DataDirectory);
         Mem.ItemRow sword = tables.Item.Get(1001);
 
-        // ToArray is a copy: writing to it leaves the table as it was.
         float[] copy = sword.Stats.ToArray();
         copy[0] = 999f;
         Assert.Equal(3f, sword.Stats[0]);
@@ -253,7 +241,6 @@ public class EndToEndTests
         rows[0] = rows[1];
         Assert.Equal(1001, tables.Item.Rows[0].Id);
 
-        // The view implements the read-only list interface and not the writable one.
         Assert.IsAssignableFrom<IReadOnlyList<float>>(sword.Stats);
         Assert.False(typeof(IList<float>).IsAssignableFrom(typeof(ReadOnlyArray<float>)));
         Assert.False(typeof(ICollection<float>).IsAssignableFrom(typeof(ReadOnlyArray<float>)));
@@ -261,7 +248,6 @@ public class EndToEndTests
         Assert.Equal(2, sword.Stats.AsSpan().Length);
     }
 
-    /// <summary>Every table, row and value as text, read through the public surface only.</summary>
     private static string Dump(ITableSet tables)
     {
         var builder = new StringBuilder();

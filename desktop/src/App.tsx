@@ -29,14 +29,11 @@ function Notices() {
   );
 }
 
-// Once per app: React's development mode runs effects twice, and two opens would start two first checks.
 let started = false;
 
 export default function App() {
   const { project, page, preferences, handleEvent, hostRestarted, startRun, reload, running } = useApp();
 
-  // Start: preferences (language first, so the first paint is in the right one), the engine's info, the last project.
-  // The event listeners stay for the app's lifetime.
   useEffect(() => {
     if (started) return;
     started = true;
@@ -54,7 +51,6 @@ export default function App() {
 
   useEffect(() => applyTheme(preferences.theme), [preferences.theme]);
 
-  // A different project starts the tree from scratch.
   useEffect(() => useTablesView.getState().reset(), [project?.configPath]);
 
   useEffect(() => {
@@ -81,7 +77,6 @@ export default function App() {
   else body = page === "settings" ? <SettingsPage /> : <TablesPage />;
 
   return (
-    // Every label is made in the language of the moment, so a language change draws the app again.
     <div className="app" key={preferences.language}>
       {project?.dir && <Toolbar />}
       <div className="fill">{body}</div>

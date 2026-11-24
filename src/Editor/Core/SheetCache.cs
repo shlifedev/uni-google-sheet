@@ -8,26 +8,12 @@ using HolySheet.Core.Schema;
 
 namespace HolySheet.Core
 {
-    /// <summary>
-    /// The sheets of the last build written on this machine, exactly as they were read. A partial build reads only the
-    /// selected sheets again and takes the rest from here, so tables nobody selected come out the same as last time.
-    /// <para>
-    /// The cache remembers the manifest that build wrote. If the manifest in the data folder is a different one, the data was
-    /// produced somewhere else (a pull, another machine, a build with another tool), and the cached sheets may no longer be what
-    /// that data was built from. A partial build then refuses to run: it could silently put old values back.
-    /// </para>
-    /// <para>
-    /// Layout: an index file and one file per distinct sheet, named after its content hash, so an unchanged sheet is not
-    /// written again. The folder carries its own .gitignore; it is local state, not something to commit.
-    /// </para>
-    /// </summary>
     public sealed class SheetCache
     {
         public const string DefaultDirectory = ".holysheet/cache";
         private const string IndexFileName = "sheets.index";
         // Version 2 added each workbook's origin. An older cache is not read: the next partial build asks for a full one.
         private const string Header = "holysheet-sheet-cache 2";
-        // Accept version 3's extra index entries when reading a partial build from that version.
         private const string HeaderWithPreviews = "holysheet-sheet-cache 3";
         private static readonly UTF8Encoding Utf8 = new(false);
 
@@ -37,17 +23,14 @@ namespace HolySheet.Core
             ManifestHash = manifestHash;
         }
 
-        /// <summary>The workbooks in the order they were read.</summary>
         public IReadOnlyList<Workbook> Workbooks { get; }
 
-        /// <summary>SHA-256 of the manifest the cached build wrote.</summary>
         public string ManifestHash { get; }
 
         public static string HashManifest(string manifestText) => SchemaHasher.Sha256Hex(Utf8.GetBytes(manifestText));
 
         public static string HashManifest(byte[] manifestBytes) => SchemaHasher.Sha256Hex(manifestBytes);
 
-        /// <summary>Null when there is no cache in the folder or it cannot be read.</summary>
         public static SheetCache? Load(string directory)
         {
             string indexPath = Path.Combine(directory, IndexFileName);
@@ -135,7 +118,6 @@ namespace HolySheet.Core
 
         private static string GridFileName(byte[] bytes) => SchemaHasher.Sha256Hex(bytes).Substring(0, 32) + ".sheet";
 
-        /// <summary>Removes the cache, so that the next partial build asks for a full one.</summary>
         public static void Delete(string directory)
         {
             try
@@ -147,7 +129,6 @@ namespace HolySheet.Core
             }
         }
 
-        /// <summary>Replaces the cache with these workbooks, as built into the given manifest.</summary>
         public static void Save(string directory, IReadOnlyList<Workbook> workbooks, string manifestText)
         {
             Directory.CreateDirectory(directory);
@@ -190,7 +171,6 @@ namespace HolySheet.Core
                 }
             }
 
-            // The index is written last and in one piece, so an interrupted save leaves the previous cache readable.
             string temporary = Path.Combine(directory, IndexFileName + ".tmp");
             File.WriteAllText(temporary, index.ToString(), Utf8);
             string indexPath = Path.Combine(directory, IndexFileName);
@@ -212,7 +192,6 @@ namespace HolySheet.Core
             }
         }
 
-        // One row per line, cells separated by tabs. Escaping keeps every character, including tabs and line breaks in cells.
         private static string WriteGrid(Sheet sheet)
         {
             var builder = new StringBuilder();

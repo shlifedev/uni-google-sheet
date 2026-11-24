@@ -4,7 +4,6 @@ using HolySheet.Desktop.Host;
 
 namespace HolySheet.Tests;
 
-/// <summary>The desktop app's engine process, driven in memory the way the Tauri shell drives it over stdio.</summary>
 public sealed class DesktopHostTests : IDisposable
 {
     private readonly TempDir _temp = new();
@@ -35,7 +34,6 @@ public sealed class DesktopHostTests : IDisposable
         return state;
     }
 
-    // The sample workbook copied to a temp folder. Its config writes code outside its folder, so it is only checked here.
     private async Task OpenGameData()
     {
         CopyDirectory(Repo.SampleData, _temp.Path);
@@ -62,7 +60,6 @@ public sealed class DesktopHostTests : IDisposable
         JsonObject again = await Run(commit: true);
         Assert.Equal("upToDate", again["status"]!.GetValue<string>());
 
-        // The toolbar follows each run from start to finish.
         string[] methods = _notifications.Select(message => message["method"]!.GetValue<string>()).ToArray();
         Assert.Equal(["run.started", "run.finished", "run.started", "run.finished", "run.started", "run.finished"], methods);
     }
@@ -136,7 +133,6 @@ public sealed class DesktopHostTests : IDisposable
 
         JsonObject whole = await Call("tables.preview", new JsonObject { ["table"] = "Item" });
         JsonArray rows = whole["rows"]!.AsArray();
-        // Rows from Item.Rare carry the sheet's short name, so "Rare 4" is not read as row 4 of Item.
         Assert.Contains(rows, row => row!["label"]!.GetValue<string>().StartsWith("Rare ", StringComparison.Ordinal));
         Assert.Equal(0, whole["keyColumn"]!.GetValue<int>());
         JsonObject id = whole["columns"]![0]!.AsObject();
@@ -146,7 +142,6 @@ public sealed class DesktopHostTests : IDisposable
         Assert.All(rare["rows"]!.AsArray(), row => Assert.Equal("Item.Rare", row!["sheet"]!.GetValue<string>()));
         Assert.All(rare["rows"]!.AsArray(), row => Assert.True(int.TryParse(row!["label"]!.GetValue<string>(), out _)));
 
-        // A column extension shows its own columns, plus the key they are matched by.
         JsonObject balance = await Call("tables.preview", new JsonObject { ["table"] = "Item", ["sheet"] = "Item.Col.Balance" });
         JsonArray columns = balance["columns"]!.AsArray();
         Assert.Equal("Id", columns[0]!["name"]!.GetValue<string>());
@@ -180,7 +175,6 @@ public sealed class DesktopHostTests : IDisposable
         Assert.Contains("\"My.Game\"", File.ReadAllText(_temp.Combine("holysheet.json")));
         Assert.True(saved["sources"]![0]!["exists"]!.GetValue<bool>());
 
-        // What the engine would refuse is refused here, and the file stays as it was.
         config["sources"]![0]!["type"] = "nonsense";
         string before = File.ReadAllText(_temp.Combine("holysheet.json"));
         await Assert.ThrowsAnyAsync<Exception>(() => Call("config.save", new JsonObject { ["config"] = config }));
@@ -293,7 +287,6 @@ public sealed class DesktopHostTests : IDisposable
         }
     }
 
-    /// <summary>Collects the notifications the server writes, so a test can wait for one.</summary>
     private sealed class NotificationWriter(TextWriter inner, ConcurrentQueue<JsonObject> notifications) : TextWriter
     {
         public override System.Text.Encoding Encoding => inner.Encoding;

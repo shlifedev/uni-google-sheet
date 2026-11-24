@@ -8,7 +8,6 @@ using UnityEngine.TestTools;
 
 namespace HolySheet.Dev.Tests
 {
-    /// <summary>Plays the demo scene and checks that it did what a person pressing Play would see.</summary>
     public class DemoSceneTests
     {
         private const string ScenePath = "Assets/Samples/Demo/Demo.unity";
@@ -21,7 +20,6 @@ namespace HolySheet.Dev.Tests
 #else
             yield return SceneManager.LoadSceneAsync("Demo");
 #endif
-            // Start runs on the first frame after the scene loads.
             yield return null;
             yield return null;
 
@@ -42,7 +40,6 @@ namespace HolySheet.Dev.Tests
 #if UNITY_EDITOR
             Assert.IsTrue(demo.IsWatching, "In the editor the demo should be watching its data folder.");
 #endif
-            // The demo's own description of each table is what its UI draws.
             Assert.AreEqual(44, HolySheetDemo.Describe(tables, ItemTable.TableName).Rows.Count);
             Assert.AreEqual(16, HolySheetDemo.Describe(tables, MonsterTable.TableName).Rows.Count);
             foreach (ITable table in tables.Tables)
@@ -54,13 +51,11 @@ namespace HolySheet.Dev.Tests
             Assert.IsNotNull(refused, "A modified data file was loaded without complaint.");
             StringAssert.StartsWith("HashMismatch", refused);
 
-            // Loading again in parallel gives the same data.
             string content = tables.Manifest.Content;
             demo.Load();
             Assert.IsNull(demo.LastError, demo.LastError);
             Assert.AreEqual(content, demo.Tables.Manifest.Content);
 
-            // Let the UI draw for a few frames; any exception in OnGUI fails the test through the log.
             for (int frame = 0; frame < 5; frame++)
             {
                 yield return null;

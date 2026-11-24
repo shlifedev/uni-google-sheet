@@ -18,7 +18,6 @@ import { showMenu } from "./Menu";
 import { Chevron, NodeIcon, SearchIcon } from "./Icons";
 import { Highlight } from "./Highlight";
 
-/** Where a node opens: a workbook, at a sheet when the node has one. */
 export function sourceOf(node: TreeNode): { workbook: string; sheet: string | null } | null {
   if (node.kind === "group") return null;
   if (node.table && node.sheet === undefined) return { workbook: node.table.workbook, sheet: node.table.sheets[0]?.sheet ?? null };
@@ -36,7 +35,6 @@ export function TableTree({ tree }: { tree: TreeNode[] }) {
   const byKey = useMemo(() => new Map(all.map((entry) => [entry.node.key, entry])), [all]);
   const expanded = view.expanded ?? defaultExpanded(tree);
 
-  // Keep the selection across runs; when nothing selected is left, select the first table, as the window does.
   useEffect(() => {
     const kept = view.selected.filter((key) => byKey.has(key));
     if (kept.length === view.selected.length && (kept.length > 0 || all.length === 0)) return;
@@ -51,12 +49,10 @@ export function TableTree({ tree }: { tree: TreeNode[] }) {
     }
   }, [byKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Search marks matching names and opens the nodes above them; it does not hide anything.
   const query = view.search.trim();
   const matches = useMemo(() => {
     if (!query) return [] as string[];
     const found = all.filter((entry) => containsText(entry.node.label, query));
-    // Exact names first, then tree order.
     const exact = found.filter((entry) => entry.node.label.toLowerCase() === query.toLowerCase());
     return [...exact, ...found.filter((entry) => !exact.includes(entry))].map((entry) => entry.node.key);
   }, [all, query]);
@@ -165,7 +161,6 @@ export function TableTree({ tree }: { tree: TreeNode[] }) {
   };
 
   const nodeMenu = (event: React.MouseEvent, node: TreeNode) => {
-    // Right-clicking outside the selection selects the node first, as file browsers do.
     let nodes = selectedNodes;
     if (!view.selected.includes(node.key)) {
       view.select([node.key], node.key, node.key);
@@ -264,7 +259,6 @@ export function TableTree({ tree }: { tree: TreeNode[] }) {
         })}
       </div>
       {project?.config && model.tables.length > 0 && (
-        // What is selected (the toolbar's "Build selection" builds it), and how much there is in all.
         <div className="sidebar-foot">
           <span className="fill ellipsis" title={build.empty ? undefined : build.sheetsTooltip}>
             {build.empty ? "" : build.label}

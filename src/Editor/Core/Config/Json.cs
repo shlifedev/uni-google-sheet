@@ -17,7 +17,6 @@ namespace HolySheet.Core.Config
         Object
     }
 
-    /// <summary>The JSON text could not be read. The message names the line and column.</summary>
     public sealed class JsonFormatException : Exception
     {
         public JsonFormatException(string message) : base(message)
@@ -25,11 +24,6 @@ namespace HolySheet.Core.Config
         }
     }
 
-    /// <summary>
-    /// A small JSON document model. It exists so the engine needs no JSON package: the same DLL must load in the Unity 6 editor,
-    /// the Unity 7 editor and the .NET CLI without bringing a dependency that could clash with one already in a project.
-    /// The reader accepts <c>//</c> comments and trailing commas, because the config file is written by hand.
-    /// </summary>
     public sealed class JsonValue
     {
         private readonly object? _value;
@@ -105,7 +99,6 @@ namespace HolySheet.Core.Config
                     break;
                 case JsonKind.Array:
                     var items = (List<JsonValue>)_value!;
-                    // Arrays of plain values stay on one line: that is how people write them and it keeps diffs short.
                     bool inline = !indented || items.All(item => item.Kind is not (JsonKind.Array or JsonKind.Object));
                     builder.Append('[');
                     for (int index = 0; index < items.Count; index++)
@@ -177,7 +170,6 @@ namespace HolySheet.Core.Config
         }
     }
 
-    /// <summary>A JSON object that remembers the order its members were added in, so written files are stable.</summary>
     public sealed class JsonObject
     {
         private readonly List<KeyValuePair<string, JsonValue>> _members = new();

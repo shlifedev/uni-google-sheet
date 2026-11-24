@@ -13,10 +13,8 @@ using HolySheet.Core.Csv;
 
 namespace HolySheet.Core.Sources
 {
-    /// <summary>A native Google tab the window can download individually.</summary>
     public sealed record GoogleTab(string Workbook, string Sheet, string SpreadsheetId, DateTime? LocalCopyUtc, string? LocalPath);
 
-    /// <summary>Explicit local copies are independent of the automatic Drive cache and the configured snapshot.</summary>
     internal sealed class GoogleLocalCopies
     {
         private readonly string root;
@@ -30,8 +28,6 @@ namespace HolySheet.Core.Sources
             return BitConverter.ToString(sha.ComputeHash(Utf8.GetBytes(value))).Replace("-", "").ToLowerInvariant();
         }
 
-        // Include the exact title in the hash. Tabs such as A/B and A:B (or two titles differing in case)
-        // must remain distinct on Windows and macOS. The suffix makes the downloaded CSV recognizable.
         public string CsvPath(string id, string tab)
         {
             string name = GoogleSheetsSource.SafeFileName(tab);
@@ -58,7 +54,6 @@ namespace HolySheet.Core.Sources
                 ? SourceConfig.ExtractGoogleId(link) : null;
         }
 
-        // The catalog remembers file and tab names. The CSV itself records the decision to pin a tab.
         public void SaveCatalog(SourceConfig source, IReadOnlyList<Workbook> books)
         {
             string text = JsonValue.Array(books.Select(book => JsonValue.Object().Set("name", book.Name)
@@ -84,7 +79,6 @@ namespace HolySheet.Core.Sources
             return Directory.Exists(folder) && Directory.EnumerateFiles(folder, "*.csv").Any();
         }
 
-        // A wholly pinned selection needs no network. Otherwise let the source discover its files and tabs.
         public IReadOnlyList<Workbook>? ReadLocal(SourceConfig source, SheetSelection? only, ICsvParser? parser)
         {
             var catalog = Catalog(source);
@@ -112,7 +106,6 @@ namespace HolySheet.Core.Sources
                 var names = new HashSet<string>(paths.Select(tab => tab.Name), StringComparer.Ordinal);
                 if (names.Count == 0 || (only != null && only.Sheets.Any(selected => selected.Workbook == name && !names.Contains(selected.Sheet))))
                     return null;
-                // A snapshot may contain fewer tabs than an explicit source list.
                 if (source.Type == SourceType.Google && source.Sheets.Any(tab => (only == null || only.Includes(name, tab.Name)) && !names.Contains(tab.Name)))
                     return null;
                 entries.Add((book, paths));
@@ -146,7 +139,7 @@ namespace HolySheet.Core.Sources
                 if (existingOnly || File.Exists(path))
                 {
                     try { File.Replace(temporary, path, null); }
-                    catch (FileNotFoundException) when (existingOnly) { } // Released by another window during a refresh.
+                    catch (FileNotFoundException) when (existingOnly) { }
                 }
                 else
                 {
@@ -182,7 +175,6 @@ namespace HolySheet.Core.Sources
 
     public static class GoogleTabCopies
     {
-        /// <summary>Download one tab or release its copy, then validate against the other Google inputs already on screen.</summary>
         public static async Task<BuildResult> ChangeAsync(HolySheetConfig config, BuildResult previous, string workbook, string sheet,
             bool useLocal, TableBuildOptions options, CancellationToken cancellationToken = default)
         {

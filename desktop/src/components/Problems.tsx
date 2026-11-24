@@ -6,7 +6,6 @@ import { showMenu } from "./Menu";
 import { Chevron, ErrorIcon, WarningIcon } from "./Icons";
 import type { Diagnostic } from "../types";
 
-/** The one-line bar under the data: error and warning counts; clicking it opens or closes the list. */
 export function ProblemsBar() {
   const { run, problemsOpen, setProblemsOpen } = useApp();
   const problems = run?.diagnostics ?? [];
@@ -36,7 +35,6 @@ export function ProblemsBar() {
   );
 }
 
-/** Every problem of the last run, errors first. Double-click opens the file at the problem. */
 export function ProblemsList() {
   const { run } = useApp();
   const [selected, setSelected] = useState<number>(-1);

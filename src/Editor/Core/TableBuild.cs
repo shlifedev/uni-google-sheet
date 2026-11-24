@@ -19,22 +19,16 @@ using HolySheet.Core.Transform;
 
 namespace HolySheet.Core
 {
-    /// <summary>Per-run settings that do not belong in the config file.</summary>
     public sealed class TableBuildOptions
     {
-        /// <summary>Additional project rules discovered by the host, such as Unity editor scripts.</summary>
         public IReadOnlyList<Type>? ValidatorTypes { get; set; }
 
-        /// <summary>Loads the configured validator DLLs. Hosts can supply their own assembly load context.</summary>
         public Func<string, System.Reflection.Assembly>? LoadValidatorAssembly { get; set; }
 
-        /// <summary>Do not contact Google; read the CSV snapshot saved by the last online build instead.</summary>
         public bool Offline { get; set; }
 
-        /// <summary>Fetch online Google sources even when Drive reports the last downloaded version.</summary>
         public bool RefreshGoogle { get; set; }
 
-        /// <summary>Keep remote input grids for single-tab downloads and immediate validation in an interactive window.</summary>
         public bool KeepGooglePreview { get; set; }
 
         internal IReadOnlyDictionary<string, GoogleSourcePreview>? ReplayGoogle { get; private set; }
@@ -49,32 +43,19 @@ namespace HolySheet.Core
             return options;
         }
 
-        /// <summary>The transform rules to apply. Null uses <see cref="TransformPipeline.CreateDefault"/>.</summary>
         public TransformPipeline? Pipeline { get; set; }
 
-        /// <summary>Sources to read instead of the ones the config lists. For hosts that already hold the sheets in memory.</summary>
         public IReadOnlyList<IWorkbookSource>? Sources { get; set; }
 
-        /// <summary>Replaces the HTTP transport, for tests.</summary>
         public HttpMessageHandler? HttpHandler { get; set; }
 
-        /// <summary>Replaces the Google service addresses, for tests.</summary>
         public GoogleEndpoints? GoogleEndpoints { get; set; }
 
-        /// <summary>
-        /// The providers that sources with auth type "custom" choose from by name (see <see cref="IGoogleCredentialProvider"/>).
-        /// The Unity editor fills this with the provider classes it finds; null means the host has none.
-        /// </summary>
         public IReadOnlyList<IGoogleCredentialProvider>? CredentialProviders { get; set; }
 
-        /// <summary>
-        /// Read only these workbooks and sheets again; take every other sheet from the sheet cache, as the last build on this
-        /// machine read it. Null or empty reads everything. See <see cref="SheetCache"/>.
-        /// </summary>
         public SheetSelection? Only { get; set; }
     }
 
-    /// <summary>What a build found and produced. Tables that could be built are present even when other parts failed.</summary>
     public sealed class BuildResult
     {
         public BuildResult(DiagnosticBag diagnostics)
@@ -84,7 +65,6 @@ namespace HolySheet.Core
 
         public DiagnosticBag Diagnostics { get; }
 
-        /// <summary>The sheets exactly as read, before any rule was applied. In a partial build, the cached sheets with the selected ones replaced.</summary>
         public IReadOnlyList<Workbook> Workbooks { get; internal set; } = Array.Empty<Workbook>();
 
         public IReadOnlyDictionary<(string Workbook, string Sheet), GoogleTab> GoogleTabs => _googleTabs;
@@ -92,24 +72,18 @@ namespace HolySheet.Core
         internal readonly Dictionary<(string Workbook, string Sheet), GoogleTab> _googleTabs = new();
         internal readonly Dictionary<string, GoogleSourcePreview> GoogleInputs = new();
 
-        /// <summary>The source each workbook was read from, by workbook name. Kept by <see cref="ReleaseBuildData"/>, for the window's tree.</summary>
         public IReadOnlyDictionary<string, WorkbookOrigin> WorkbookOrigins { get; internal set; } = new Dictionary<string, WorkbookOrigin>();
 
-        /// <summary>What a partial build read again; null for a full build.</summary>
         public SheetSelection? Only { get; internal set; }
 
-        /// <summary>"Workbook / Sheet" of every sheet a partial build read again, in workbook order. Empty for a full build.</summary>
         public IReadOnlyList<string> RefreshedSheets { get; internal set; } = Array.Empty<string>();
 
-        /// <summary>The tables after the transform rules, still as text.</summary>
         public IReadOnlyList<RawTable> RawTables { get; internal set; } = Array.Empty<RawTable>();
 
-        /// <summary>The typed tables, in ordinal name order.</summary>
         public IReadOnlyList<TableData> Tables { get; internal set; } = Array.Empty<TableData>();
 
         public IReadOnlyList<EnumDefinition> Enums { get; internal set; } = Array.Empty<EnumDefinition>();
 
-        /// <summary>Null when there is any error: a build either produces everything or nothing.</summary>
         public GeneratedOutput? Output { get; internal set; }
 
         private bool _released;
@@ -117,14 +91,12 @@ namespace HolySheet.Core
         private int _tableCount;
         private int _rowCount;
 
-        /// <summary>The CSV parser that was used ("builtin" or "sep").</summary>
         public string CsvBackend { get; internal set; } = "";
 
         public TimeSpan ReadTime { get; internal set; }
 
         public TimeSpan BuildTime { get; internal set; }
 
-        /// <summary>How long each phase of the build took, in the order they ran. For finding out where time goes on large data.</summary>
         public IReadOnlyList<KeyValuePair<string, TimeSpan>> Phases => _phases;
 
         private readonly List<KeyValuePair<string, TimeSpan>> _phases = new();
@@ -137,7 +109,6 @@ namespace HolySheet.Core
 
         public int RowCount => _released ? _rowCount : Tables.Sum(table => table.Rows.Count);
 
-        /// <summary>True after <see cref="ReleaseBuildData"/>.</summary>
         public bool IsReleased => _released;
 
         /// <summary>
@@ -146,13 +117,6 @@ namespace HolySheet.Core
         /// </summary>
         internal string? BaseManifestHash { get; set; }
 
-        /// <summary>
-        /// Lets go of everything that is only needed to write files: the sheets as read, the typed values and the generated output.
-        /// What is left is what a person looks at afterwards: <see cref="RawTables"/>, <see cref="Diagnostics"/>, <see cref="Enums"/>
-        /// and the counts. Call it after <see cref="TableBuild.Commit"/> when the result is kept around, as the editor window does;
-        /// on 300,000 rows it brings a kept result from about 820 MB down to about 270 MB. With KeepGooglePreview, the remote
-        /// grids stay available for checking a single-tab download. A released result cannot be committed.
-        /// </summary>
         public void ReleaseBuildData()
         {
             if (_released)
@@ -170,16 +134,6 @@ namespace HolySheet.Core
         }
     }
 
-    /// <summary>
-    /// Reads the configured sources and produces generated code and data in memory. Nothing is written to disk here;
-    /// <see cref="Commit"/> does that, and only for a build without errors.
-    /// <para>
-    /// Every run builds every table, because the shared outputs (manifest, tables class, enums) must agree with all of them.
-    /// A partial build (<see cref="TableBuildOptions.Only"/>) differs only in where the sheets come from: the selected ones are
-    /// read again, the rest come from the sheet cache. Tables made only of unselected sheets come out byte for byte as before,
-    /// so their files are not written again.
-    /// </para>
-    /// </summary>
     public static class TableBuild
     {
         public const string ToolName = "holysheet/2.0.0";
@@ -211,7 +165,6 @@ namespace HolySheet.Core
             ITableCodec codec = TableCodecs.Find(config.Codegen.Serializer)!;
             result.BaseManifestHash = HashManifestOnDisk(config);
 
-            // 1. Read every source. Sources are independent, so they are read at the same time.
             var readWatch = Stopwatch.StartNew();
             SheetSelection? only = options.Only is { IsEmpty: false } selection ? selection : null;
             SheetCache? cache = only == null ? null : LoadCacheForPartialBuild(config, diagnostics);
@@ -243,9 +196,7 @@ namespace HolySheet.Core
             for (int index = 0; index < loads.Length; index++)
             {
                 IReadOnlyList<Workbook> loaded = await loads[index].ConfigureAwait(false);
-                // Sources made from the config are in config order, so each workbook can be tagged with the source it came from.
                 SourceConfig? origin = options.Sources == null && index < config.Sources.Count ? config.Sources[index] : null;
-                // A source may already know a link to the file (a spreadsheet in a Drive folder); it is kept.
                 workbooks.AddRange(origin == null ? loaded : loaded.Select(workbook => workbook.WithOrigin(new WorkbookOrigin(origin.Type, DescribeSource(origin), workbook.Origin?.Link))));
                 diagnostics.AddRange(sourceBags[index]);
             }
@@ -267,7 +218,6 @@ namespace HolySheet.Core
                 {
                     SourceConfig source = config.Sources[i];
                     if (!source.IsRemote) continue;
-                    // A full read retains the exact source entry, even when a document is registered twice under different names.
                     var books = only == null ? loads[i].Result.ToList()
                         : workbooks.Where(book => book.Origin?.Type == source.Type && book.Origin.Source == DescribeSource(source)
                             && (source.Type != SourceType.Google || source.Name == null || book.Name == source.Name)).ToList();
@@ -290,7 +240,6 @@ namespace HolySheet.Core
             result.ReadTime = readWatch.Elapsed;
             result.AddPhase("read", readWatch.Elapsed);
 
-            // 2. Apply the transform rules: sheets as written become tables ready to be typed.
             var buildWatch = Stopwatch.StartNew();
             var phase = Stopwatch.StartNew();
             TransformContext context = (options.Pipeline ?? TransformPipeline.CreateDefault()).Run(workbooks, config.Sheet, diagnostics);
@@ -298,7 +247,6 @@ namespace HolySheet.Core
             result.AddPhase("transform", phase.Elapsed);
             phase.Restart();
 
-            // 3. Enums: from Enums sheets and from Mapping columns. They must exist before column types are resolved.
             var enums = new Dictionary<string, EnumDefinition>(StringComparer.Ordinal);
             foreach (Sheet sheet in context.EnumSheets)
             {
@@ -310,7 +258,6 @@ namespace HolySheet.Core
                 AddEnums(MappingBuilder.Build(table, diagnostics), enums, diagnostics);
             }
 
-            // 4. Resolve types, then convert every cell. Tables do not depend on each other here, so they convert in parallel.
             List<(TableSchema Schema, RawTable Raw)> schemas = SchemaBuilder.Build(context.Tables, new TypeResolver(enums), diagnostics);
             schemas.Sort((left, right) => string.CompareOrdinal(left.Schema.Name, right.Schema.Name));
             result.AddPhase("schema", phase.Elapsed);
@@ -333,7 +280,6 @@ namespace HolySheet.Core
             List<EnumDefinition> sortedEnums = enums.Values.OrderBy(definition => definition.Name, StringComparer.Ordinal).ToList();
             result.Enums = sortedEnums;
 
-            // 5. Checks that need every table: unique keys, references that resolve, names that do not collide.
             DataValidator.Validate(tables, diagnostics);
             ValidateNames(schemas.Select(entry => entry.Schema).ToList(), sortedEnums, config, diagnostics);
             if (!diagnostics.HasErrors && schemas.Count == 0)
@@ -348,7 +294,6 @@ namespace HolySheet.Core
             result.AddPhase("validate", phase.Elapsed);
             phase.Restart();
 
-            // 6. Only a build with no errors produces output.
             if (!diagnostics.HasErrors)
             {
                 result.Output = Generate(tables, context.Tables, sortedEnums, config, codec, diagnostics, cancellationToken);
@@ -366,13 +311,11 @@ namespace HolySheet.Core
             _ => source.Path ?? ""
         };
 
-        /// <summary>Synchronous form of <see cref="RunAsync"/> for hosts without an async entry point.</summary>
         public static BuildResult Run(HolySheetConfig config, TableBuildOptions? options = null, CancellationToken cancellationToken = default)
         {
             return Task.Run(() => RunAsync(config, options, cancellationToken), cancellationToken).GetAwaiter().GetResult();
         }
 
-        /// <summary>Writes a successful build to the folders the config names. Returns what changed on disk.</summary>
         public static CommitReport Commit(HolySheetConfig config, BuildResult result)
         {
             if (result.Output == null)
@@ -380,9 +323,6 @@ namespace HolySheet.Core
                 throw new InvalidOperationException(result.IsReleased ? "The build data was released; run the build again to write it." : "A build with errors has no output to write.");
             }
 
-            // Two builds of the same project can overlap: the CLI next to the editor, a watch next to a build. Commits are
-            // taken one at a time, and a build whose starting point was replaced by another build's output is refused:
-            // writing it would put back what that build changed (a partial build carries every unselected sheet as it was).
             using (OutputLock.Acquire(config.Resolve(config.CacheDirectory), CommitLockTimeout))
             {
                 if (HashManifestOnDisk(config) != result.BaseManifestHash)
@@ -397,7 +337,6 @@ namespace HolySheet.Core
             }
         }
 
-        /// <summary>How long a commit waits for another build's commit to finish.</summary>
         internal static TimeSpan CommitLockTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
         private static string? HashManifestOnDisk(HolySheetConfig config)
@@ -414,8 +353,6 @@ namespace HolySheet.Core
             }
         }
 
-        // The cache records what was just written. If it cannot be saved, the old one is removed rather than left behind:
-        // a later partial build then asks for a full build instead of starting from sheets that no longer match the data.
         private static void SaveCache(HolySheetConfig config, BuildResult result)
         {
             string directory = config.Resolve(config.CacheDirectory);
@@ -450,9 +387,6 @@ namespace HolySheet.Core
             return cache;
         }
 
-        // The cached workbooks, in their order, with the selected parts replaced by what was just read.
-        // A selected workbook is replaced as a whole: sheets added to it appear, removed ones disappear.
-        // A selected sheet is replaced, added at the end of its workbook if new, or removed if the source no longer has it.
         private static List<Workbook> MergeIntoCache(IReadOnlyList<Workbook> cached, List<Workbook> fresh, SheetSelection only, DiagnosticBag diagnostics, out List<string> refreshed)
         {
             var refreshedSheets = new List<string>();
@@ -494,9 +428,6 @@ namespace HolySheet.Core
             {
                 if (read == null)
                 {
-                    // No source returned the workbook at all. That is far more often a name that does not match (an offline
-                    // snapshot, a renamed file) than a deliberate removal, and dropping its sheets here would delete their
-                    // tables' data on commit. A partial build never removes a whole workbook; a full build does.
                     if (!sourceFailed)
                     {
                         diagnostics.AddError(old.Name, "The workbook was not found in any source, so this partial build cannot read it again.",
@@ -552,7 +483,6 @@ namespace HolySheet.Core
 
         private static GeneratedOutput? Generate(TableData[] tables, IReadOnlyList<RawTable> rawTables, List<EnumDefinition> enums, HolySheetConfig config, ITableCodec codec, DiagnosticBag diagnostics, CancellationToken cancellationToken)
         {
-            // Signing is decided first: the public key is part of the generated code.
             string? publicKey = config.Signing.PublicKey;
             System.Security.Cryptography.RSAParameters? privateKey = null;
             string? privateKeyText = SigningKeys.ReadPrivateKey(config);
@@ -669,7 +599,6 @@ namespace HolySheet.Core
             }
         }
 
-        // Generated type names (row, table, reference, enum, tables class) share one namespace and must not collide.
         private static void ValidateNames(List<TableSchema> schemas, List<EnumDefinition> enums, HolySheetConfig config, DiagnosticBag diagnostics)
         {
             var owners = new Dictionary<string, string>(StringComparer.Ordinal) { [config.Codegen.TablesClass] = "the tables class" };
