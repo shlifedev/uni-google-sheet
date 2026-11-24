@@ -14,6 +14,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using HolySheet.Core.Config;
 using HolySheet.Core.Csv;
+using HolySheet.Core.Output;
 
 namespace HolySheet.Core.Sources
 {
@@ -241,6 +242,10 @@ namespace HolySheet.Core.Sources
             catch (GoogleSourceException exception)
             {
                 diagnostics.AddError(location, exception.Message, exception.Hint);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                diagnostics.AddError(location, exception.Message, "Check the files and permissions in the configured Google snapshot or cache.");
             }
             catch (HttpRequestException exception)
             {
@@ -846,43 +851,50 @@ namespace HolySheet.Core.Sources
         /// </summary>
         internal static void WriteSnapshot(string snapshotDirectory, string workbookName, IReadOnlyList<string> names, IReadOnlyList<string> texts, bool complete)
         {
-            Directory.CreateDirectory(snapshotDirectory);
             SnapshotIndex previous = SnapshotIndex.Read(snapshotDirectory);
-            var kept = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var encoding = new UTF8Encoding(false);
+            var tabs = complete ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : previous.Tabs.ToDictionary(tab => tab.Key, tab => tab.Value, StringComparer.Ordinal);
+            var reserved = new HashSet<string>(previous.Files, StringComparer.OrdinalIgnoreCase);
+            if (Directory.Exists(snapshotDirectory))
+            {
+                foreach (string path in Directory.EnumerateFileSystemEntries(snapshotDirectory))
+                    reserved.Add(Path.GetFileName(path));
+            }
 
+            var changes = new FileChangeSet("This file is not part of the Google snapshot. Refresh the source again.");
+            var encoding = new UTF8Encoding(false);
             for (int index = 0; index < names.Count; index++)
             {
-                string fileName = SafeFileName(names[index]) + ".csv";
-                kept.Add(fileName);
-                string path = Path.Combine(snapshotDirectory, fileName);
-                byte[] bytes = encoding.GetBytes(texts[index].Replace("\r\n", "\n"));
-                if (!File.Exists(path) || !File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes))
+                string name = names[index];
+                bool owned = previous.Tabs.TryGetValue(name, out string? file);
+                if (file == null)
                 {
-                    File.WriteAllBytes(path, bytes);
+                    string stem = SafeFileName(name);
+                    file = stem + ".csv";
+                    int suffix = 1;
+                    while (!reserved.Add(file))
+                    {
+                        file = stem + "." + suffix.ToString(CultureInfo.InvariantCulture) + ".csv";
+                        suffix++;
+                    }
                 }
+
+                tabs[name] = file;
+                byte[] bytes = encoding.GetBytes(texts[index].Replace("\r\n", "\n"));
+                changes.PlanWrite(Path.Combine(snapshotDirectory, file), bytes, file, owned);
             }
 
-            var owned = new SortedSet<string>(kept, StringComparer.OrdinalIgnoreCase);
+            var kept = new HashSet<string>(tabs.Values, StringComparer.Ordinal);
             foreach (string file in previous.Files)
             {
-                if (kept.Contains(file))
-                {
-                    continue;
-                }
-
-                if (complete)
-                {
-                    File.Delete(Path.Combine(snapshotDirectory, file));
-                }
-                else
-                {
-                    // A partial fetch leaves the other tabs as they were, and they stay the snapshot's own.
-                    owned.Add(file);
-                }
+                string path = Path.Combine(snapshotDirectory, file);
+                if (!kept.Contains(file) && File.Exists(path)) changes.PlanDelete(path, file);
             }
 
-            SnapshotIndex.Write(snapshotDirectory, workbookName, owned);
+            string indexText = SnapshotIndex.Format(workbookName, tabs);
+            changes.PlanWrite(Path.Combine(snapshotDirectory, SnapshotIndex.FileName), encoding.GetBytes(indexText),
+                SnapshotIndex.FileName, previous.Workbook != null);
+            changes.Apply();
         }
 
         internal static string SafeFileName(string name)
@@ -1044,83 +1056,73 @@ namespace HolySheet.Core.Sources
         /// <summary>Starts with a dot so Unity does not import it when the snapshot is under Assets.</summary>
         public const string FileName = ".holysheet-snapshot";
 
-        private const string Header = "holysheet-snapshot 1";
+        private const string Header = "holysheet-snapshot 2";
+        private readonly Dictionary<string, string> tabs = new(StringComparer.Ordinal);
 
-        private SnapshotIndex(string? workbook, IReadOnlyCollection<string> files)
-        {
-            Workbook = workbook;
-            Files = files;
-        }
+        public string? Workbook { get; private set; }
 
-        /// <summary>The workbook name the last online build used. Null for a snapshot written before the index existed.</summary>
-        public string? Workbook { get; }
+        public IReadOnlyDictionary<string, string> Tabs => tabs;
 
-        public IReadOnlyCollection<string> Files { get; }
+        public IReadOnlyCollection<string> Files => tabs.Values;
 
         public static SnapshotIndex Read(string directory)
         {
+            var index = new SnapshotIndex();
             string path = Path.Combine(directory, FileName);
-            var files = new List<string>();
-            string? workbook = null;
-            try
+            if (!File.Exists(path)) return index;
+
+            string[] lines = File.ReadAllLines(path, Encoding.UTF8);
+            if (lines.Length == 0 || (lines[0] != Header && lines[0] != "holysheet-snapshot 1"))
+                throw new IOException($"The snapshot index '{path}' has an unrecognized format.");
+            var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string line in lines.Skip(1))
             {
-                if (!File.Exists(path))
+                string[] parts = line.Split('\t');
+                if (parts.Length == 2 && parts[0] == "workbook")
                 {
-                    return new SnapshotIndex(null, files);
+                    index.Workbook = Unescape(parts[1]);
                 }
-
-                string[] lines = File.ReadAllText(path, Encoding.UTF8).Split('\n');
-                if (lines.Length == 0 || lines[0].TrimEnd('\r') != Header)
+                else if ((parts.Length == 2 && parts[0] == "file") || (parts.Length == 3 && parts[0] == "tab"))
                 {
-                    return new SnapshotIndex(null, files);
-                }
-
-                foreach (string raw in lines.Skip(1))
-                {
-                    string line = raw.TrimEnd('\r');
-                    int tab = line.IndexOf('\t');
-                    if (tab < 0)
-                    {
-                        continue;
-                    }
-
-                    string key = line.Substring(0, tab);
-                    string value = Unescape(line.Substring(tab + 1));
-                    if (key == "workbook")
-                    {
-                        workbook = value;
-                    }
-                    else if (key == "file" && IsOwnFileName(value))
-                    {
-                        files.Add(value);
-                    }
+                    string file = Unescape(parts[parts.Length - 1]);
+                    string tab = parts.Length == 3 ? Unescape(parts[1]) : Path.GetFileNameWithoutExtension(file);
+                    if (IsOwnFileName(file) && files.Add(file)) index.tabs[tab] = file;
                 }
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                // Unreadable: own nothing, so nothing is deleted.
-            }
 
-            return new SnapshotIndex(workbook, files);
+            if (index.Workbook == null) throw new IOException($"The snapshot index '{path}' has no workbook name.");
+            return index;
         }
 
-        public static void Write(string directory, string workbook, IEnumerable<string> files)
+        public static string Format(string workbook, Dictionary<string, string> tabs)
         {
             var text = new StringBuilder();
             text.Append(Header).Append('\n');
             text.Append("# Written by HolySheet. Only the files listed here are replaced or removed by the next online build.\n");
             text.Append("workbook\t").Append(Escape(workbook)).Append('\n');
-            foreach (string file in files)
+            foreach (var tab in tabs.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             {
-                text.Append("file\t").Append(Escape(file)).Append('\n');
+                text.Append("tab\t").Append(Escape(tab.Key)).Append('\t').Append(Escape(tab.Value)).Append('\n');
             }
 
-            string path = Path.Combine(directory, FileName);
-            string content = text.ToString();
-            if (!File.Exists(path) || File.ReadAllText(path, Encoding.UTF8) != content)
+            return text.ToString();
+        }
+
+        public static void RemoveWorkbook(string directory)
+        {
+            SnapshotIndex index = Read(directory);
+            if (index.Workbook == null) return;
+
+            var changes = new FileChangeSet("The file is not part of this snapshot.");
+            foreach (string file in index.Files.Distinct(StringComparer.Ordinal))
             {
-                File.WriteAllText(path, content, new UTF8Encoding(false));
+                string path = Path.Combine(directory, file);
+                if (File.Exists(path)) changes.PlanDelete(path, file);
             }
+
+            changes.PlanDelete(Path.Combine(directory, FileName), FileName);
+            changes.Apply();
+            if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
         }
 
         // A plain .csv name in this folder. A hand-edited index must never point the tool at a file elsewhere.
