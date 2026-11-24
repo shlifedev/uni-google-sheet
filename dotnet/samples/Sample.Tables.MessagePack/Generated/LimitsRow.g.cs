@@ -28,12 +28,12 @@ namespace Sample.MessagePackData
         [Key(10)] private double _f64;
         [Key(11)] private bool _flag;
         [Key(12)] private string _text = "";
-        [Key(13)] private int[] _ints = Array.Empty<int>();
-        [Key(14)] private long[] _longs = Array.Empty<long>();
-        [Key(15)] private bool[] _flags = Array.Empty<bool>();
-        [Key(16)] private byte[] _bytes = Array.Empty<byte>();
-        [Key(17)] private System.DateTime[] _dates = Array.Empty<System.DateTime>();
-        [Key(18)] private double[] _doubles = Array.Empty<double>();
+        [Key(13)] private int[] _ints = global::System.Array.Empty<int>();
+        [Key(14)] private long[] _longs = global::System.Array.Empty<long>();
+        [Key(15)] private bool[] _flags = global::System.Array.Empty<bool>();
+        [Key(16)] private byte[] _bytes = global::System.Array.Empty<byte>();
+        [Key(17)] private System.DateTime[] _dates = global::System.Array.Empty<System.DateTime>();
+        [Key(18)] private double[] _doubles = global::System.Array.Empty<double>();
 
         [SerializationConstructor]
         private LimitsRow()

@@ -24,8 +24,8 @@ namespace HolySheet.Demo.Data
         [MemoryPackInclude, MemoryPackOrder(6)] private int _giver;
         [MemoryPackInclude, MemoryPackOrder(7)] private long _rewardExp;
         [MemoryPackInclude, MemoryPackOrder(8)] private int _rewardGold;
-        [MemoryPackInclude, MemoryPackOrder(9)] private int[] _rewardItems = Array.Empty<int>();
-        [MemoryPackInclude, MemoryPackOrder(10)] private int[] _rewardCounts = Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(9)] private int[] _rewardItems = global::System.Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(10)] private int[] _rewardCounts = global::System.Array.Empty<int>();
 
         [MemoryPackConstructor]
         private QuestRow()

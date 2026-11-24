@@ -24,7 +24,7 @@ namespace HolySheet.Demo.Data
         [MemoryPackInclude, MemoryPackOrder(6)] private int _maxLevel;
         [MemoryPackInclude, MemoryPackOrder(7)] private float _cooldown;
         [MemoryPackInclude, MemoryPackOrder(8)] private int _mpCost;
-        [MemoryPackInclude, MemoryPackOrder(9)] private float[] _damage = Array.Empty<float>();
+        [MemoryPackInclude, MemoryPackOrder(9)] private float[] _damage = global::System.Array.Empty<float>();
 
         [MemoryPackConstructor]
         private SkillRow()

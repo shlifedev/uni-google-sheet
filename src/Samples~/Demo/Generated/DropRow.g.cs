@@ -17,8 +17,8 @@ namespace HolySheet.Demo.Data
     {
         [MemoryPackInclude, MemoryPackOrder(0)] private int _id;
         [MemoryPackInclude, MemoryPackOrder(1)] private string _name = "";
-        [MemoryPackInclude, MemoryPackOrder(2)] private int[] _items = Array.Empty<int>();
-        [MemoryPackInclude, MemoryPackOrder(3)] private float[] _chances = Array.Empty<float>();
+        [MemoryPackInclude, MemoryPackOrder(2)] private int[] _items = global::System.Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(3)] private float[] _chances = global::System.Array.Empty<float>();
         [MemoryPackInclude, MemoryPackOrder(4)] private int _goldMin;
         [MemoryPackInclude, MemoryPackOrder(5)] private int _goldMax;
 
