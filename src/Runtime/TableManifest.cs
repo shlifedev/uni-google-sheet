@@ -108,7 +108,8 @@ namespace HolySheet
         /// <summary>True when the set-level schema differs: the newer data cannot be read by code generated for the older one.</summary>
         public bool RequiresNewCode { get; }
 
-        public bool HasChanges => Added.Count > 0 || Removed.Count > 0 || Changed.Count > 0;
+        /// <summary>True when applying this release needs new generated code or a change to the installed table files.</summary>
+        public bool HasChanges => RequiresNewCode || Added.Count > 0 || Removed.Count > 0 || Changed.Count > 0;
 
         internal TableManifestDiff(List<string> added, List<string> removed, List<string> changed, List<string> schemaChanged, List<string> unchanged, bool requiresNewCode)
         {
