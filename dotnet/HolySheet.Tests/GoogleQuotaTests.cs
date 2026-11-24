@@ -192,6 +192,52 @@ public class GoogleQuotaTests
     }
 
     [Fact]
+    public async Task An_unchanged_drive_version_respects_each_configured_tab_list()
+    {
+        using var temp = new TempDir();
+        var google = new Google();
+        var handler = new StubHandler(request =>
+        {
+            if (!request.RequestUri!.AbsolutePath.EndsWith("/values:batchGet", StringComparison.Ordinal))
+                return google.Serve(request);
+            int count = request.RequestUri.Query.TrimStart('?').Split('&').Count(part => part.StartsWith("ranges=", StringComparison.Ordinal));
+            return Json("""{ "valueRanges": [""" + string.Join(",", Enumerable.Repeat("""{ "values": [["value"]] }""", count)) + "]}");
+        });
+        var source = new SourceConfig { Type = SourceType.Google, SpreadsheetId = "sheet-id", Auth = { Type = GoogleAuthType.ApiKey, ApiKey = "KEY" } };
+        var endpoints = new GoogleEndpoints { SheetsApi = "https://sheets.test", DriveApi = "https://drive.test" };
+        string snapshot = temp.Combine("snapshot");
+        bool refresh = false;
+
+        async Task Check(string[] expected, bool downloads, params GoogleSheetRef[] configured)
+        {
+            source.Sheets = configured.ToList();
+            var reader = new GoogleSheetsSource(source, temp.Path, HolySheet.Core.Csv.BuiltinCsvParser.Instance,
+                snapshot, handler, endpoints, remoteCacheDirectory: temp.Combine("cache")) { RefreshGoogle = refresh };
+            handler.Requests.Clear();
+            var diagnostics = new DiagnosticBag();
+            Workbook book = Assert.Single(await reader.LoadAsync(diagnostics, default));
+            Assert.False(diagnostics.HasErrors);
+            Assert.Equal(expected, book.Sheets.Select(sheet => sheet.Name));
+            Assert.Equal(downloads ? 1 : 0, handler.Requests.Count(url => url.Contains("values:batchGet")));
+            Assert.Equal(expected.Order(), Directory.GetFiles(snapshot, "*.csv").Select(Path.GetFileNameWithoutExtension).Order());
+        }
+
+        var gear = new GoogleSheetRef("Gear", 0);
+        var notes = new GoogleSheetRef("#Hero's Notes", 9);
+        await Check(["Gear"], true, gear);
+        await Check(["Gear"], false, gear);
+        await Check([notes.Name, "Gear"], true, notes, gear);
+        await Check([notes.Name], true, notes);
+        await Check(["Gear", notes.Name], true); // Discover every tab.
+        await Check(["Gear"], false, gear);      // A second configuration of this file keeps its own cache.
+        await Check(["Gear"], true, new GoogleSheetRef("Gear", 25));
+        refresh = true;
+        await Check(["Gear"], true, gear);
+        refresh = false;
+        await Check([notes.Name, "Gear"], true, notes, gear);
+    }
+
+    [Fact]
     public void A_partial_download_of_a_changed_file_does_not_leave_a_mixed_copy()
     {
         using var temp = new TempDir();

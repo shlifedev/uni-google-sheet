@@ -20,17 +20,21 @@ namespace HolySheet.Core.Sources
 
         public sealed record Copy(string Title, IReadOnlyList<(string Name, string Text)> Tabs);
 
-        private static string FolderOf(string root, string fileId) => Path.Combine(root, GoogleSheetsSource.SafeFileName(fileId));
+        private static string FolderOf(string root, string fileId, string? sourceKey)
+        {
+            string folder = Path.Combine(root, GoogleSheetsSource.SafeFileName(fileId));
+            return sourceKey == null ? folder : Path.Combine(folder, sourceKey);
+        }
 
         /// <summary>The copy made at exactly this version, or null.</summary>
-        public static Copy? TryLoad(string? root, string fileId, long version)
+        public static Copy? TryLoad(string? root, string fileId, long version, string? sourceKey = null)
         {
             if (root == null)
             {
                 return null;
             }
 
-            string folder = FolderOf(root, fileId);
+            string folder = FolderOf(root, fileId, sourceKey);
             try
             {
                 string indexPath = Path.Combine(folder, IndexFileName);
@@ -64,17 +68,17 @@ namespace HolySheet.Core.Sources
         }
 
         /// <summary>Replaces the copy. Only a complete download is saved: a partial one would mix versions.</summary>
-        public static void Save(string? root, string fileId, long version, string title, IReadOnlyList<(string Name, string Text)> tabs)
+        public static void Save(string? root, string fileId, long version, string title, IReadOnlyList<(string Name, string Text)> tabs, string? sourceKey = null)
         {
             if (root == null)
             {
                 return;
             }
 
-            string folder = FolderOf(root, fileId);
+            string folder = FolderOf(root, fileId, sourceKey);
             try
             {
-                Invalidate(root, fileId);
+                Invalidate(root, fileId, sourceKey);
                 Directory.CreateDirectory(folder);
                 foreach (string old in Directory.GetFiles(folder, "*.csv"))
                 {
@@ -95,12 +99,12 @@ namespace HolySheet.Core.Sources
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                Invalidate(root, fileId);
+                Invalidate(root, fileId, sourceKey);
             }
         }
 
         /// <summary>Forgets the copy, so the next build downloads the file again.</summary>
-        public static void Invalidate(string? root, string fileId)
+        public static void Invalidate(string? root, string fileId, string? sourceKey)
         {
             if (root == null)
             {
@@ -109,7 +113,25 @@ namespace HolySheet.Core.Sources
 
             try
             {
-                File.Delete(Path.Combine(FolderOf(root, fileId), IndexFileName));
+                File.Delete(Path.Combine(FolderOf(root, fileId, sourceKey), IndexFileName));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        // A manual refresh can observe new cells before Drive increments the shared file version.
+        // Dropping or refreshing a local copy can also affect every configured view of this file.
+        public static void InvalidateFile(string? root, string fileId)
+        {
+            if (root == null) return;
+            string folder = FolderOf(root, fileId, null);
+            try
+            {
+                if (!Directory.Exists(folder)) return;
+                Invalidate(root, fileId, null);
+                foreach (string source in Directory.GetDirectories(folder))
+                    Invalidate(root, fileId, Path.GetFileName(source));
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
