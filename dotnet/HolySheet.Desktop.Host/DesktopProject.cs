@@ -25,7 +25,9 @@ public sealed class DesktopProject
     private string? _directory;
     private string _configName = HolySheetConfig.DefaultFileName;
     private RunRecord? _last;
-    private Task<JsonObject>? _running;
+    private string _sessionId = Guid.NewGuid().ToString("N");
+    private string? _runningSession;
+    private Task _running = Task.CompletedTask;
 
     public DesktopProject(Action<string, JsonNode?> notify)
     {
@@ -36,7 +38,10 @@ public sealed class DesktopProject
 
     public string ConfigPath => Path.Combine(RequireDirectory(), _configName);
 
-    public RunRecord? LastRun => _last;
+    public RunRecord? LastRun
+    {
+        get { lock (_gate) return _last; }
+    }
 
     public static JsonObject AppInfo()
     {
@@ -80,26 +85,21 @@ public sealed class DesktopProject
             throw new RpcException(RpcException.ToolError, $"'{full}' does not exist.");
         }
 
+        return SelectProject(directory, configName);
+    }
+
+    public JsonObject Close() => SelectProject(null, HolySheetConfig.DefaultFileName);
+
+    private JsonObject SelectProject(string? directory, string configName)
+    {
         lock (_gate)
         {
             _directory = directory;
             _configName = configName;
+            _sessionId = Guid.NewGuid().ToString("N");
             _last = null;
+            return State();
         }
-
-        return State();
-    }
-
-    public JsonObject Close()
-    {
-        lock (_gate)
-        {
-            _directory = null;
-            _configName = HolySheetConfig.DefaultFileName;
-            _last = null;
-        }
-
-        return State();
     }
 
     public JsonObject Init(string directory, bool sample, bool? unity)
@@ -114,10 +114,21 @@ public sealed class DesktopProject
     /// </summary>
     public JsonObject State()
     {
-        string? directory = _directory;
-        string? configPath = directory == null ? null : Path.Combine(directory, _configName);
+        string? directory, configPath;
+        string sessionId;
+        RunRecord? last;
+        bool running;
+        lock (_gate)
+        {
+            directory = _directory;
+            configPath = directory == null ? null : Path.Combine(directory, _configName);
+            sessionId = _sessionId;
+            last = _last;
+            running = IsRunning;
+        }
         var state = new JsonObject
         {
+            ["sessionId"] = sessionId,
             ["dir"] = directory,
             ["configPath"] = configPath,
             ["hasConfig"] = false,
@@ -127,8 +138,8 @@ public sealed class DesktopProject
             ["sources"] = new JsonArray(),
             ["keyFileExists"] = false,
             ["keyIgnored"] = false,
-            ["running"] = IsRunning,
-            ["lastRun"] = _last == null ? null : RunJson.Describe(_last)
+            ["running"] = running,
+            ["lastRun"] = last == null ? null : RunJson.Describe(last, sessionId)
         };
         if (directory == null || configPath == null || !File.Exists(configPath))
         {
@@ -209,7 +220,7 @@ public sealed class DesktopProject
         {
             lock (_gate)
             {
-                return _running is { IsCompleted: false };
+                return _runningSession == _sessionId && !_running.IsCompleted;
             }
         }
     }
@@ -217,29 +228,33 @@ public sealed class DesktopProject
     /// <summary>
     /// Reads the sources and, with <paramref name="commit"/> and no errors, writes code and data. With
     /// <paramref name="only"/> ("Item.xlsx" or "Item.xlsx/Item.Rare"), reads just those again and takes the rest
-    /// from the last build. Refuses while another run is going: two builds must never write the same folder.
+    /// from the last build. Only one run per project session is accepted at a time. Runs across sessions are serialized.
     /// </summary>
     public Task<JsonObject> RunAsync(bool commit, bool offline, IReadOnlyList<string> only, string trigger, bool refreshGoogle = false,
-        (string Workbook, string Sheet, bool UseLocal)? copy = null)
+        (string Workbook, string Sheet, bool UseLocal)? copy = null, string? expectedSession = null)
     {
-        string configPath = ConfigPath;
         SheetSelection? selection = only.Count > 0 ? SheetSelection.Parse(only) : null;
-        Task<JsonObject> task;
         lock (_gate)
         {
-            if (_running is { IsCompleted: false })
+            string sessionId = _sessionId;
+            if (expectedSession != null && expectedSession != sessionId)
+                throw new RpcException(RpcException.NoProject, "The active project changed before the run started.");
+            string configPath = ConfigPath;
+            if (IsRunning)
             {
                 throw new RpcException(RpcException.Busy, "A build is already running.");
             }
 
             BuildResult? previous = copy.HasValue ? _last?.Build : null;
             if (copy.HasValue && previous == null) throw new RpcException(RpcException.ToolError, "Refresh the project before downloading a tab.");
-            _notify("run.started", new JsonObject { ["commit"] = commit, ["offline"] = offline, ["only"] = Json.Strings(only), ["trigger"] = trigger });
-            task = Task.Run(() => Finish(Run(configPath, commit, offline, selection, refreshGoogle, copy, previous), trigger));
+            _notify("run.started", new JsonObject { ["sessionId"] = sessionId, ["commit"] = commit, ["offline"] = offline, ["only"] = Json.Strings(only), ["trigger"] = trigger });
+            // Different projects can target the same output directory. Queue the new session behind its predecessor.
+            var task = _running.ContinueWith(_ => Finish(Run(configPath, commit, offline, selection, refreshGoogle, copy, previous), trigger, sessionId),
+                CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            _runningSession = sessionId;
             _running = task;
+            return task;
         }
-
-        return task;
     }
 
     private static RunRecord Run(string configPath, bool commit, bool offline, SheetSelection? only, bool refreshGoogle,
@@ -268,14 +283,14 @@ public sealed class DesktopProject
         }
     }
 
-    private JsonObject Finish(RunRecord record, string trigger)
+    private JsonObject Finish(RunRecord record, string trigger, string sessionId)
     {
         lock (_gate)
         {
-            _last = record;
+            if (_sessionId == sessionId) _last = record;
         }
 
-        JsonObject result = RunJson.Describe(record);
+        JsonObject result = RunJson.Describe(record, sessionId);
         result["trigger"] = trigger;
         _notify("run.finished", result.DeepClone());
         return result;
@@ -283,11 +298,11 @@ public sealed class DesktopProject
 
     // ---- Tables ----
 
-    public JsonObject TableModel() => _last == null ? TableView.Empty() : TableView.Model(_last.Build);
+    public JsonObject TableModel() => LastRun is { } last ? TableView.Model(last.Build) : TableView.Empty();
 
     public JsonObject Preview(string table, string? sheet)
     {
-        RunRecord last = _last ?? throw new RpcException(RpcException.ToolError, "Nothing has been read yet. Run a check first.");
+        RunRecord last = LastRun ?? throw new RpcException(RpcException.ToolError, "Nothing has been read yet. Run a check first.");
         return TableView.Preview(last.Build, table, sheet);
     }
 

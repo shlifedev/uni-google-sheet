@@ -51,7 +51,7 @@ internal static class Json
 /// <summary>How a run and its problems are written for the app. Diagnostics have the same shape as <c>holysheet build --json</c>.</summary>
 internal static class RunJson
 {
-    public static JsonObject Describe(RunRecord record)
+    public static JsonObject Describe(RunRecord record, string sessionId)
     {
         BuildResult build = record.Build;
         CommitReport? commit = record.Commit;
@@ -62,6 +62,7 @@ internal static class RunJson
             : "upToDate";
         return new JsonObject
         {
+            ["sessionId"] = sessionId,
             ["status"] = status,
             ["success"] = record.Failure == null && build.Success,
             ["committed"] = record.Committed,
