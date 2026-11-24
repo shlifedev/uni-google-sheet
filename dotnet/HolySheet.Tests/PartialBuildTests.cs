@@ -141,6 +141,45 @@ public sealed class PartialBuildTests
     }
 
     [Fact]
+    public void A_missing_workbook_in_a_sheet_selection_prevents_the_entire_commit()
+    {
+        using var project = new Project();
+        Assert.True(project.Build().Result.Success);
+        byte[] item = project.DataFile("Item");
+        project.Write("Item", "Key<int>,int\nId,Price\n,\n1,22\n");
+
+        (BuildResult result, CommitReport? report) = project.Build("Sheets/Item,Missing/First,Missing/Second");
+
+        Assert.False(result.Success);
+        Assert.Single(result.Diagnostics.Items, d => d.Message.Contains("No source has a workbook named 'Missing'"));
+        Assert.Null(report);
+        Assert.Equal(item, project.DataFile("Item"));
+    }
+
+    [Theory]
+    [InlineData("Sheets")]
+    [InlineData("Sheets/Item")]
+    public void A_partial_build_reports_ambiguous_workbooks_without_dropping_their_tables(string selection)
+    {
+        using var project = new Project();
+        string other = Directory.CreateDirectory(project.Config.Resolve("Other/Sheets")).FullName;
+        File.WriteAllText(Path.Combine(other, "Bonus.csv"), "Key<int>\nId\n\n7\n");
+        project.Config.Sources.Add(new SourceConfig { Type = SourceType.Csv, Path = "Other/Sheets" });
+        BuildResult full = project.Build().Result;
+        Assert.True(full.Success, Sheets.Errors(full));
+        byte[] item = project.DataFile("Item");
+        byte[] bonus = project.DataFile("Bonus");
+
+        (BuildResult result, CommitReport? report) = project.Build(selection);
+
+        Assert.False(result.Success);
+        Assert.Contains("more than one workbook named 'Sheets'", Sheets.Errors(result));
+        Assert.Null(report);
+        Assert.Equal(item, project.DataFile("Item"));
+        Assert.Equal(bonus, project.DataFile("Bonus"));
+    }
+
+    [Fact]
     public void The_cache_keeps_every_character_of_every_cell()
     {
         using var temp = new TempDir();
