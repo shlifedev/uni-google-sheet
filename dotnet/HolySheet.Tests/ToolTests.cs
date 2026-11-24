@@ -591,6 +591,42 @@ public class CliTests
         Assert.Equal("Item.bytes", Assert.Single(plan.GetArray("download")!).AsObject!.GetString("file"));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Diff_reports_a_code_only_release_with_no_table_downloads(bool json)
+    {
+        using var temp = new TempDir();
+        Assert.Equal(0, Run(temp.Path, "init", "--sample").ExitCode);
+        string path = temp.Combine("Sheets", "Release.Enums.csv");
+        File.WriteAllText(path, "int\nERelease\n\nAlpha\n");
+        Assert.Equal(0, Run(temp.Path, "build").ExitCode);
+        string manifest = "Generated/Data/tables.manifest.json";
+        File.Copy(temp.Combine(manifest), temp.Combine("old.json"));
+        File.AppendAllText(path, "Beta\n");
+        Assert.Equal(0, Run(temp.Path, "build").ExitCode);
+
+        var oldRelease = TableManifest.Parse(File.ReadAllText(temp.Combine("old.json")));
+        var newRelease = TableManifest.Parse(File.ReadAllText(temp.Combine(manifest)));
+        Assert.Equal(oldRelease.Content, newRelease.Content);
+        Assert.NotEqual(oldRelease.Schema, newRelease.Schema);
+
+        var result = json ? Run(temp.Path, "diff", "old.json", manifest, "--json") : Run(temp.Path, "diff", "old.json", manifest);
+        Assert.Equal(0, result.ExitCode);
+        if (json)
+        {
+            JsonObject plan = JsonValue.Parse(result.Output).AsObject!;
+            Assert.Equal(true, plan.GetBoolean("hasChanges"));
+            Assert.Equal(true, plan.GetBoolean("requiresNewCode"));
+            Assert.Empty(plan.GetArray("download")!);
+        }
+        else
+        {
+            Assert.Contains("clients need the new generated code", result.Output);
+            Assert.Contains("0 bytes to fetch", result.Output);
+        }
+    }
+
     [Fact]
     public void Sheet_errors_exit_with_one_and_write_nothing()
     {
