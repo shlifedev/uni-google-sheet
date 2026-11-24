@@ -17,10 +17,10 @@ namespace HolySheet.Demo.Data
     {
         [MemoryPackInclude, MemoryPackOrder(0)] private int _id;
         [MemoryPackInclude, MemoryPackOrder(1)] private string _name = "";
-        [MemoryPackInclude, MemoryPackOrder(2)] private int[] _pieces = Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(2)] private int[] _pieces = global::System.Array.Empty<int>();
         [MemoryPackInclude, MemoryPackOrder(3)] private int _requiredPieces;
-        [MemoryPackInclude, MemoryPackOrder(4)] private EStat[] _stats = Array.Empty<EStat>();
-        [MemoryPackInclude, MemoryPackOrder(5)] private int[] _values = Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(4)] private EStat[] _stats = global::System.Array.Empty<EStat>();
+        [MemoryPackInclude, MemoryPackOrder(5)] private int[] _values = global::System.Array.Empty<int>();
 
         [MemoryPackConstructor]
         private SetBonusRow()

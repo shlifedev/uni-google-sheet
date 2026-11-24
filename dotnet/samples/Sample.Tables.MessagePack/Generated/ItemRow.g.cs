@@ -26,10 +26,10 @@ namespace Sample.MessagePackData
         [Key(8)] private double _dropRate;
         [Key(9)] private bool _tradable;
         [Key(10)] private System.DateTime _releasedAt;
-        [Key(11)] private float[] _stats = Array.Empty<float>();
-        [Key(12)] private string[] _aliases = Array.Empty<string>();
+        [Key(11)] private float[] _stats = global::System.Array.Empty<float>();
+        [Key(12)] private string[] _aliases = global::System.Array.Empty<string>();
         [Key(13)] private long _exp;
-        [Key(14)] private int[] _sockets = Array.Empty<int>();
+        [Key(14)] private int[] _sockets = global::System.Array.Empty<int>();
         [Key(15)] private ERarity _rarity;
         [Key(16)] private int _attack;
         [Key(17)] private int _defense;

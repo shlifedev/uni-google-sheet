@@ -19,7 +19,7 @@ namespace HolySheet.Demo.Data
         [MemoryPackInclude, MemoryPackOrder(1)] private int _maxPartySize;
         [MemoryPackInclude, MemoryPackOrder(2)] private int _inventorySlots;
         [MemoryPackInclude, MemoryPackOrder(3)] private int _startMap;
-        [MemoryPackInclude, MemoryPackOrder(4)] private int[] _starterItems = Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(4)] private int[] _starterItems = global::System.Array.Empty<int>();
         [MemoryPackInclude, MemoryPackOrder(5)] private float _expRate;
         [MemoryPackInclude, MemoryPackOrder(6)] private float _dropRate;
         [MemoryPackInclude, MemoryPackOrder(7)] private System.DateTime _seasonStartsAt;

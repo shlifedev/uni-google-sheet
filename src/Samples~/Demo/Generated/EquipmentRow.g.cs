@@ -25,8 +25,8 @@ namespace HolySheet.Demo.Data
         [MemoryPackInclude, MemoryPackOrder(7)] private int _atk;
         [MemoryPackInclude, MemoryPackOrder(8)] private int _mAtk;
         [MemoryPackInclude, MemoryPackOrder(9)] private int _def;
-        [MemoryPackInclude, MemoryPackOrder(10)] private EStat[] _bonusStats = Array.Empty<EStat>();
-        [MemoryPackInclude, MemoryPackOrder(11)] private int[] _bonusValues = Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(10)] private EStat[] _bonusStats = global::System.Array.Empty<EStat>();
+        [MemoryPackInclude, MemoryPackOrder(11)] private int[] _bonusValues = global::System.Array.Empty<int>();
         [MemoryPackInclude, MemoryPackOrder(12)] private int _maxUpgrade;
         [MemoryPackInclude, MemoryPackOrder(13)] private int _upgradeGold;
         [MemoryPackInclude, MemoryPackOrder(14)] private bool _upgradeStone__has;

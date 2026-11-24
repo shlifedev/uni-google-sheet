@@ -26,10 +26,10 @@ namespace Sample.MemoryPackData
         [MemoryPackInclude, MemoryPackOrder(8)] private double _dropRate;
         [MemoryPackInclude, MemoryPackOrder(9)] private bool _tradable;
         [MemoryPackInclude, MemoryPackOrder(10)] private System.DateTime _releasedAt;
-        [MemoryPackInclude, MemoryPackOrder(11)] private float[] _stats = Array.Empty<float>();
-        [MemoryPackInclude, MemoryPackOrder(12)] private string[] _aliases = Array.Empty<string>();
+        [MemoryPackInclude, MemoryPackOrder(11)] private float[] _stats = global::System.Array.Empty<float>();
+        [MemoryPackInclude, MemoryPackOrder(12)] private string[] _aliases = global::System.Array.Empty<string>();
         [MemoryPackInclude, MemoryPackOrder(13)] private long _exp;
-        [MemoryPackInclude, MemoryPackOrder(14)] private int[] _sockets = Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(14)] private int[] _sockets = global::System.Array.Empty<int>();
         [MemoryPackInclude, MemoryPackOrder(15)] private ERarity _rarity;
         [MemoryPackInclude, MemoryPackOrder(16)] private int _attack;
         [MemoryPackInclude, MemoryPackOrder(17)] private int _defense;

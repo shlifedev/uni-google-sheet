@@ -21,7 +21,7 @@ namespace HolySheet.Demo.Data
         [MemoryPackInclude, MemoryPackOrder(3)] private bool _baseJob__has;
         [MemoryPackInclude, MemoryPackOrder(4)] private int _baseJob;
         [MemoryPackInclude, MemoryPackOrder(5)] private EStat _mainStat;
-        [MemoryPackInclude, MemoryPackOrder(6)] private EWeaponType[] _weapons = Array.Empty<EWeaponType>();
+        [MemoryPackInclude, MemoryPackOrder(6)] private EWeaponType[] _weapons = global::System.Array.Empty<EWeaponType>();
         [MemoryPackInclude, MemoryPackOrder(7)] private int _baseHp;
         [MemoryPackInclude, MemoryPackOrder(8)] private int _baseMp;
 

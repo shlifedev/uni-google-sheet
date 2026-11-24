@@ -292,6 +292,8 @@ public class ValidationTests
 
     [Theory]
     [InlineData("class", "'class' cannot be used as a table name")]
+    [InlineData("GameTables", "'GameTables' cannot be a table name")]
+    [InlineData("_tables", "'_tables' cannot be a table name")]
     [InlineData("Tables", "'Tables' cannot be a table name")]
     [InlineData("A.B.C", "The sheet name is not understood")]
     public void Table_name_mistakes_are_errors(string sheetName, string expected)
@@ -308,6 +310,29 @@ public class ValidationTests
         // but an enum named ItemRow collides.
         BuildResult result = Sheets.Build(Sheets.Of("Enums", "int\nItemRow\n\nA\n"), Sheets.Of("Item", "Key<int>\nId\n\n1\n"));
         Assert.Contains("The generated name 'ItemRow' is also used by", Sheets.Errors(result));
+    }
+
+    [Theory]
+    [InlineData("memorypack")]
+    [InlineData("messagepack")]
+    public void Generated_helpers_keep_public_fields_and_table_names_usable(string serializer)
+    {
+        var config = Sheets.Config(serializer);
+        config.Codegen.TablesClass = "Enums";
+        BuildResult result = Sheets.Build(config,
+            Sheets.Of("Enums", "int\nKind\n\nFirst\n"),
+            Sheets.Of("Items", "Key<int>,Key<int>,Index<int>,int,int,int[],Ref<Items>?,int\nRow,Found,Rows,Price,_price,Array,Other,_other__has\n,,,,,,,\n1,3,9,15,7,10,,8\n"),
+            Sheets.Of("data", "Key<int>\nId\n\n1\n"));
+        Assert.True(result.Success, Sheets.Errors(result));
+        var files = result.Output!.CodeFiles;
+        Assert.Contains("enum Kind", files["Enums.Definitions.g.cs"]);
+        Assert.Contains("this.data = (dataTable)", files["Enums.g.cs"]);
+        Assert.Contains("TryGet(int @rowValue, out ItemsRow row)", files["ItemsTable.g.cs"]);
+        Assert.Contains("GetByFound(int @foundValue)", files["ItemsTable.g.cs"]);
+        Assert.Contains("ListByRows(int @rowsValue)", files["ItemsTable.g.cs"]);
+        Assert.Contains("public int Price => _price_;", files["ItemsRow.g.cs"]);
+        Assert.Contains("private bool _other___has;", files["ItemsRow.g.cs"]);
+        Assert.Contains("global::System.Array.Empty<int>()", files["ItemsRow.g.cs"]);
     }
 
     [Fact]

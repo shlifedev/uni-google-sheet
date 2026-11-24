@@ -19,8 +19,8 @@ namespace HolySheet.Demo.Data
         [MemoryPackInclude, MemoryPackOrder(1)] private string _name = "";
         [MemoryPackInclude, MemoryPackOrder(2)] private ECurrency _currency;
         [MemoryPackInclude, MemoryPackOrder(3)] private int _cost;
-        [MemoryPackInclude, MemoryPackOrder(4)] private int[] _pool = Array.Empty<int>();
-        [MemoryPackInclude, MemoryPackOrder(5)] private float[] _weights = Array.Empty<float>();
+        [MemoryPackInclude, MemoryPackOrder(4)] private int[] _pool = global::System.Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(5)] private float[] _weights = global::System.Array.Empty<float>();
         [MemoryPackInclude, MemoryPackOrder(6)] private System.DateTime _endsAt;
 
         [MemoryPackConstructor]

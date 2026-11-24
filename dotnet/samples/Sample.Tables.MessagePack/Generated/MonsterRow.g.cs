@@ -18,11 +18,11 @@ namespace Sample.MessagePackData
         [Key(0)] private int _id;
         [Key(1)] private string _name = "";
         [Key(2)] private int _hp;
-        [Key(3)] private int[] _drops = Array.Empty<int>();
+        [Key(3)] private int[] _drops = global::System.Array.Empty<int>();
         [Key(4)] private bool _rare__has;
         [Key(5)] private int _rare;
         [Key(6)] private int _weapon;
-        [Key(7)] private EItemKind[] _weak = Array.Empty<EItemKind>();
+        [Key(7)] private EItemKind[] _weak = global::System.Array.Empty<EItemKind>();
         [Key(8)] private string _zone = "";
 
         [SerializationConstructor]

@@ -610,7 +610,9 @@ namespace HolySheet.Core
 
             if (enums.Count > 0)
             {
-                output.CodeFiles.Add(EnumCodeGenerator.FileName, EnumCodeGenerator.Generate(enums, codegen));
+                string enumFile = string.Equals(config.Codegen.TablesClass + ".g.cs", EnumCodeGenerator.FileName, StringComparison.OrdinalIgnoreCase)
+                    ? "Enums.Definitions.g.cs" : EnumCodeGenerator.FileName;
+                output.CodeFiles.Add(enumFile, EnumCodeGenerator.Generate(enums, codegen));
             }
 
             output.CodeFiles.Add(config.Codegen.TablesClass + ".g.cs", TablesCodeGenerator.Generate(schemas, schemaHash, codegen));
@@ -694,7 +696,7 @@ namespace HolySheet.Core
                 Claim(schema.RowTypeName, schema.Location);
                 Claim(schema.TableTypeName, schema.Location);
                 Claim(schema.RefTypeName, schema.Location);
-                if (TablesCodeGenerator.ReservedNames.Contains(schema.Name))
+                if (schema.Name == config.Codegen.TablesClass || TablesCodeGenerator.ReservedNames.Contains(schema.Name))
                 {
                     diagnostics.AddError(schema.Location, $"'{schema.Name}' cannot be a table name: the tables class already has a member with that name.", "Rename the sheet.");
                 }

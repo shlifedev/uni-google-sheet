@@ -18,11 +18,11 @@ namespace Sample.MemoryPackData
         [MemoryPackInclude, MemoryPackOrder(0)] private int _id;
         [MemoryPackInclude, MemoryPackOrder(1)] private string _name = "";
         [MemoryPackInclude, MemoryPackOrder(2)] private int _hp;
-        [MemoryPackInclude, MemoryPackOrder(3)] private int[] _drops = Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(3)] private int[] _drops = global::System.Array.Empty<int>();
         [MemoryPackInclude, MemoryPackOrder(4)] private bool _rare__has;
         [MemoryPackInclude, MemoryPackOrder(5)] private int _rare;
         [MemoryPackInclude, MemoryPackOrder(6)] private int _weapon;
-        [MemoryPackInclude, MemoryPackOrder(7)] private EItemKind[] _weak = Array.Empty<EItemKind>();
+        [MemoryPackInclude, MemoryPackOrder(7)] private EItemKind[] _weak = global::System.Array.Empty<EItemKind>();
         [MemoryPackInclude, MemoryPackOrder(8)] private string _zone = "";
 
         [MemoryPackConstructor]

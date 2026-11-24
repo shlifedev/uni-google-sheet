@@ -28,12 +28,12 @@ namespace Sample.MemoryPackData
         [MemoryPackInclude, MemoryPackOrder(10)] private double _f64;
         [MemoryPackInclude, MemoryPackOrder(11)] private bool _flag;
         [MemoryPackInclude, MemoryPackOrder(12)] private string _text = "";
-        [MemoryPackInclude, MemoryPackOrder(13)] private int[] _ints = Array.Empty<int>();
-        [MemoryPackInclude, MemoryPackOrder(14)] private long[] _longs = Array.Empty<long>();
-        [MemoryPackInclude, MemoryPackOrder(15)] private bool[] _flags = Array.Empty<bool>();
-        [MemoryPackInclude, MemoryPackOrder(16)] private byte[] _bytes = Array.Empty<byte>();
-        [MemoryPackInclude, MemoryPackOrder(17)] private System.DateTime[] _dates = Array.Empty<System.DateTime>();
-        [MemoryPackInclude, MemoryPackOrder(18)] private double[] _doubles = Array.Empty<double>();
+        [MemoryPackInclude, MemoryPackOrder(13)] private int[] _ints = global::System.Array.Empty<int>();
+        [MemoryPackInclude, MemoryPackOrder(14)] private long[] _longs = global::System.Array.Empty<long>();
+        [MemoryPackInclude, MemoryPackOrder(15)] private bool[] _flags = global::System.Array.Empty<bool>();
+        [MemoryPackInclude, MemoryPackOrder(16)] private byte[] _bytes = global::System.Array.Empty<byte>();
+        [MemoryPackInclude, MemoryPackOrder(17)] private System.DateTime[] _dates = global::System.Array.Empty<System.DateTime>();
+        [MemoryPackInclude, MemoryPackOrder(18)] private double[] _doubles = global::System.Array.Empty<double>();
 
         [MemoryPackConstructor]
         private LimitsRow()

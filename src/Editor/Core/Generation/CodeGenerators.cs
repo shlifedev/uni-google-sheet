@@ -122,7 +122,11 @@ namespace HolySheet.Core.Generation
         public static string StorageName(string field) => "_" + char.ToLowerInvariant(field[0]) + field[1..];
 
         /// <summary>A camelCase parameter name that cannot be a keyword.</summary>
-        public static string ParameterName(string field) => "@" + char.ToLowerInvariant(field[0]) + field[1..];
+        public static string ParameterName(string field, params string[] locals)
+        {
+            string name = char.ToLowerInvariant(field[0]) + field[1..];
+            return "@" + (locals.Contains(name, StringComparer.Ordinal) ? name + "Value" : name);
+        }
     }
 
     /// <summary>
@@ -140,19 +144,29 @@ namespace HolySheet.Core.Generation
             writer.Line(codec.RowAttribute);
             writer.Open($"public sealed partial class {schema.RowTypeName}");
 
+            var usedNames = new HashSet<string>(schema.Columns.Select(column => column.Field), StringComparer.Ordinal);
+            var storageNames = new Dictionary<string, string>(StringComparer.Ordinal);
             int order = 0;
             foreach (ColumnSchema column in schema.Columns)
             {
                 ColumnType type = column.Type;
                 string storage = Code.StorageName(column.Field);
+                bool hasPresenceFlag = type is { Kind: ColumnKind.Reference, IsOptional: true };
+                while (usedNames.Contains(storage) || (hasPresenceFlag && usedNames.Contains(storage + "__has")))
+                {
+                    storage += "_";
+                }
+                usedNames.Add(storage);
+                if (hasPresenceFlag) usedNames.Add(storage + "__has");
+                storageNames.Add(column.Field, storage);
                 string valueType = type.CSharpValueType;
                 if (type.IsArray)
                 {
-                    writer.Line($"{codec.FieldAttribute(order++)} private {valueType}[] {storage} = Array.Empty<{valueType}>();");
+                    writer.Line($"{codec.FieldAttribute(order++)} private {valueType}[] {storage} = global::System.Array.Empty<{valueType}>();");
                 }
                 else
                 {
-                    if (type is { Kind: ColumnKind.Reference, IsOptional: true })
+                    if (hasPresenceFlag)
                     {
                         writer.Line($"{codec.FieldAttribute(order++)} private bool {storage}__has;");
                     }
@@ -169,7 +183,7 @@ namespace HolySheet.Core.Generation
             foreach (ColumnSchema column in schema.Columns)
             {
                 ColumnType type = column.Type;
-                string storage = Code.StorageName(column.Field);
+                string storage = storageNames[column.Field];
                 writer.Line();
                 writer.Summary(Describe(column));
                 string ignore = codec.IgnoreAttribute;
@@ -189,7 +203,7 @@ namespace HolySheet.Core.Generation
             }
 
             writer.Line();
-            string identity = schema.PrimaryKey is { } key ? $" + {Code.StorageName(key.Field)} + " : " + ";
+            string identity = schema.PrimaryKey is { } key ? $" + {storageNames[key.Field]} + " : " + ";
             writer.Line(schema.PrimaryKey != null
                 ? $"public override string ToString() => \"{schema.Name}(\"{identity}\")\";"
                 : $"public override string ToString() => \"{schema.Name} row\";");
@@ -273,9 +287,10 @@ namespace HolySheet.Core.Generation
             foreach (ColumnSchema index in schema.Indexes)
             {
                 writer.Line();
+                string parameter = Code.ParameterName(index.Field, "rows");
                 writer.Summary($"Every row whose {index.Field} is the given value, in sheet order. Empty when there is none.");
-                writer.Open($"public global::HolySheet.ReadOnlyArray<{row}> ListBy{index.Field}({index.Type.CSharpValueType} {Code.ParameterName(index.Field)})");
-                writer.Line($"return _listBy{index.Field}.TryGetValue({Code.ParameterName(index.Field)}, out {row}[]? rows) ? new global::HolySheet.ReadOnlyArray<{row}>(rows) : global::HolySheet.ReadOnlyArray<{row}>.Empty;");
+                writer.Open($"public global::HolySheet.ReadOnlyArray<{row}> ListBy{index.Field}({index.Type.CSharpValueType} {parameter})");
+                writer.Line($"return _listBy{index.Field}.TryGetValue({parameter}, out {row}[]? rows) ? new global::HolySheet.ReadOnlyArray<{row}>(rows) : global::HolySheet.ReadOnlyArray<{row}>.Empty;");
                 writer.Close();
             }
 
@@ -357,7 +372,7 @@ namespace HolySheet.Core.Generation
         {
             string row = schema.RowTypeName;
             string type = key.Type.CSharpValueType;
-            string parameter = Code.ParameterName(key.Field);
+            string parameter = Code.ParameterName(key.Field, "row", "found");
             string suffix = isPrimary ? "" : "By" + key.Field;
             string map = "_by" + key.Field;
 
@@ -507,7 +522,7 @@ namespace HolySheet.Core.Generation
         public static readonly IReadOnlyCollection<string> ReservedNames = new HashSet<string>(StringComparer.Ordinal)
         {
             "SchemaHash", "Serializer", "ManifestFileName", "PublicKey", "Definition", "Manifest", "Tables", "LoadedTables",
-            "Load", "LoadAsync", "Reload", "Watch"
+            "Load", "LoadAsync", "Reload", "Watch", "_tables"
         };
 
         public static string Generate(IReadOnlyList<TableSchema> schemas, string schemaHash, CodegenOptions options)
@@ -557,7 +572,8 @@ namespace HolySheet.Core.Generation
             writer.Line("_tables = data.Tables.ToArray();");
             for (int index = 0; index < schemas.Count; index++)
             {
-                writer.Line($"{schemas[index].Name} = ({schemas[index].TableTypeName})_tables[{index}];");
+                string property = schemas[index].Name == "data" ? "this.data" : schemas[index].Name;
+                writer.Line($"{property} = ({schemas[index].TableTypeName})_tables[{index}];");
             }
 
             writer.Close();
