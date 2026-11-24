@@ -83,6 +83,7 @@ namespace HolySheet
         private T _current;
         private string _stamp;
         private int _attempt;
+        private bool _reportedTransientFailure;
         private bool _polling;
         private volatile bool _disposed;
 
@@ -130,7 +131,7 @@ namespace HolySheet
                 return false;
             }
 
-            return TryReload(raiseInline: true, out _);
+            return TryReload(manual: true, out _);
         }
 
         public void Dispose()
@@ -237,7 +238,7 @@ namespace HolySheet
             bool retry = false;
             try
             {
-                TryReload(raiseInline: _options.RaiseEventsInline, out retry);
+                TryReload(manual: false, out retry);
             }
             catch (Exception exception)
             {
@@ -273,15 +274,22 @@ namespace HolySheet
             }
         }
 
-        private bool TryReload(bool raiseInline, out bool retry)
+        private bool TryReload(bool manual, out bool retry)
         {
             retry = false;
+            bool raiseInline = manual || _options.RaiseEventsInline;
             TableReloadedEventArgs<T>? reloaded = null;
             Exception? failure = null;
             lock (_reloadLock)
             {
                 string stamp = ReadStamp();
-                if (stamp == _stamp && _attempt == 0)
+                if (stamp != _stamp)
+                {
+                    _stamp = stamp;
+                    _attempt = 0;
+                    _reportedTransientFailure = false;
+                }
+                else if (_attempt == 0 && !_reportedTransientFailure)
                 {
                     return false;
                 }
@@ -290,8 +298,8 @@ namespace HolySheet
                 try
                 {
                     T next = _loader(_source, _options.LoadOptions, previous);
-                    _stamp = stamp;
                     _attempt = 0;
+                    _reportedTransientFailure = false;
                     if (next.Manifest.Content == previous.Manifest.Content && next.Manifest.Schema == previous.Manifest.Schema)
                     {
                         // The manifest was rewritten with identical data. Nothing to announce.
@@ -309,14 +317,21 @@ namespace HolySheet
                     // A hash mismatch or a missing file usually means the tool is still writing. Try again a few times before reporting.
                     bool transient = exception is IOException
                         || (exception is TableLoadException loadException && (loadException.Error == TableLoadError.HashMismatch || loadException.Error == TableLoadError.FileMissing || loadException.Error == TableLoadError.ManifestInvalid));
-                    if (transient && _attempt < MaxAttempts && !raiseInline)
+                    // Data files can be repaired without another manifest write. Keep checking a reported
+                    // transient failure on subsequent polls or file events, but report it once per manifest.
+                    if (transient && _reportedTransientFailure)
+                    {
+                        return false;
+                    }
+
+                    if (transient && !manual && _attempt < MaxAttempts)
                     {
                         _attempt++;
                         retry = true;
                         return false;
                     }
 
-                    _stamp = stamp;
+                    _reportedTransientFailure = transient;
                     _attempt = 0;
                     failure = exception;
                 }
