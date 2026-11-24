@@ -293,10 +293,13 @@ namespace HolySheet
                     T next = _loader(_source, _options.LoadOptions, previous);
                     _stamp = stamp;
                     _attempt = 0;
-                    if (next.Manifest.SignedText == previous.Manifest.SignedText && next.Manifest.Signature == previous.Manifest.Signature)
+                    if (next.Manifest.Content == previous.Manifest.Content && next.Manifest.Schema == previous.Manifest.Schema)
                     {
-                        // The manifest was rewritten with identical fields and signature.
-                        return false;
+                        // Identical payloads can still have a new release label, entry metadata or signature.
+                        if (next.Manifest.SignedText == previous.Manifest.SignedText && next.Manifest.Signature == previous.Manifest.Signature)
+                        {
+                            return false;
+                        }
                     }
 
                     TableManifestDiff diff = TableManifest.Diff(previous.Manifest, next.Manifest);
