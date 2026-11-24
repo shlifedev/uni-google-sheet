@@ -448,7 +448,11 @@ internal static class Commands
     {
         HolySheetConfig config = LoadConfig(arguments);
         int interval = int.TryParse(arguments.Get("--interval"), out int seconds) && seconds > 0 ? seconds : 30;
-        bool hasRemote = config.Sources.Any(source => source.IsRemote) && !arguments.Has("--offline");
+        bool offline = arguments.Has("--offline");
+        bool PollsGoogle() => !offline && config.Sources.Any(source => source.IsRemote);
+        IEnumerable<string> WatchPaths() => config.Sources.Where(source => source.Path != null).Select(source => config.Resolve(source.Path!))
+            .Concat(offline ? config.Sources.Where(source => source.Snapshot != null).Select(source => config.Resolve(source.Snapshot!)) : [])
+            .Append(arguments.ConfigPath);
         using var stop = new CancellationTokenSource();
         Console.CancelKeyPress += (_, args) =>
         {
@@ -457,9 +461,7 @@ internal static class Commands
         };
 
         using var changed = new SemaphoreSlim(0);
-        IEnumerable<string> paths = config.Sources.Where(source => source.Path != null).Select(source => config.Resolve(source.Path!))
-            .Concat(arguments.Has("--offline") ? config.Sources.Where(source => source.Snapshot != null).Select(source => config.Resolve(source.Snapshot!)) : []);
-        using var watcher = new SourceWatcher(paths, TimeSpan.FromMilliseconds(300), () =>
+        using var watcher = new SourceWatcher(WatchPaths(), TimeSpan.FromMilliseconds(300), () =>
         {
             if (changed.CurrentCount == 0)
             {
@@ -468,13 +470,13 @@ internal static class Commands
         });
 
         await BuildOnceAsync(config, arguments, console, commit: true, stop.Token).ConfigureAwait(false);
-        console.Info($"watching {watcher.WatchedCount} folder(s){(hasRemote ? $", re-reading Google every {interval} s" : "")}. Press Ctrl+C to stop.");
+        console.Info($"watching {watcher.WatchedCount} path(s){(PollsGoogle() ? $", re-reading Google every {interval} s" : "")}. Press Ctrl+C to stop.");
         while (!stop.IsCancellationRequested)
         {
             try
             {
                 // Local sources wake this up through the watcher. Remote ones have no change notification, so they are polled.
-                bool signalled = await changed.WaitAsync(hasRemote ? TimeSpan.FromSeconds(interval) : Timeout.InfiniteTimeSpan, stop.Token).ConfigureAwait(false);
+                bool signalled = await changed.WaitAsync(PollsGoogle() ? TimeSpan.FromSeconds(interval) : Timeout.InfiniteTimeSpan, stop.Token).ConfigureAwait(false);
                 if (signalled)
                 {
                     console.Info($"[{DateTime.Now:HH:mm:ss}] change detected");
@@ -482,6 +484,7 @@ internal static class Commands
 
                 // A config edit takes effect on the next build without restarting the watch.
                 config = LoadConfig(arguments);
+                watcher.SetPaths(WatchPaths());
                 await BuildOnceAsync(config, arguments, console, commit: true, stop.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
