@@ -372,7 +372,7 @@ namespace HolySheet.Core.Output
 
             if (Directory.Exists(codeDirectory))
             {
-                foreach (string path in Directory.GetFiles(codeDirectory, "*.g.cs", SearchOption.TopDirectoryOnly))
+                foreach (string path in Directory.EnumerateFiles(codeDirectory, "*.g.cs", SearchOption.TopDirectoryOnly).OrderBy(path => path, StringComparer.Ordinal))
                 {
                     if (!ListsFile(keptCode, codeDirectory, Path.GetFileName(path)) && IsGenerated(path))
                     {
