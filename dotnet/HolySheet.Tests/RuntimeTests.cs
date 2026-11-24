@@ -568,6 +568,56 @@ public class WatcherTests
     }
 
     [Fact]
+    public void Restoring_a_missing_table_reloads_without_rewriting_the_manifest()
+    {
+        using var temp = new TempDir();
+        string sheets = LoaderTests.CopySampleSheets(temp);
+        var config = SampleBuild.Load("memorypack", temp.Combine("out"));
+        config.BaseDirectory = temp.Path;
+        LoaderTests.Build(config);
+        string directory = config.Resolve(config.Output.Data);
+        using var watcher = Mem.GameTables.Watch(directory, new TableWatchOptions { Mode = TableWatchMode.Manual });
+        int failures = 0;
+        watcher.ReloadFailed += _ => failures++;
+
+        EditLimits(sheets, "\n3,-33,128,", "\n3,-35,130,");
+        LoaderTests.Build(config);
+        string table = Path.Combine(directory, "Limits.bytes");
+        File.Move(table, table + ".pending");
+        Assert.False(watcher.CheckNow());
+        Assert.False(watcher.CheckNow());
+        Assert.Equal(1, failures);
+        Assert.Equal(-33, watcher.Current.Limits.Get(3).I8);
+
+        File.Move(table + ".pending", table);
+        Assert.True(watcher.CheckNow());
+        Assert.Equal(-35, watcher.Current.Limits.Get(3).I8);
+        Assert.False(watcher.CheckNow());
+    }
+
+    [Fact]
+    public async Task Inline_event_delivery_still_retries_a_transient_reload()
+    {
+        using var build = new SampleBuild("memorypack");
+        var retried = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int attempts = 0;
+        var options = new TableWatchOptions { Mode = TableWatchMode.Polling, PollInterval = TimeSpan.FromMilliseconds(50),
+            Debounce = TimeSpan.FromMilliseconds(10), RaiseEventsInline = true };
+        using var watcher = new TableWatcher<Mem.GameTables>(build.DataDirectory, TableManifest.DefaultFileName, (source, loadOptions, previous) =>
+        {
+            if (previous == null) return Mem.GameTables.Load(source, loadOptions);
+            if (Interlocked.Increment(ref attempts) == 1) throw new IOException("Table replacement in progress.");
+            retried.TrySetResult();
+            return previous;
+        }, options);
+        watcher.ReloadFailed += exception => retried.TrySetException(exception);
+
+        File.AppendAllText(Path.Combine(build.DataDirectory, TableManifest.DefaultFileName), "\n");
+        await retried.Task.WaitAsync(Timeout);
+        Assert.Equal(2, attempts);
+    }
+
+    [Fact]
     public void Manual_mode_checks_only_when_asked()
     {
         using var temp = new TempDir();
