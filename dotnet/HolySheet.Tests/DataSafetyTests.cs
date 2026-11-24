@@ -240,6 +240,44 @@ public sealed class DataSafetyTests
         Assert.True(File.Exists(Path.Combine(project.Code, "GameTables.g.cs")));
     }
 
+    [Theory]
+    [InlineData("comment")]
+    [InlineData("raw input")]
+    [InlineData("namespace")]
+    public void A_stale_commit_cannot_revert_changes_that_leave_the_manifest_identical(string edit)
+    {
+        using var project = new Project();
+        TableBuild.Commit(project.Config, project.Run());
+        string manifest = Path.Combine(project.Data, project.Config.Output.ManifestFile);
+        byte[] before = File.ReadAllBytes(manifest);
+        BuildResult stale = project.Run("Sheets/Monster");
+
+        if (edit == "namespace") project.Config.Codegen.Namespace = "Current.Release";
+        else if (edit == "comment") project.Write("Item", "Key<int>,int\nId,Price\n,Current price\n1,10\n");
+        else project.Write("Item", "Key<int>,int\nId,Price\n,\n01,10\n");
+        TableBuild.Commit(project.Config, project.Run());
+        byte[] row = File.ReadAllBytes(Path.Combine(project.Code, "ItemRow.g.cs"));
+        string index = Path.Combine(project.Config.Resolve(project.Config.CacheDirectory), "sheets.index");
+        byte[] saved = File.ReadAllBytes(index);
+        Assert.Equal(before, File.ReadAllBytes(manifest));
+
+        Assert.Throws<IOException>(() => TableBuild.Commit(project.Config, stale));
+        Assert.Equal(row, File.ReadAllBytes(Path.Combine(project.Code, "ItemRow.g.cs")));
+        Assert.Equal(saved, File.ReadAllBytes(index));
+        Assert.False(TableBuild.Commit(project.Config, project.Run("Sheets/Monster")).HasChanges);
+    }
+
+    [Fact]
+    public void Two_identical_overlapping_builds_can_both_commit_without_writing()
+    {
+        using var project = new Project();
+        TableBuild.Commit(project.Config, project.Run());
+        BuildResult first = project.Run();
+        BuildResult second = project.Run();
+        Assert.False(TableBuild.Commit(project.Config, first).HasChanges);
+        Assert.False(TableBuild.Commit(project.Config, second).HasChanges);
+    }
+
     [Fact]
     public void Two_partial_builds_of_different_sheets_cannot_undo_each_other()
     {

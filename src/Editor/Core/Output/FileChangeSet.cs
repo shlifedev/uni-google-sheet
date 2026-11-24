@@ -15,6 +15,8 @@ namespace HolySheet.Core.Output
 
         public FileChangeSet(string conflictHint) => this.conflictHint = conflictHint;
 
+        public bool HasChanges => changes.Count != 0;
+
         public CommitReport Apply()
         {
             if (changes.Count == 0)
@@ -48,7 +50,7 @@ namespace HolySheet.Core.Output
                             File.Delete(change.Path + ".meta");
                         }
 
-                        report.Deleted.Add(change.Name);
+                        if (change.Name != null) report.Deleted.Add(change.Name);
                     }
                     else
                     {
@@ -60,7 +62,7 @@ namespace HolySheet.Core.Output
                             applied++;
                         }
 
-                        report.Written.Add(change.Name);
+                        if (change.Name != null) report.Written.Add(change.Name);
                     }
                 }
             }
@@ -97,7 +99,7 @@ namespace HolySheet.Core.Output
             return report;
         }
 
-        public void PlanWrite(string path, byte[] content, string name, bool canReplace)
+        public void PlanWrite(string path, byte[] content, string? name, bool canReplace)
         {
             path = AddDestination(path);
             byte[]? original = null;
@@ -111,7 +113,7 @@ namespace HolySheet.Core.Output
                 original = File.ReadAllBytes(path);
                 if (original.AsSpan().SequenceEqual(content))
                 {
-                    report.Unchanged++;
+                    if (name != null) report.Unchanged++;
                     return;
                 }
             }
@@ -193,7 +195,7 @@ namespace HolySheet.Core.Output
 
         private sealed class Change
         {
-            public Change(string path, string name, byte[]? content, byte[]? original)
+            public Change(string path, string? name, byte[]? content, byte[]? original)
             {
                 Path = path;
                 Name = name;
@@ -203,7 +205,7 @@ namespace HolySheet.Core.Output
 
             public string Path { get; }
 
-            public string Name { get; }
+            public string? Name { get; }
 
             /// <summary>Null means delete.</summary>
             public byte[]? Content { get; }
