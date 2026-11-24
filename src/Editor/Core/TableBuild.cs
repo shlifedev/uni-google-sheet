@@ -457,34 +457,37 @@ namespace HolySheet.Core
         {
             var refreshedSheets = new List<string>();
             refreshed = refreshedSheets;
-            var freshByName = new Dictionary<string, Workbook>(StringComparer.Ordinal);
-            foreach (Workbook workbook in fresh)
+            var freshByName = fresh.ToLookup(workbook => workbook.Name, StringComparer.Ordinal);
+            var cachedByName = cached.ToLookup(workbook => workbook.Name, StringComparer.Ordinal);
+            bool sourceFailed = diagnostics.HasErrors;
+            var ambiguous = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string name in only.Workbooks.Concat(only.Sheets.Select(sheet => sheet.Workbook)).Distinct(StringComparer.Ordinal))
             {
-                freshByName[workbook.Name] = workbook;
+                if (freshByName[name].Count() > 1 || cachedByName[name].Count() > 1)
+                {
+                    ambiguous.Add(name);
+                    diagnostics.AddError(name, $"There is more than one workbook named '{name}'.",
+                        "Run a full build, or give the workbooks distinct names before selecting one.");
+                }
+                else if (!sourceFailed && !freshByName.Contains(name) && !cachedByName.Contains(name))
+                {
+                    diagnostics.AddError(name, $"No source has a workbook named '{name}'.", "Use the workbook name shown in the source tree.");
+                }
             }
 
-            bool sourceFailed = diagnostics.HasErrors;
             var merged = new List<Workbook>(cached.Count + 1);
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (Workbook workbook in cached)
             {
                 seen.Add(workbook.Name);
-                merged.Add(only.Touches(workbook.Name) ? Merge(workbook, freshByName.TryGetValue(workbook.Name, out Workbook? read) ? read : null) : workbook);
+                merged.Add(only.Touches(workbook.Name) && !ambiguous.Contains(workbook.Name) ? Merge(workbook, freshByName[workbook.Name].SingleOrDefault()) : workbook);
             }
 
             foreach (Workbook workbook in fresh)
             {
-                if (seen.Add(workbook.Name))
+                if (seen.Add(workbook.Name) && !ambiguous.Contains(workbook.Name))
                 {
                     merged.Add(Merge(new Workbook(workbook.Name, Array.Empty<Sheet>(), workbook.Origin), workbook));
-                }
-            }
-
-            foreach (string name in only.Workbooks.Where(name => !seen.Contains(name)))
-            {
-                if (!sourceFailed)
-                {
-                    diagnostics.AddError(name, $"No source has a workbook named '{name}'.", "Use the name the tree shows: the file name for xlsx, the folder name for CSV, the spreadsheet name for Google.");
                 }
             }
 
