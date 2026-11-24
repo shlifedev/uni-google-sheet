@@ -55,11 +55,15 @@ function message(error: unknown): string {
 
 export const useApp = create<AppState>((set, get) => {
   const refreshModel = async () => {
+    const session = get().project?.sessionId;
+    if (!session) return;
+    let model = emptyModel;
     try {
-      set({ model: await rpc.model() });
+      model = await rpc.model();
     } catch {
-      set({ model: emptyModel });
+      // A failed model read clears the view for the project that requested it.
     }
+    if (get().project?.sessionId === session) set({ model });
   };
 
   // The initial preview uses local files and snapshots. An online read needs an explicit refresh or build.
@@ -136,7 +140,7 @@ export const useApp = create<AppState>((set, get) => {
       set({ running: true });
       try {
         const state = await rpc.state();
-        if (get().project?.configPath !== project.configPath) return;
+        if (get().project?.sessionId !== project.sessionId || state.sessionId !== project.sessionId) return;
         if (!state.config) {
           set({ project: state, running: state.running, run: null, model: emptyModel });
           return;
@@ -144,6 +148,7 @@ export const useApp = create<AppState>((set, get) => {
         set({ project: state });
         if (!state.running) await get().startRun(false, [], { refreshGoogle: true });
       } catch (error) {
+        if (get().project?.sessionId !== project.sessionId) return;
         set({ running: false });
         get().notify(message(error));
       }
@@ -163,13 +168,16 @@ export const useApp = create<AppState>((set, get) => {
     applyState: (state) => set({ project: state }),
 
     startRun: async (commit, only = [], options = {}) => {
+      const session = get().project?.sessionId;
+      if (!session) return;
       try {
         // The result arrives through the run.finished notification as well; both lead to the same state.
         const result = options.copy
-          ? await rpc.localCopy(options.copy)
-          : await rpc.run(commit, options.offline ?? false, only, options.refreshGoogle);
+          ? await rpc.localCopy(session, options.copy)
+          : await rpc.run(session, commit, options.offline ?? false, only, options.refreshGoogle);
         get().handleEvent({ method: "run.finished", params: result });
       } catch (error) {
+        if (get().project?.sessionId !== session) return;
         if (error instanceof RpcError && error.code === RpcError.Busy) {
           get().notify(error.message, "info");
           return;
@@ -180,6 +188,7 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     handleEvent: (event) => {
+      if (event.params.sessionId !== get().project?.sessionId) return;
       if (event.method === "run.started") {
         set({ running: true });
         return;
@@ -188,7 +197,7 @@ export const useApp = create<AppState>((set, get) => {
       const result = event.params;
       const previous = get().run;
       // The same run arrives twice (notification and response); only the first one changes anything.
-      if (previous && previous.finishedAt === result.finishedAt && !get().running) return;
+      if (previous && previous.finishedAt === result.finishedAt) return;
       set({
         running: false,
         run: result,

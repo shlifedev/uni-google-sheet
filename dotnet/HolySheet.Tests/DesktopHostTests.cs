@@ -99,6 +99,78 @@ public sealed class DesktopHostTests : IDisposable
         Assert.False(Directory.Exists(_temp.Combine("Generated")));
     }
 
+    [Theory]
+    [InlineData("other")]
+    [InlineData("close")]
+    [InlineData("reopen")]
+    public async Task Finishing_a_run_keeps_the_preview_in_its_original_project(string switchTo)
+    {
+        string other = Directory.CreateDirectory(_temp.Combine("other")).FullName;
+        DesktopProject project = null!;
+        project = new DesktopProject((method, _) =>
+        {
+            if (method != "run.started") return;
+            // Switch after the host accepted the run, before its result can be published.
+            if (switchTo == "close") project.Close();
+            else project.Open(switchTo == "other" ? other : _temp.Path);
+        });
+        JsonObject original = project.Init(_temp.Path, sample: true, unity: false);
+        JsonObject result = await project.RunAsync(true, false, [], "user");
+
+        Assert.Equal("built", result["status"]!.GetValue<string>());
+        Assert.True(File.Exists(_temp.Combine("Generated", "Data", "tables.manifest.json")));
+        Assert.Null(project.LastRun);
+        Assert.Null(project.State()["lastRun"]);
+        Assert.NotEqual(original["sessionId"]!.GetValue<string>(), project.State()["sessionId"]!.GetValue<string>());
+        Assert.Equal(original["sessionId"]!.GetValue<string>(), result["sessionId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task A_delayed_build_request_cannot_write_to_a_newly_opened_project()
+    {
+        JsonObject original = await InitSample();
+        string other = _temp.Combine("other");
+        await Call("project.init", new JsonObject { ["dir"] = other, ["sample"] = true });
+        var request = new JsonObject { ["commit"] = true, ["sessionId"] = original["sessionId"]!.DeepClone() };
+        var refused = await Assert.ThrowsAsync<RpcException>(() => Call("run", request));
+        Assert.Equal(RpcException.NoProject, refused.Code);
+        Assert.False(Directory.Exists(Path.Combine(other, "Generated")));
+    }
+
+    [Fact]
+    public async Task The_new_project_can_queue_its_preview_while_the_old_run_finishes()
+    {
+        var finishing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var project = new DesktopProject((method, _) =>
+        {
+            if (method == "run.finished" && finishing.TrySetResult())
+                release.Wait(TimeSpan.FromSeconds(10));
+        });
+        project.Init(_temp.Path, sample: true, unity: false);
+        Task<JsonObject> first = project.RunAsync(false, false, [], "user");
+        await finishing.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task<JsonObject> second;
+        try
+        {
+            project.Init(_temp.Combine("next"), sample: true, unity: false);
+            Assert.False(project.IsRunning);
+            second = project.RunAsync(false, true, [], "user");
+            Assert.True(project.IsRunning);
+            Assert.False(second.IsCompleted);
+            Assert.Equal(RpcException.Busy, Assert.Throws<RpcException>(() =>
+            {
+                _ = project.RunAsync(true, false, [], "user");
+            }).Code);
+        }
+        finally
+        {
+            release.Set();
+            await first;
+        }
+        Assert.Equal("checked", (await second)["status"]!.GetValue<string>());
+    }
+
     [Fact]
     public async Task A_second_run_is_refused_while_one_is_going()
     {

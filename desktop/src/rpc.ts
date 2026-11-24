@@ -45,9 +45,9 @@ export const rpc = {
   init: (dir: string, sample: boolean, unity?: boolean) => call<ProjectState>("project.init", { dir, sample, unity }),
   close: () => call<ProjectState>("project.close"),
   saveConfig: (config: HolySheetConfig) => call<ProjectState>("config.save", { config }),
-  run: (commit: boolean, offline: boolean, only: string[] = [], refreshGoogle = false) =>
-    call<RunResult>("run", { commit, offline, only, refreshGoogle }),
-  localCopy: (params: { workbook: string; sheet: string; useLocal: boolean }) => call<RunResult>("source.localCopy", params),
+  run: (sessionId: string, commit: boolean, offline: boolean, only: string[] = [], refreshGoogle = false) =>
+    call<RunResult>("run", { sessionId, commit, offline, only, refreshGoogle }),
+  localCopy: (sessionId: string, params: { workbook: string; sheet: string; useLocal: boolean }) => call<RunResult>("source.localCopy", { ...params, sessionId }),
   model: () => call<TableModel>("tables.model"),
   preview: (table: string, sheet?: string | null) => call<Preview>("tables.preview", { table, sheet: sheet ?? null }),
   locateSource: (workbook: string, sheet?: string | null) => call<Located>("source.locate", { workbook, sheet: sheet ?? null }),
@@ -61,7 +61,7 @@ export const rpc = {
 };
 
 export type HostEvent =
-  | { method: "run.started"; params: { commit: boolean; offline: boolean; only: string[]; trigger: string } }
+  | { method: "run.started"; params: { sessionId: string; commit: boolean; offline: boolean; only: string[]; trigger: string } }
   | { method: "run.finished"; params: RunResult };
 
 /** Notifications from the engine, and the shell's word that the engine was started again. */

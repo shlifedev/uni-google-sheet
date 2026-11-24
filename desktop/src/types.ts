@@ -19,6 +19,7 @@ export interface Diagnostic {
 export type RunStatus = "failed" | "errors" | "checked" | "built" | "upToDate";
 
 export interface RunResult {
+  sessionId: string;
   status: RunStatus;
   success: boolean;
   committed: boolean;
@@ -103,6 +104,7 @@ export interface SourceState {
 }
 
 export interface ProjectState {
+  sessionId: string;
   dir: string | null;
   configPath: string | null;
   hasConfig: boolean;
