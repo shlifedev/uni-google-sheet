@@ -723,3 +723,35 @@ public class CliTests
 
 [CollectionDefinition("console", DisableParallelization = true)]
 public class ConsoleCollection;
+
+public class SourceWatchTests
+{
+    [Fact]
+    public async Task Changes_in_a_newly_configured_source_folder_wake_the_watcher()
+    {
+        using var temp = new TempDir();
+        string old = Directory.CreateDirectory(temp.Combine("Old")).FullName;
+        string next = Directory.CreateDirectory(temp.Combine("New")).FullName;
+        var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var watcher = new SourceWatcher([old], TimeSpan.FromMilliseconds(20), () => changed.TrySetResult());
+        watcher.SetPaths([next]);
+        Assert.Equal(1, watcher.WatchedCount);
+        File.WriteAllText(Path.Combine(next, "Gear.csv"), "changed");
+        await changed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Theory]
+    [InlineData("Gear.csv", false)]
+    [InlineData("Game.xlsx", true)]
+    [InlineData("game.settings.json", true)]
+    public async Task Renaming_a_watched_input_away_signals_a_change(string name, bool watchFile)
+    {
+        using var temp = new TempDir();
+        string path = temp.Combine(name);
+        File.WriteAllText(path, "original");
+        var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var watcher = new SourceWatcher([watchFile ? path : temp.Path], TimeSpan.FromMilliseconds(20), () => changed.TrySetResult());
+        File.Move(path, path + ".bak");
+        await changed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+}

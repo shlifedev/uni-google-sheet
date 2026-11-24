@@ -13,7 +13,7 @@ namespace HolySheet.Core
     /// </summary>
     public sealed class SourceWatcher : IDisposable
     {
-        private readonly List<FileSystemWatcher> _watchers = new();
+        private readonly Dictionary<string, FileSystemWatcher> _watchers = new(StringComparer.Ordinal);
         private readonly Timer _timer;
         private readonly TimeSpan _debounce;
         private readonly Action _onChanged;
@@ -24,45 +24,75 @@ namespace HolySheet.Core
             _debounce = debounce;
             _onChanged = Guard.NotNull(onChanged, nameof(onChanged));
             _timer = new Timer(_ => Fire(), null, Timeout.Infinite, Timeout.Infinite);
-            foreach (string path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+            SetPaths(paths);
+        }
+
+        /// <summary>Keep subscriptions for unchanged paths and start watching newly configured sources.</summary>
+        public void SetPaths(IEnumerable<string> paths)
+        {
+            var wanted = new HashSet<string>(paths.Select(Path.GetFullPath), _watchers.Comparer);
+            lock (_watchers)
             {
-                string? directory = Directory.Exists(path) ? path : Path.GetDirectoryName(Path.GetFullPath(path));
-                if (directory == null || !Directory.Exists(directory))
+                if (_disposed) throw new ObjectDisposedException(nameof(SourceWatcher));
+                foreach (string path in wanted)
                 {
-                    continue;
+                    bool folder = Directory.Exists(path);
+                    if (_watchers.TryGetValue(path, out var existing))
+                    {
+                        if ((existing.Filter == "*") == folder) continue;
+                        existing.Dispose();
+                        _watchers.Remove(path);
+                    }
+
+                    string? directory = folder ? path : Path.GetDirectoryName(path);
+                    if (directory == null || !Directory.Exists(directory)) continue;
+                    var watcher = new FileSystemWatcher(directory)
+                    {
+                        Filter = folder ? "*" : Path.GetFileName(path),
+                        NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.CreationTime,
+                        IncludeSubdirectories = false
+                    };
+
+                    // For an explicit path the watcher's filter already matched the file, including custom config filenames.
+                    FileSystemEventHandler handler = folder ? OnSheetEvent : OnEvent;
+                    watcher.Changed += handler;
+                    watcher.Created += handler;
+                    watcher.Deleted += handler;
+                    watcher.Renamed += folder ? OnSheetEvent : OnEvent;
+                    watcher.EnableRaisingEvents = true;
+                    _watchers.Add(path, watcher);
                 }
 
-                var watcher = new FileSystemWatcher(directory)
+                foreach (string removed in _watchers.Keys.Where(key => !wanted.Contains(key)).ToArray())
                 {
-                    // A single file is watched through its folder, because editors replace files rather than write into them.
-                    Filter = Directory.Exists(path) ? "*.*" : Path.GetFileName(path),
-                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.CreationTime,
-                    IncludeSubdirectories = false
-                };
-                watcher.Changed += OnEvent;
-                watcher.Created += OnEvent;
-                watcher.Deleted += OnEvent;
-                watcher.Renamed += OnEvent;
-                watcher.EnableRaisingEvents = true;
-                _watchers.Add(watcher);
+                    _watchers[removed].Dispose();
+                    _watchers.Remove(removed);
+                }
             }
         }
 
-        /// <summary>Number of folders being watched. Zero means there is nothing local to watch (all sources are remote).</summary>
-        public int WatchedCount => _watchers.Count;
+        public int WatchedCount
+        {
+            get { lock (_watchers) return _watchers.Count; }
+        }
+
+        private static bool IsSheet(string path)
+        {
+            string name = Path.GetFileName(path);
+            string extension = Path.GetExtension(name);
+            return !name.StartsWith("~$", StringComparison.Ordinal) &&
+                (extension.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) || extension.Equals(".csv", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void OnSheetEvent(object sender, FileSystemEventArgs args)
+        {
+            if (IsSheet(args.FullPath) || (args is RenamedEventArgs renamed && IsSheet(renamed.OldFullPath)))
+                OnEvent(sender, args);
+        }
 
         private void OnEvent(object sender, FileSystemEventArgs args)
         {
-            string name = Path.GetFileName(args.FullPath);
-            string extension = Path.GetExtension(name);
-            // Only sheets matter. Excel's "~$" lock files and editor temp files come and go without the data changing.
-            bool relevant = (extension.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) || extension.Equals(".csv", StringComparison.OrdinalIgnoreCase))
-                && !name.StartsWith("~$", StringComparison.Ordinal);
-            if (!relevant || _disposed)
-            {
-                return;
-            }
-
+            if (_disposed) return;
             try
             {
                 _timer.Change(_debounce, Timeout.InfiniteTimeSpan);
@@ -82,11 +112,12 @@ namespace HolySheet.Core
 
         public void Dispose()
         {
-            _disposed = true;
-            foreach (FileSystemWatcher watcher in _watchers)
+            lock (_watchers)
             {
-                watcher.EnableRaisingEvents = false;
-                watcher.Dispose();
+                _disposed = true;
+                foreach (FileSystemWatcher watcher in _watchers.Values)
+                    watcher.Dispose();
+                _watchers.Clear();
             }
 
             _timer.Dispose();
